@@ -23,42 +23,46 @@
           "filters": {
             "description": "结构化属性条件，仍使用原查询语义",
             "items": {
+              "additionalProperties": false,
+              "description": "Agent结构化属性条件，使用op；与页面AttributeFilter的operator字段分开",
               "properties": {
                 "field": {
-                  "description": "字段名",
+                  "description": "真实字段名称",
+                  "maxLength": 200,
                   "type": "string"
                 },
-                "operator": {
-                  "description": "过滤操作符",
+                "op": {
+                  "description": "原Agent查询运算语义",
                   "enum": [
-                    "contains",
                     "eq",
                     "ne",
                     "gt",
                     "gte",
                     "lt",
                     "lte",
-                    "between"
+                    "contains"
                   ],
                   "type": "string"
                 },
                 "value": {
-                  "description": "过滤值",
-                  "type": "string"
-                },
-                "valueTo": {
-                  "description": "between 操作符时使用的结束值",
-                  "type": "string"
+                  "description": "有界标量值，范围筛选须为数值",
+                  "maxLength": 500,
+                  "type": [
+                    "string",
+                    "number",
+                    "boolean",
+                    "null"
+                  ]
                 }
               },
               "required": [
                 "field",
-                "operator",
+                "op",
                 "value"
               ],
               "type": "object"
             },
-            "maxItems": 100,
+            "maxItems": 8,
             "type": "array"
           },
           "groupBy": {
@@ -88,8 +92,7 @@
         },
         "required": [
           "resourceId",
-          "groupBy",
-          "metric"
+          "groupBy"
         ],
         "type": "object"
       },
@@ -101,7 +104,7 @@
       "requiredPermissions": [],
       "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
       "risk": "low",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     "check_knowledge_constraints": {
       "anyPermissions": [],
@@ -123,7 +126,7 @@
               "minimum": 1,
               "type": "integer"
             },
-            "maxItems": 100,
+            "maxItems": 30,
             "type": "array",
             "uniqueItems": true
           },
@@ -147,7 +150,7 @@
       "requiredPermissions": [],
       "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
       "risk": "low",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     "compare_summaries": {
       "anyPermissions": [],
@@ -165,11 +168,12 @@
           "evidenceIds": {
             "description": "本轮已读取且仍获授权的证据编号",
             "items": {
-              "description": "真实名称或证据标识",
-              "maxLength": 200,
-              "type": "string"
+              "description": "本轮真实统计证据序号",
+              "minimum": 1,
+              "type": "integer"
             },
-            "maxItems": 100,
+            "maxItems": 3,
+            "minItems": 2,
             "type": "array",
             "uniqueItems": true
           }
@@ -185,7 +189,7 @@
       "requiredPermissions": [],
       "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
       "risk": "low",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     "describe_resource": {
       "anyPermissions": [],
@@ -219,7 +223,7 @@
       "requiredPermissions": [],
       "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
       "risk": "low",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     "execute_operator": {
       "anyPermissions": [],
@@ -252,18 +256,20 @@
             },
             "description": "角色键到真实资料编号的映射，角色取对应发布清单",
             "maxProperties": 100,
-            "type": "object"
+            "type": "object",
+            "x-business-validation": true
           },
           "name": {
             "description": "本次创建对象的显示名称",
-            "maxLength": 120,
+            "maxLength": 160,
             "type": "string"
           },
           "parameters": {
             "additionalProperties": true,
             "description": "发布清单允许的参数；单位、必填项和范围继续由真实清单验证",
             "maxProperties": 100,
-            "type": "object"
+            "type": "object",
+            "x-business-validation": true
           },
           "versionId": {
             "description": "真实已发布且允许智能体使用的版本编号",
@@ -272,8 +278,7 @@
           }
         },
         "required": [
-          "versionId",
-          "inputs"
+          "versionId"
         ],
         "type": "object"
       },
@@ -287,7 +292,7 @@
       ],
       "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
       "risk": "medium",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     "get_compute_task": {
       "anyPermissions": [
@@ -326,7 +331,7 @@
       "requiredPermissions": [],
       "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
       "risk": "low",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     "get_map_data_profile": {
       "anyPermissions": [],
@@ -366,12 +371,13 @@
       "limitations": "仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件",
       "name": "get_map_data_profile",
       "operationIds": [
-        "getResourceProfile"
+        "getResourceProfile",
+        "getResourceVisualizationSummary"
       ],
       "requiredPermissions": [],
       "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
       "risk": "low",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     "get_platform_link": {
       "anyPermissions": [],
@@ -411,7 +417,7 @@
       "requiredPermissions": [],
       "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
       "risk": "low",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     "get_system_info": {
       "anyPermissions": [],
@@ -430,6 +436,13 @@
             "description": "平台参数白名单分区",
             "items": {
               "description": "真实名称或证据标识",
+              "enum": [
+                "platform",
+                "resources",
+                "limits",
+                "models",
+                "compute"
+              ],
               "maxLength": 200,
               "type": "string"
             },
@@ -446,7 +459,7 @@
       "requiredPermissions": [],
       "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
       "risk": "low",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     "import_compute_result": {
       "anyPermissions": [
@@ -510,6 +523,7 @@
       "limitations": "仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件",
       "name": "import_compute_result",
       "operationIds": [
+        "importComputeOutput",
         "getComputeTask"
       ],
       "requiredPermissions": [
@@ -517,7 +531,7 @@
       ],
       "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
       "risk": "medium",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     "list_business_flows": {
       "anyPermissions": [],
@@ -534,7 +548,7 @@
         "properties": {
           "limit": {
             "description": "本次读取上限；完整性和下一页位置以真实返回值为准",
-            "maximum": 1000,
+            "maximum": 10,
             "minimum": 1,
             "type": "integer"
           },
@@ -545,7 +559,7 @@
           },
           "query": {
             "description": "当前授权范围内的检索关键词；空值是否允许取决于工具用途",
-            "maxLength": 300,
+            "maxLength": 120,
             "type": "string"
           }
         },
@@ -559,7 +573,7 @@
       "requiredPermissions": [],
       "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
       "risk": "low",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     "list_compute_algorithms": {
       "anyPermissions": [],
@@ -575,8 +589,8 @@
         "description": "按query目标关键词查找已发布算法，空格分词（如面积 周长）；返回具体版本完整manifest，先核对输入/参数/输出再执行。query可省略以列出目录",
         "properties": {
           "query": {
-            "description": "当前授权范围内的检索关键词；空值是否允许取决于工具用途",
-            "maxLength": 300,
+            "description": "当前允许的已发布算法关键词；须为不超过200字的文字",
+            "maxLength": 200,
             "type": "string"
           }
         },
@@ -590,7 +604,7 @@
       "requiredPermissions": [],
       "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
       "risk": "low",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     "list_compute_tasks": {
       "anyPermissions": [],
@@ -607,7 +621,7 @@
         "properties": {
           "query": {
             "description": "当前授权范围内的检索关键词；空值是否允许取决于工具用途",
-            "maxLength": 300,
+            "maxLength": 160,
             "type": "string"
           }
         },
@@ -623,7 +637,7 @@
       ],
       "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
       "risk": "low",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     "prepare_business_flow_inputs": {
       "anyPermissions": [],
@@ -696,7 +710,7 @@
       "requiredPermissions": [],
       "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
       "risk": "low",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     "prepare_map_workspace": {
       "anyPermissions": [],
@@ -724,6 +738,7 @@
               "type": "integer"
             },
             "maxItems": 5,
+            "minItems": 1,
             "type": "array",
             "uniqueItems": true
           },
@@ -754,7 +769,7 @@
       ],
       "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
       "risk": "low",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     "present_resource_catalog": {
       "anyPermissions": [],
@@ -781,7 +796,7 @@
           },
           "query": {
             "description": "当前授权范围内的检索关键词；空值是否允许取决于工具用途",
-            "maxLength": 300,
+            "maxLength": 200,
             "type": "string"
           }
         },
@@ -795,7 +810,7 @@
       "requiredPermissions": [],
       "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
       "risk": "low",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     "read_compute_output": {
       "anyPermissions": [
@@ -815,7 +830,7 @@
         "properties": {
           "limit": {
             "description": "本次读取上限；完整性和下一页位置以真实返回值为准",
-            "maximum": 1000,
+            "maximum": 50,
             "minimum": 1,
             "type": "integer"
           },
@@ -838,12 +853,13 @@
       "limitations": "仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件",
       "name": "read_compute_output",
       "operationIds": [
+        "previewComputeOutput",
         "getComputeTask"
       ],
       "requiredPermissions": [],
       "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
       "risk": "low",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     "read_document": {
       "anyPermissions": [],
@@ -860,6 +876,7 @@
         "properties": {
           "offset": {
             "description": "从0开始的分页位置",
+            "maximum": 262144,
             "minimum": 0,
             "type": "integer"
           },
@@ -880,7 +897,7 @@
       "requiredPermissions": [],
       "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
       "risk": "low",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     "read_knowledge_document": {
       "anyPermissions": [],
@@ -896,10 +913,9 @@
         "description": "按search_knowledge返回的documentId读取知识文献原文；offset从0开始，limit为1至8000字符；返回nextOffset供继续阅读。documentId属于知识库，不是数据resourceId",
         "properties": {
           "documentId": {
-            "description": "知识库文献编号，不能替代业务资料resourceId",
-            "maxLength": 120,
-            "minLength": 1,
-            "type": "string"
+            "description": "知识文献真实正整数编号，不能与resourceId混用",
+            "minimum": 1,
+            "type": "integer"
           },
           "limit": {
             "description": "本次读取上限；完整性和下一页位置以真实返回值为准",
@@ -924,7 +940,7 @@
       "requiredPermissions": [],
       "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
       "risk": "low",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     "read_rows": {
       "anyPermissions": [],
@@ -946,49 +962,53 @@
               "maxLength": 200,
               "type": "string"
             },
-            "maxItems": 100,
+            "maxItems": 12,
             "type": "array",
             "uniqueItems": true
           },
           "filters": {
             "description": "结构化属性条件，仍使用原查询语义",
             "items": {
+              "additionalProperties": false,
+              "description": "Agent结构化属性条件，使用op；与页面AttributeFilter的operator字段分开",
               "properties": {
                 "field": {
-                  "description": "字段名",
+                  "description": "真实字段名称",
+                  "maxLength": 200,
                   "type": "string"
                 },
-                "operator": {
-                  "description": "过滤操作符",
+                "op": {
+                  "description": "原Agent查询运算语义",
                   "enum": [
-                    "contains",
                     "eq",
                     "ne",
                     "gt",
                     "gte",
                     "lt",
                     "lte",
-                    "between"
+                    "contains"
                   ],
                   "type": "string"
                 },
                 "value": {
-                  "description": "过滤值",
-                  "type": "string"
-                },
-                "valueTo": {
-                  "description": "between 操作符时使用的结束值",
-                  "type": "string"
+                  "description": "有界标量值，范围筛选须为数值",
+                  "maxLength": 500,
+                  "type": [
+                    "string",
+                    "number",
+                    "boolean",
+                    "null"
+                  ]
                 }
               },
               "required": [
                 "field",
-                "operator",
+                "op",
                 "value"
               ],
               "type": "object"
             },
-            "maxItems": 100,
+            "maxItems": 8,
             "type": "array"
           },
           "resourceId": {
@@ -1011,7 +1031,7 @@
       "requiredPermissions": [],
       "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
       "risk": "low",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     "search_knowledge": {
       "anyPermissions": [],
@@ -1045,7 +1065,7 @@
       "requiredPermissions": [],
       "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
       "risk": "low",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     "search_resources": {
       "anyPermissions": [],
@@ -1071,8 +1091,7 @@
             "type": "string"
           },
           "limit": {
-            "description": "本次读取上限；完整性和下一页位置以真实返回值为准",
-            "maximum": 1000,
+            "description": "默认50条，实际响应按24KiB分页预算截断，以nextOffset继续；不将截断误称为完整目录",
             "minimum": 1,
             "type": "integer"
           },
@@ -1083,7 +1102,7 @@
           },
           "query": {
             "description": "当前授权范围内的检索关键词；空值是否允许取决于工具用途",
-            "maxLength": 300,
+            "maxLength": 200,
             "type": "string"
           }
         },
@@ -1092,12 +1111,12 @@
       "limitations": "仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件",
       "name": "search_resources",
       "operationIds": [
-        "getResources"
+        "listAgentResources"
       ],
       "requiredPermissions": [],
       "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
       "risk": "low",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     "search_web": {
       "anyPermissions": [],
@@ -1149,7 +1168,7 @@
       "requiredPermissions": [],
       "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
       "risk": "low",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     "start_business_flow": {
       "anyPermissions": [],
@@ -1232,7 +1251,7 @@
       "requiredPermissions": [],
       "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
       "risk": "medium",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     "summarize_data": {
       "anyPermissions": [],
@@ -1254,49 +1273,53 @@
               "maxLength": 200,
               "type": "string"
             },
-            "maxItems": 100,
+            "maxItems": 12,
             "type": "array",
             "uniqueItems": true
           },
           "filters": {
             "description": "结构化属性条件，仍使用原查询语义",
             "items": {
+              "additionalProperties": false,
+              "description": "Agent结构化属性条件，使用op；与页面AttributeFilter的operator字段分开",
               "properties": {
                 "field": {
-                  "description": "字段名",
+                  "description": "真实字段名称",
+                  "maxLength": 200,
                   "type": "string"
                 },
-                "operator": {
-                  "description": "过滤操作符",
+                "op": {
+                  "description": "原Agent查询运算语义",
                   "enum": [
-                    "contains",
                     "eq",
                     "ne",
                     "gt",
                     "gte",
                     "lt",
                     "lte",
-                    "between"
+                    "contains"
                   ],
                   "type": "string"
                 },
                 "value": {
-                  "description": "过滤值",
-                  "type": "string"
-                },
-                "valueTo": {
-                  "description": "between 操作符时使用的结束值",
-                  "type": "string"
+                  "description": "有界标量值，范围筛选须为数值",
+                  "maxLength": 500,
+                  "type": [
+                    "string",
+                    "number",
+                    "boolean",
+                    "null"
+                  ]
                 }
               },
               "required": [
                 "field",
-                "operator",
+                "op",
                 "value"
               ],
               "type": "object"
             },
-            "maxItems": 100,
+            "maxItems": 8,
             "type": "array"
           },
           "resourceId": {
@@ -1306,8 +1329,7 @@
           }
         },
         "required": [
-          "resourceId",
-          "fields"
+          "resourceId"
         ],
         "type": "object"
       },
@@ -1319,7 +1341,7 @@
       "requiredPermissions": [],
       "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
       "risk": "low",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     "summarize_resource_catalog": {
       "anyPermissions": [],
@@ -1346,7 +1368,7 @@
           },
           "query": {
             "description": "当前授权范围内的检索关键词；空值是否允许取决于工具用途",
-            "maxLength": 300,
+            "maxLength": 200,
             "type": "string"
           }
         },
@@ -1360,7 +1382,7 @@
       "requiredPermissions": [],
       "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
       "risk": "low",
-      "version": "1.0.0"
+      "version": "1.0.1"
     }
   }
 }

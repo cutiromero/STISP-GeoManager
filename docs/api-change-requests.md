@@ -1,8 +1,21 @@
 # API Change Requests
 
-## API-20261117-001 - Agent能力发现及唯一工具合同
+## API-20261117-002 - 通用工具执行合同与真实调用回执
 
 - Status: BackendReady
+- Owner: codex/xintao，契约、后端与SDK按顺序交接。
+- Endpoints: GET /api/agent/runs/{runId}/tool-calls/；既有工具执行内部入口。
+- Change type: 新增受授权调用审计；ErrorResponse新增可选机器字段，旧detail保持兼容。
+- OpenAPI change: AgentToolCall、AgentToolCallList、AgentToolAttributeFilter；工具参数合同修订1.0.1，保留实际统计默认值和整数文献/证据编号。
+- Mock examples: 180-agent-capabilities.json、181-agent-tool-calls.json。
+- Frontend reason: 可读取真实工具调用、实际任务引用和可操作的错误，不显示敏感参数正文。
+- Backend implementation notes: 新增独立AgentToolCall表；当前项目/本人/历史来源重新授权。执行前校验生成合同，动态算法信封仍由真实manifest核对；未知异常不返回路径或秘密。
+- Verification: 类型与布尔混用、边界、嵌套及体积、原查询op语义、权限变化、审计隔离、错误关联、真实模型协议修正和原算子输入引导。
+- Result: 阶段2实现，完成专项及候选验收后上线。
+
+## API-20261117-001 - Agent能力发现及唯一工具合同
+
+- Status: Verified
 - Owner: codex/xintao，按契约、后端、SDK顺序完成跨端交接。
 - Endpoints: GET /api/agent/capabilities/。
 - Change type: 新增只读授权能力目录；不改变已有工具执行和业务接口。
@@ -11,7 +24,7 @@
 - Frontend reason: SDK可读取当前账号与项目的能力合同，后续工具说明及操作预览沿用同一来源。
 - Backend implementation notes: 当前单项目与Agent权限，策略及工具功能权限过滤；不返回资料、凭据或服务器路径，不触发模型或业务写入。
 - Verification: 生成合同与实际注册表一致；未知operationId/参数漂移拒绝；未登录、缺项目、撤权及策略变化；业务对象数不变。
-- Result: 阶段1实现；完成本地及标准候选验收后上线。
+- Result: 已通过标准full与正式HTTP验收，上线0.4.0 / 8d544d3；原件保护记录一致。
 
 ## API-20261116-003 - 业务流启动固定参数准入
 
@@ -835,7 +848,8 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| API-20261117-001 | BackendReady | agent/capabilities | 新增只读能力发现 | AgentCapabilityCatalog及工具schema | 180 | 已实现 | 参数漂移及授权回归 | 目录不授予执行权 |
+| API-20261117-002 | BackendReady | agent/runs/tool-calls | 新增审计及可选错误字段 | AgentToolCallList、ErrorResponse | 180、181 | 已实现 | 执行合同及隔离 | 新增表，不保存原始参数 |
+| API-20261117-001 | Verified | agent/capabilities | 新增只读能力发现 | AgentCapabilityCatalog及工具schema | 180 | 已实现 | 参数漂移及授权回归 | 目录不授予执行权 |
 | API-20261116-003 | BackendReady | business-flow start/decide | 400准入及恢复语义 | BusinessFlowStart | 145 | 已实现 | 回归与真实候选验收 | 确认固定参数，不重复消耗调用 |
 | API-20261116-002 | BackendReady | raster/render/async | additive请求字段 | RasterRenderAsyncRequest | 40 | 已实现 | 定点及正式工程验收 | 服务端保存样式恢复、ACL及缓存缺失 |
 | API-20261116-001 | BackendReady | catalog成果/版本与文件 | additive字段及缺失404 | MapCompositionVersion、ResultArtifact | 50、55 | 已实现 | 后端及浏览器回归通过 | 文件状态、后台生成与原件缺失边界 |

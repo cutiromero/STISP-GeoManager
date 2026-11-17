@@ -21210,6 +21210,149 @@
         }
       }
     },
+    "/api/agent/runs/{runId}/tool-calls/": {
+      "get": {
+        "tags": [
+          "智能体"
+        ],
+        "operationId": "listAgentToolCalls",
+        "summary": "读取本人运行的真实工具调用回执",
+        "description": "只读分页查询，必须为当前用户、当前项目及可访问历史运行。保留真实合同版本、影响、参数名及SHA-256、对象引用和结构化错误；不返回参数值、文档正文、凭据或服务器路径。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Project-Id",
+            "in": "header",
+            "required": true,
+            "description": "唯一当前项目",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "description": "本人真实运行编号",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "从0开始的分页位置",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "每页回执数量",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 30
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "真实调用分页",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentToolCallList"
+                },
+                "example": {
+                  "runId": 8,
+                  "projectId": 1,
+                  "total": 1,
+                  "nextOffset": null,
+                  "items": [
+                    {
+                      "id": "b08d463f-85f5-4831-a726-40d06b81f208",
+                      "tool": "search_resources",
+                      "contractVersion": "1.0.1",
+                      "effect": "read",
+                      "status": "succeeded",
+                      "requestHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                      "argumentKeys": [
+                        "query"
+                      ],
+                      "resultRefs": {},
+                      "error": {},
+                      "createdAt": "2026-11-17T15:30:00+08:00",
+                      "updatedAt": "2026-11-17T15:30:01+08:00"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "请先登录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Agent或来源权限已变化",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "运行不存在或无权访问",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "服务暂时繁忙",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/agent/capabilities/": {
       "get": {
         "tags": [
@@ -21260,8 +21403,7 @@
                             "type": "string"
                           },
                           "limit": {
-                            "description": "本次读取上限；完整性和下一页位置以真实返回值为准",
-                            "maximum": 1000,
+                            "description": "默认50条，实际响应按24KiB分页预算截断，以nextOffset继续；不将截断误称为完整目录",
                             "minimum": 1,
                             "type": "integer"
                           },
@@ -21272,7 +21414,7 @@
                           },
                           "query": {
                             "description": "当前授权范围内的检索关键词；空值是否允许取决于工具用途",
-                            "maxLength": 300,
+                            "maxLength": 200,
                             "type": "string"
                           }
                         },
@@ -21281,12 +21423,12 @@
                       "limitations": "仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件",
                       "name": "search_resources",
                       "operationIds": [
-                        "getResources"
+                        "listAgentResources"
                       ],
                       "requiredPermissions": [],
                       "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
                       "risk": "low",
-                      "version": "1.0.0"
+                      "version": "1.0.1"
                     }
                   ],
                   "limitations": "只读目录不授予对象或执行权限"
@@ -38262,6 +38404,42 @@
             "items": {
               "$ref": "#/components/schemas/ComputeInputGap"
             }
+          },
+          "code": {
+            "type": "string",
+            "description": "稳定机器错误码，决定补参、停止、换版或有限重试",
+            "pattern": "^[A-Z][A-Z0-9_]*$"
+          },
+          "retryable": {
+            "type": "boolean",
+            "description": "是否适合在原授权和参数下有限退避重试，不代替幂等检查"
+          },
+          "requestId": {
+            "type": "string",
+            "description": "本次真实调用关联号",
+            "format": "uuid"
+          },
+          "fieldErrors": {
+            "type": "array",
+            "description": "参数字段差距，不记录敏感值",
+            "items": {
+              "type": "object",
+              "required": [
+                "field",
+                "detail"
+              ],
+              "properties": {
+                "field": {
+                  "type": "string",
+                  "description": "JSON字段位置"
+                },
+                "detail": {
+                  "type": "string",
+                  "description": "可操作的问题说明"
+                }
+              },
+              "additionalProperties": false
+            }
           }
         }
       },
@@ -54445,7 +54623,7 @@
           "query": {
             "description": "当前授权范围内的检索关键词；空值是否允许取决于工具用途",
             "type": "string",
-            "maxLength": 300
+            "maxLength": 120
           },
           "offset": {
             "description": "从0开始的分页位置",
@@ -54456,7 +54634,7 @@
             "description": "本次读取上限；完整性和下一页位置以真实返回值为准",
             "type": "integer",
             "minimum": 1,
-            "maximum": 1000
+            "maximum": 10
           }
         },
         "additionalProperties": false
@@ -54550,7 +54728,7 @@
           "query": {
             "description": "当前授权范围内的检索关键词；空值是否允许取决于工具用途",
             "type": "string",
-            "maxLength": 300
+            "maxLength": 200
           },
           "category": {
             "description": "资源来源分类",
@@ -54568,10 +54746,9 @@
             "minimum": 0
           },
           "limit": {
-            "description": "本次读取上限；完整性和下一页位置以真实返回值为准",
+            "description": "默认50条，实际响应按24KiB分页预算截断，以nextOffset继续；不将截断误称为完整目录",
             "type": "integer",
-            "minimum": 1,
-            "maximum": 1000
+            "minimum": 1
           }
         },
         "additionalProperties": false
@@ -54583,7 +54760,7 @@
           "query": {
             "description": "当前授权范围内的检索关键词；空值是否允许取决于工具用途",
             "type": "string",
-            "maxLength": 300
+            "maxLength": 200
           },
           "category": {
             "description": "资源来源分类",
@@ -54605,7 +54782,7 @@
           "query": {
             "description": "当前授权范围内的检索关键词；空值是否允许取决于工具用途",
             "type": "string",
-            "maxLength": 300
+            "maxLength": 200
           },
           "category": {
             "description": "资源来源分类",
@@ -54659,7 +54836,8 @@
               "description": "真实编号"
             },
             "maxItems": 5,
-            "uniqueItems": true
+            "uniqueItems": true,
+            "minItems": 1
           },
           "styles": {
             "description": "仅用于个人地图工程的展示样式，不写入原始资料",
@@ -54737,16 +54915,16 @@
               "maxLength": 200,
               "description": "真实名称或证据标识"
             },
-            "maxItems": 100,
+            "maxItems": 12,
             "uniqueItems": true
           },
           "filters": {
             "description": "结构化属性条件，仍使用原查询语义",
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/AttributeFilter"
+              "$ref": "#/components/schemas/AgentToolAttributeFilter"
             },
-            "maxItems": 100
+            "maxItems": 8
           }
         },
         "additionalProperties": false,
@@ -54771,22 +54949,21 @@
               "maxLength": 200,
               "description": "真实名称或证据标识"
             },
-            "maxItems": 100,
+            "maxItems": 12,
             "uniqueItems": true
           },
           "filters": {
             "description": "结构化属性条件，仍使用原查询语义",
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/AttributeFilter"
+              "$ref": "#/components/schemas/AgentToolAttributeFilter"
             },
-            "maxItems": 100
+            "maxItems": 8
           }
         },
         "additionalProperties": false,
         "required": [
-          "resourceId",
-          "fields"
+          "resourceId"
         ]
       },
       "AgentToolAggregateDataArguments": {
@@ -54827,16 +55004,15 @@
             "description": "结构化属性条件，仍使用原查询语义",
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/AttributeFilter"
+              "$ref": "#/components/schemas/AgentToolAttributeFilter"
             },
-            "maxItems": 100
+            "maxItems": 8
           }
         },
         "additionalProperties": false,
         "required": [
           "resourceId",
-          "groupBy",
-          "metric"
+          "groupBy"
         ]
       },
       "AgentToolCompareSummariesArguments": {
@@ -54847,12 +55023,13 @@
             "description": "本轮已读取且仍获授权的证据编号",
             "type": "array",
             "items": {
-              "type": "string",
-              "maxLength": 200,
-              "description": "真实名称或证据标识"
+              "type": "integer",
+              "minimum": 1,
+              "description": "本轮真实统计证据序号"
             },
-            "maxItems": 100,
-            "uniqueItems": true
+            "maxItems": 3,
+            "uniqueItems": true,
+            "minItems": 2
           }
         },
         "additionalProperties": false,
@@ -54872,7 +55049,8 @@
           "offset": {
             "description": "从0开始的分页位置",
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "maximum": 262144
           }
         },
         "additionalProperties": false,
@@ -54890,7 +55068,14 @@
             "items": {
               "type": "string",
               "maxLength": 200,
-              "description": "真实名称或证据标识"
+              "description": "真实名称或证据标识",
+              "enum": [
+                "platform",
+                "resources",
+                "limits",
+                "models",
+                "compute"
+              ]
             },
             "maxItems": 5,
             "uniqueItems": true
@@ -54903,9 +55088,9 @@
         "description": "按query目标关键词查找已发布算法，空格分词（如面积 周长）；返回具体版本完整manifest，先核对输入/参数/输出再执行。query可省略以列出目录",
         "properties": {
           "query": {
-            "description": "当前授权范围内的检索关键词；空值是否允许取决于工具用途",
+            "description": "当前允许的已发布算法关键词；须为不超过200字的文字",
             "type": "string",
-            "maxLength": 300
+            "maxLength": 200
           }
         },
         "additionalProperties": false
@@ -54927,18 +55112,20 @@
               "minimum": 1,
               "description": "真实资料编号"
             },
-            "maxProperties": 100
+            "maxProperties": 100,
+            "x-business-validation": true
           },
           "parameters": {
             "description": "发布清单允许的参数；单位、必填项和范围继续由真实清单验证",
             "type": "object",
             "additionalProperties": true,
-            "maxProperties": 100
+            "maxProperties": 100,
+            "x-business-validation": true
           },
           "name": {
             "description": "本次创建对象的显示名称",
             "type": "string",
-            "maxLength": 120
+            "maxLength": 160
           },
           "idempotencyKey": {
             "description": "同一逻辑提交的稳定重试键",
@@ -54953,8 +55140,7 @@
         },
         "additionalProperties": false,
         "required": [
-          "versionId",
-          "inputs"
+          "versionId"
         ]
       },
       "AgentToolGetComputeTaskArguments": {
@@ -54992,7 +55178,7 @@
             "description": "本次读取上限；完整性和下一页位置以真实返回值为准",
             "type": "integer",
             "minimum": 1,
-            "maximum": 1000
+            "maximum": 50
           }
         },
         "additionalProperties": false,
@@ -55007,7 +55193,7 @@
           "query": {
             "description": "当前授权范围内的检索关键词；空值是否允许取决于工具用途",
             "type": "string",
-            "maxLength": 300
+            "maxLength": 160
           }
         },
         "additionalProperties": false
@@ -55079,10 +55265,9 @@
         "description": "按search_knowledge返回的documentId读取知识文献原文；offset从0开始，limit为1至8000字符；返回nextOffset供继续阅读。documentId属于知识库，不是数据resourceId",
         "properties": {
           "documentId": {
-            "description": "知识库文献编号，不能替代业务资料resourceId",
-            "type": "string",
-            "maxLength": 120,
-            "minLength": 1
+            "type": "integer",
+            "minimum": 1,
+            "description": "知识文献真实正整数编号，不能与resourceId混用"
           },
           "offset": {
             "description": "从0开始的分页位置",
@@ -55119,7 +55304,7 @@
               "minimum": 1,
               "description": "真实编号"
             },
-            "maxItems": 100,
+            "maxItems": 30,
             "uniqueItems": true
           }
         },
@@ -55306,12 +55491,171 @@
             "description": "执行时必须重新满足的边界"
           }
         }
+      },
+      "AgentToolCall": {
+        "type": "object",
+        "description": "真实工具调用回执，只记录参数名及摘要，不记录原始参数值或资料正文",
+        "required": [
+          "id",
+          "tool",
+          "contractVersion",
+          "effect",
+          "status",
+          "requestHash",
+          "argumentKeys",
+          "resultRefs",
+          "error",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "真实调用关联号"
+          },
+          "tool": {
+            "type": "string",
+            "description": "稳定工具名"
+          },
+          "contractVersion": {
+            "type": "string",
+            "description": "实际合同版本"
+          },
+          "effect": {
+            "type": "string",
+            "description": "实际操作影响"
+          },
+          "status": {
+            "type": "string",
+            "description": "执行状态，工具受理不代表计算或入库完成"
+          },
+          "requestHash": {
+            "type": "string",
+            "description": "参数JSON的SHA-256；不返回参数内容"
+          },
+          "argumentKeys": {
+            "type": "array",
+            "description": "本次提交的参数名称",
+            "items": {
+              "type": "string",
+              "description": "参数名"
+            }
+          },
+          "resultRefs": {
+            "type": "object",
+            "description": "真实任务及对象引用，不保存资料正文或原始像元",
+            "additionalProperties": true
+          },
+          "error": {
+            "description": "失败时的机器错误；成功或执行中为空对象",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorResponse"
+              },
+              {
+                "type": "object",
+                "maxProperties": 0
+              }
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "调用创建时间"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "调用更新时间"
+          }
+        }
+      },
+      "AgentToolCallList": {
+        "type": "object",
+        "description": "本人当前项目的工具调用审计分页",
+        "required": [
+          "runId",
+          "projectId",
+          "total",
+          "nextOffset",
+          "items"
+        ],
+        "properties": {
+          "runId": {
+            "type": "integer",
+            "description": "真实Agent运行编号"
+          },
+          "projectId": {
+            "type": "integer",
+            "description": "当前项目"
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "真实回执总数"
+          },
+          "nextOffset": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "下一页位置，null表示已到末页"
+          },
+          "items": {
+            "type": "array",
+            "description": "当前页回执",
+            "items": {
+              "$ref": "#/components/schemas/AgentToolCall"
+            }
+          }
+        }
+      },
+      "AgentToolAttributeFilter": {
+        "type": "object",
+        "description": "Agent结构化属性条件，使用op；与页面AttributeFilter的operator字段分开",
+        "required": [
+          "field",
+          "op",
+          "value"
+        ],
+        "properties": {
+          "field": {
+            "type": "string",
+            "description": "真实字段名称",
+            "maxLength": 200
+          },
+          "op": {
+            "type": "string",
+            "description": "原Agent查询运算语义",
+            "enum": [
+              "eq",
+              "ne",
+              "gt",
+              "gte",
+              "lt",
+              "lte",
+              "contains"
+            ]
+          },
+          "value": {
+            "type": [
+              "string",
+              "number",
+              "boolean",
+              "null"
+            ],
+            "description": "有界标量值，范围筛选须为数值",
+            "maxLength": 500
+          }
+        },
+        "additionalProperties": false
       }
     }
   },
   "x-agent-tools": {
     "list_business_flows": {
-      "version": "1.0.0",
+      "version": "1.0.1",
       "inputSchema": {
         "$ref": "#/components/schemas/AgentToolListBusinessFlowsArguments"
       },
@@ -55330,7 +55674,7 @@
       "anyPermissions": []
     },
     "prepare_business_flow_inputs": {
-      "version": "1.0.0",
+      "version": "1.0.1",
       "inputSchema": {
         "$ref": "#/components/schemas/AgentToolPrepareBusinessFlowInputsArguments"
       },
@@ -55349,7 +55693,7 @@
       "anyPermissions": []
     },
     "start_business_flow": {
-      "version": "1.0.0",
+      "version": "1.0.1",
       "inputSchema": {
         "$ref": "#/components/schemas/AgentToolStartBusinessFlowArguments"
       },
@@ -55368,12 +55712,12 @@
       "anyPermissions": []
     },
     "search_resources": {
-      "version": "1.0.0",
+      "version": "1.0.1",
       "inputSchema": {
         "$ref": "#/components/schemas/AgentToolSearchResourcesArguments"
       },
       "operationIds": [
-        "getResources"
+        "listAgentResources"
       ],
       "effect": "read",
       "risk": "low",
@@ -55387,7 +55731,7 @@
       "anyPermissions": []
     },
     "summarize_resource_catalog": {
-      "version": "1.0.0",
+      "version": "1.0.1",
       "inputSchema": {
         "$ref": "#/components/schemas/AgentToolSummarizeResourceCatalogArguments"
       },
@@ -55406,7 +55750,7 @@
       "anyPermissions": []
     },
     "present_resource_catalog": {
-      "version": "1.0.0",
+      "version": "1.0.1",
       "inputSchema": {
         "$ref": "#/components/schemas/AgentToolPresentResourceCatalogArguments"
       },
@@ -55425,12 +55769,13 @@
       "anyPermissions": []
     },
     "get_map_data_profile": {
-      "version": "1.0.0",
+      "version": "1.0.1",
       "inputSchema": {
         "$ref": "#/components/schemas/AgentToolGetMapDataProfileArguments"
       },
       "operationIds": [
-        "getResourceProfile"
+        "getResourceProfile",
+        "getResourceVisualizationSummary"
       ],
       "effect": "read",
       "risk": "low",
@@ -55444,7 +55789,7 @@
       "anyPermissions": []
     },
     "prepare_map_workspace": {
-      "version": "1.0.0",
+      "version": "1.0.1",
       "inputSchema": {
         "$ref": "#/components/schemas/AgentToolPrepareMapWorkspaceArguments"
       },
@@ -55466,7 +55811,7 @@
       "anyPermissions": []
     },
     "get_platform_link": {
-      "version": "1.0.0",
+      "version": "1.0.1",
       "inputSchema": {
         "$ref": "#/components/schemas/AgentToolGetPlatformLinkArguments"
       },
@@ -55483,7 +55828,7 @@
       "anyPermissions": []
     },
     "describe_resource": {
-      "version": "1.0.0",
+      "version": "1.0.1",
       "inputSchema": {
         "$ref": "#/components/schemas/AgentToolDescribeResourceArguments"
       },
@@ -55502,7 +55847,7 @@
       "anyPermissions": []
     },
     "read_rows": {
-      "version": "1.0.0",
+      "version": "1.0.1",
       "inputSchema": {
         "$ref": "#/components/schemas/AgentToolReadRowsArguments"
       },
@@ -55522,7 +55867,7 @@
       "anyPermissions": []
     },
     "summarize_data": {
-      "version": "1.0.0",
+      "version": "1.0.1",
       "inputSchema": {
         "$ref": "#/components/schemas/AgentToolSummarizeDataArguments"
       },
@@ -55541,7 +55886,7 @@
       "anyPermissions": []
     },
     "aggregate_data": {
-      "version": "1.0.0",
+      "version": "1.0.1",
       "inputSchema": {
         "$ref": "#/components/schemas/AgentToolAggregateDataArguments"
       },
@@ -55560,7 +55905,7 @@
       "anyPermissions": []
     },
     "compare_summaries": {
-      "version": "1.0.0",
+      "version": "1.0.1",
       "inputSchema": {
         "$ref": "#/components/schemas/AgentToolCompareSummariesArguments"
       },
@@ -55577,7 +55922,7 @@
       "anyPermissions": []
     },
     "read_document": {
-      "version": "1.0.0",
+      "version": "1.0.1",
       "inputSchema": {
         "$ref": "#/components/schemas/AgentToolReadDocumentArguments"
       },
@@ -55594,7 +55939,7 @@
       "anyPermissions": []
     },
     "get_system_info": {
-      "version": "1.0.0",
+      "version": "1.0.1",
       "inputSchema": {
         "$ref": "#/components/schemas/AgentToolGetSystemInfoArguments"
       },
@@ -55611,7 +55956,7 @@
       "anyPermissions": []
     },
     "list_compute_algorithms": {
-      "version": "1.0.0",
+      "version": "1.0.1",
       "inputSchema": {
         "$ref": "#/components/schemas/AgentToolListComputeAlgorithmsArguments"
       },
@@ -55630,7 +55975,7 @@
       "anyPermissions": []
     },
     "execute_operator": {
-      "version": "1.0.0",
+      "version": "1.0.1",
       "inputSchema": {
         "$ref": "#/components/schemas/AgentToolExecuteOperatorArguments"
       },
@@ -55651,7 +55996,7 @@
       "anyPermissions": []
     },
     "get_compute_task": {
-      "version": "1.0.0",
+      "version": "1.0.1",
       "inputSchema": {
         "$ref": "#/components/schemas/AgentToolGetComputeTaskArguments"
       },
@@ -55673,11 +56018,12 @@
       ]
     },
     "read_compute_output": {
-      "version": "1.0.0",
+      "version": "1.0.1",
       "inputSchema": {
         "$ref": "#/components/schemas/AgentToolReadComputeOutputArguments"
       },
       "operationIds": [
+        "previewComputeOutput",
         "getComputeTask"
       ],
       "effect": "read",
@@ -55695,7 +56041,7 @@
       ]
     },
     "list_compute_tasks": {
-      "version": "1.0.0",
+      "version": "1.0.1",
       "inputSchema": {
         "$ref": "#/components/schemas/AgentToolListComputeTasksArguments"
       },
@@ -55716,11 +56062,12 @@
       "anyPermissions": []
     },
     "import_compute_result": {
-      "version": "1.0.0",
+      "version": "1.0.1",
       "inputSchema": {
         "$ref": "#/components/schemas/AgentToolImportComputeResultArguments"
       },
       "operationIds": [
+        "importComputeOutput",
         "getComputeTask"
       ],
       "effect": "import",
@@ -55740,7 +56087,7 @@
       ]
     },
     "search_knowledge": {
-      "version": "1.0.0",
+      "version": "1.0.1",
       "inputSchema": {
         "$ref": "#/components/schemas/AgentToolSearchKnowledgeArguments"
       },
@@ -55759,7 +56106,7 @@
       "anyPermissions": []
     },
     "read_knowledge_document": {
-      "version": "1.0.0",
+      "version": "1.0.1",
       "inputSchema": {
         "$ref": "#/components/schemas/AgentToolReadKnowledgeDocumentArguments"
       },
@@ -55776,7 +56123,7 @@
       "anyPermissions": []
     },
     "check_knowledge_constraints": {
-      "version": "1.0.0",
+      "version": "1.0.1",
       "inputSchema": {
         "$ref": "#/components/schemas/AgentToolCheckKnowledgeConstraintsArguments"
       },
@@ -55795,7 +56142,7 @@
       "anyPermissions": []
     },
     "search_web": {
-      "version": "1.0.0",
+      "version": "1.0.1",
       "inputSchema": {
         "$ref": "#/components/schemas/AgentToolSearchWebArguments"
       },

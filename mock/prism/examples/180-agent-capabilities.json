@@ -29,8 +29,7 @@
                 "type": "string"
               },
               "limit": {
-                "description": "本次读取上限；完整性和下一页位置以真实返回值为准",
-                "maximum": 1000,
+                "description": "默认50条，实际响应按24KiB分页预算截断，以nextOffset继续；不将截断误称为完整目录",
                 "minimum": 1,
                 "type": "integer"
               },
@@ -41,7 +40,7 @@
               },
               "query": {
                 "description": "当前授权范围内的检索关键词；空值是否允许取决于工具用途",
-                "maxLength": 300,
+                "maxLength": 200,
                 "type": "string"
               }
             },
@@ -50,12 +49,12 @@
           "limitations": "仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件",
           "name": "search_resources",
           "operationIds": [
-            "getResources"
+            "listAgentResources"
           ],
           "requiredPermissions": [],
           "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
           "risk": "low",
-          "version": "1.0.0"
+          "version": "1.0.1"
         }
       ],
       "limitations": "只读目录不授予对象或执行权限"

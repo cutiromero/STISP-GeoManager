@@ -1065,6 +1065,66 @@ def _operator_submit(run, user, p, args):
 
 
 def execute(run, name, args):
+    from .capability_catalog import contracts, enabled
+    from .models import AgentToolCall
+    from .tool_contract_runtime import (
+        argument_fingerprint,
+        failure,
+        result_refs,
+        validate_arguments,
+    )
+    from apps.projects.context import selected_project_id
+    import uuid
+
+    spec = TOOLS.get(name)
+    if not spec or not CAPABILITIES.get(spec.capability):
+        raise ValidationError("未开放该工具或能力")
+    if not isinstance(args, dict) or any(not isinstance(key, str) for key in args):
+        raise ValidationError("工具参数无效")
+    user = fresh_user(run.owner_id)
+    p = require_access(user, "agent", run.model)
+    if run.project_tag_id != selected_project_id():
+        raise PermissionDenied("工具调用不属于当前项目")
+    check_evidence(run, user, p)
+    contract = contracts()[name]
+    call = AgentToolCall.objects.create(
+        project_tag_id=run.project_tag_id,
+        run=run,
+        tool=name,
+        contract_version=contract["version"],
+        effect=contract["effect"],
+        request_hash=argument_fingerprint(args),
+        idempotency_key=uuid.uuid4().hex,
+        argument_keys=sorted(set(args) & set(spec.arguments)),
+    )
+    try:
+        _check_special_capability(spec, p)
+        if not enabled(name, user, p, run=run):
+            if (
+                name in {"read_document", "read_knowledge_document"}
+                and not p["allowDocuments"]
+            ):
+                raise PermissionDenied("文档正文读取未开启")
+            if name == "compare_summaries" and not p["allowCompare"]:
+                raise PermissionDenied("跨资源比较已关闭")
+            raise PermissionDenied("当前账号、会话或策略未开放该工具")
+        validate_arguments(name, args)
+        result, pairs = _execute_authorized(run, name, args, user, p)
+        AgentToolCall.objects.filter(pk=call.pk).update(
+            status="succeeded",
+            result_refs=result_refs(result),
+            updated_at=timezone.now(),
+        )
+        return result, pairs
+    except Exception as error:
+        error.tool_request_id = str(call.pk)
+        AgentToolCall.objects.filter(pk=call.pk).update(
+            status="failed", error=failure(error, call.pk), updated_at=timezone.now()
+        )
+        raise
+
+
+def _execute_authorized(run, name, args, user, p):
     from .selections import (
         KNOWLEDGE_TOOLS,
         algorithm_ids,
@@ -1072,15 +1132,6 @@ def execute(run, name, args):
         require_knowledge,
     )
 
-    spec = TOOLS.get(name)
-    if not spec or not CAPABILITIES.get(spec.capability):
-        raise ValidationError("未开放该工具或能力")
-    if not isinstance(args, dict) or set(args) - set(spec.arguments):
-        raise ValidationError("工具参数无效")
-    user = fresh_user(run.owner_id)
-    p = require_access(user, "agent", run.model)
-    check_evidence(run, user, p)
-    _check_special_capability(spec, p)
     if name in {
         "list_business_flows",
         "prepare_business_flow_inputs",

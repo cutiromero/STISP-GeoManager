@@ -18,6 +18,34 @@ class AgentRuntime(models.Model):
     detail = models.JSONField(default=dict)
 
 
+class AgentToolCall(ProjectScopedModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    run = models.ForeignKey(
+        "AgentRun", on_delete=models.CASCADE, related_name="tool_calls"
+    )
+    tool = models.CharField(max_length=80)
+    contract_version = models.CharField(max_length=24)
+    effect = models.CharField(max_length=16)
+    request_hash = models.CharField(max_length=64)
+    idempotency_key = models.CharField(max_length=80)
+    argument_keys = models.JSONField(default=list, db_default=[])
+    status = models.CharField(max_length=24, default="running")
+    result_refs = models.JSONField(default=dict, db_default={})
+    error = models.JSONField(default=dict, db_default={})
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=("run", "idempotency_key"), name="agent_tool_call_retry_key"
+            )
+        ]
+        indexes = [
+            models.Index(fields=("run", "created_at"), name="agent_tool_call_run_time")
+        ]
+
+
 class LogicConfiguration(ProjectScopedModel):
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     value = models.JSONField(default=dict)

@@ -56,28 +56,9 @@ def live_window(model):
 
 
 def tool_enabled(tool, policy_value, run):
-    from .selections import KNOWLEDGE_TOOLS, knowledge_selection
+    from .capability_catalog import enabled
 
-    switches = {
-        "internet": policy_value["internetEnabled"] and run.internet_enabled,
-        "system_info": policy_value["systemInfoEnabled"],
-        "execute_operator": policy_value["operatorEnabled"],
-        "write_data": policy_value["operatorEnabled"],
-        "map_display": policy_value.get("mapDisplayEnabled", True),
-        "business_flow": policy_value.get("workflowEnabled", True),
-    }
-    return (
-        switches.get(tool.capability, True)
-        and (
-            tool.name not in KNOWLEDGE_TOOLS
-            or knowledge_selection(run)["mode"] != "none"
-        )
-        and (
-            tool.name not in {"read_document", "read_knowledge_document"}
-            or policy_value["allowDocuments"]
-        )
-        and (tool.name != "compare_summaries" or policy_value["allowCompare"])
-    )
+    return enabled(tool.name, run.owner, policy_value, run=run)
 
 
 def scope_for(run):
@@ -844,6 +825,10 @@ def run_task(run_id):
                     if corrections >= p["maxProtocolRetries"]:
                         raise ModelError("模型未能遵循工具协议，请调整问题或切换模型")
                     corrections += 1
+                    from .tool_contract_runtime import failure
+
+                    problem = failure(exc)
+
                     if raw.strip():
                         messages.append({"role": "assistant", "content": raw})
                     messages.append(
@@ -851,7 +836,16 @@ def run_task(run_id):
                             "role": "user",
                             "content": (
                                 "上一条JSON或工具参数无效，具体错误："
-                                + str(exc)[:300]
+                                + problem["detail"]
+                                + "\n结构化错误："
+                                + json.dumps(
+                                    {
+                                        key: value
+                                        for key, value in problem.items()
+                                        if key != "detail"
+                                    },
+                                    ensure_ascii=False,
+                                )
                                 + "。请仅使用列出的工具和真实字段，纠正一次；"
                                 "缺少信息或需要用户选择时调用ask_user；"
                                 "只有任务已完成或已明确结束时使用final。"

@@ -1,0 +1,27 @@
+{
+  "GET /api/agent/runs/{runId}/tool-calls/": {
+    "200": {
+      "runId": 8,
+      "projectId": 1,
+      "total": 1,
+      "nextOffset": null,
+      "items": [
+        {
+          "id": "b08d463f-85f5-4831-a726-40d06b81f208",
+          "tool": "search_resources",
+          "contractVersion": "1.0.1",
+          "effect": "read",
+          "status": "succeeded",
+          "requestHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "argumentKeys": [
+            "query"
+          ],
+          "resultRefs": {},
+          "error": {},
+          "createdAt": "2026-11-17T15:30:00+08:00",
+          "updatedAt": "2026-11-17T15:30:01+08:00"
+        }
+      ]
+    }
+  }
+}

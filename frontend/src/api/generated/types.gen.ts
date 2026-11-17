@@ -4968,6 +4968,31 @@ export type ErrorResponse = {
      * 第2版算子输入预检的机器可读差距，权限错误不返回资料信息
      */
     gaps?: Array<ComputeInputGap>;
+    /**
+     * 稳定机器错误码，决定补参、停止、换版或有限重试
+     */
+    code?: string;
+    /**
+     * 是否适合在原授权和参数下有限退避重试，不代替幂等检查
+     */
+    retryable?: boolean;
+    /**
+     * 本次真实调用关联号
+     */
+    requestId?: string;
+    /**
+     * 参数字段差距，不记录敏感值
+     */
+    fieldErrors?: Array<{
+        /**
+         * JSON字段位置
+         */
+        field: string;
+        /**
+         * 可操作的问题说明
+         */
+        detail: string;
+    }>;
 };
 
 export type DetailResponse = {
@@ -14698,7 +14723,7 @@ export type AgentToolSearchResourcesArguments = {
      */
     offset?: number;
     /**
-     * 本次读取上限；完整性和下一页位置以真实返回值为准
+     * 默认50条，实际响应按24KiB分页预算截断，以nextOffset继续；不将截断误称为完整目录
      */
     limit?: number;
 };
@@ -14804,7 +14829,7 @@ export type AgentToolReadRowsArguments = {
     /**
      * 结构化属性条件，仍使用原查询语义
      */
-    filters?: Array<AttributeFilter>;
+    filters?: Array<AgentToolAttributeFilter>;
 };
 
 /**
@@ -14818,11 +14843,11 @@ export type AgentToolSummarizeDataArguments = {
     /**
      * 真实字段名列表，不接受SQL表达式
      */
-    fields: Array<string>;
+    fields?: Array<string>;
     /**
      * 结构化属性条件，仍使用原查询语义
      */
-    filters?: Array<AttributeFilter>;
+    filters?: Array<AgentToolAttributeFilter>;
 };
 
 /**
@@ -14844,11 +14869,11 @@ export type AgentToolAggregateDataArguments = {
     /**
      * 确定性聚合指标
      */
-    metric: 'count' | 'sum' | 'mean' | 'min' | 'max';
+    metric?: 'count' | 'sum' | 'mean' | 'min' | 'max';
     /**
      * 结构化属性条件，仍使用原查询语义
      */
-    filters?: Array<AttributeFilter>;
+    filters?: Array<AgentToolAttributeFilter>;
 };
 
 /**
@@ -14858,7 +14883,7 @@ export type AgentToolCompareSummariesArguments = {
     /**
      * 本轮已读取且仍获授权的证据编号
      */
-    evidenceIds: Array<string>;
+    evidenceIds: Array<number>;
 };
 
 /**
@@ -14882,7 +14907,7 @@ export type AgentToolGetSystemInfoArguments = {
     /**
      * 平台参数白名单分区
      */
-    sections?: Array<string>;
+    sections?: Array<'platform' | 'resources' | 'limits' | 'models' | 'compute'>;
 };
 
 /**
@@ -14890,7 +14915,7 @@ export type AgentToolGetSystemInfoArguments = {
  */
 export type AgentToolListComputeAlgorithmsArguments = {
     /**
-     * 当前授权范围内的检索关键词；空值是否允许取决于工具用途
+     * 当前允许的已发布算法关键词；须为不超过200字的文字
      */
     query?: string;
 };
@@ -14906,7 +14931,7 @@ export type AgentToolExecuteOperatorArguments = {
     /**
      * 角色键到真实资料编号的映射，角色取对应发布清单
      */
-    inputs: {
+    inputs?: {
         [key: string]: number;
     };
     /**
@@ -15001,9 +15026,9 @@ export type AgentToolSearchKnowledgeArguments = {
  */
 export type AgentToolReadKnowledgeDocumentArguments = {
     /**
-     * 知识库文献编号，不能替代业务资料resourceId
+     * 知识文献真实正整数编号，不能与resourceId混用
      */
-    documentId: string;
+    documentId: number;
     /**
      * 从0开始的分页位置
      */
@@ -15141,6 +15166,104 @@ export type AgentCapabilityCatalog = {
      * 执行时必须重新满足的边界
      */
     limitations: string;
+};
+
+/**
+ * 真实工具调用回执，只记录参数名及摘要，不记录原始参数值或资料正文
+ */
+export type AgentToolCall = {
+    /**
+     * 真实调用关联号
+     */
+    id: string;
+    /**
+     * 稳定工具名
+     */
+    tool: string;
+    /**
+     * 实际合同版本
+     */
+    contractVersion: string;
+    /**
+     * 实际操作影响
+     */
+    effect: string;
+    /**
+     * 执行状态，工具受理不代表计算或入库完成
+     */
+    status: string;
+    /**
+     * 参数JSON的SHA-256；不返回参数内容
+     */
+    requestHash: string;
+    /**
+     * 本次提交的参数名称
+     */
+    argumentKeys: Array<string>;
+    /**
+     * 真实任务及对象引用，不保存资料正文或原始像元
+     */
+    resultRefs: {
+        [key: string]: unknown;
+    };
+    /**
+     * 失败时的机器错误；成功或执行中为空对象
+     */
+    error: ErrorResponse | {
+        [key: string]: unknown;
+    };
+    /**
+     * 调用创建时间
+     */
+    createdAt: string;
+    /**
+     * 调用更新时间
+     */
+    updatedAt: string;
+};
+
+/**
+ * 本人当前项目的工具调用审计分页
+ */
+export type AgentToolCallList = {
+    /**
+     * 真实Agent运行编号
+     */
+    runId: number;
+    /**
+     * 当前项目
+     */
+    projectId: number;
+    /**
+     * 真实回执总数
+     */
+    total: number;
+    /**
+     * 下一页位置，null表示已到末页
+     */
+    nextOffset: number | null;
+    /**
+     * 当前页回执
+     */
+    items: Array<AgentToolCall>;
+};
+
+/**
+ * Agent结构化属性条件，使用op；与页面AttributeFilter的operator字段分开
+ */
+export type AgentToolAttributeFilter = {
+    /**
+     * 真实字段名称
+     */
+    field: string;
+    /**
+     * 原Agent查询运算语义
+     */
+    op: 'eq' | 'ne' | 'gt' | 'gte' | 'lt' | 'lte' | 'contains';
+    /**
+     * 有界标量值，范围筛选须为数值
+     */
+    value: string | number | boolean | null;
 };
 
 /**
@@ -23286,6 +23409,67 @@ export type UpdateAgentResearchIntentResponses = {
 };
 
 export type UpdateAgentResearchIntentResponse = UpdateAgentResearchIntentResponses[keyof UpdateAgentResearchIntentResponses];
+
+export type ListAgentToolCallsData = {
+    body?: never;
+    headers: {
+        /**
+         * 唯一当前项目
+         */
+        'X-Project-Id': number;
+    };
+    path: {
+        /**
+         * 本人真实运行编号
+         */
+        runId: number;
+    };
+    query?: {
+        /**
+         * 从0开始的分页位置
+         */
+        offset?: number;
+        /**
+         * 每页回执数量
+         */
+        limit?: number;
+    };
+    url: '/api/agent/runs/{runId}/tool-calls/';
+};
+
+export type ListAgentToolCallsErrors = {
+    /**
+     * 参数无效
+     */
+    400: ErrorResponse;
+    /**
+     * 请先登录
+     */
+    401: ErrorResponse;
+    /**
+     * Agent或来源权限已变化
+     */
+    403: ErrorResponse;
+    /**
+     * 运行不存在或无权访问
+     */
+    404: ErrorResponse;
+    /**
+     * 服务暂时繁忙
+     */
+    503: ErrorResponse;
+};
+
+export type ListAgentToolCallsError = ListAgentToolCallsErrors[keyof ListAgentToolCallsErrors];
+
+export type ListAgentToolCallsResponses = {
+    /**
+     * 真实调用分页
+     */
+    200: AgentToolCallList;
+};
+
+export type ListAgentToolCallsResponse = ListAgentToolCallsResponses[keyof ListAgentToolCallsResponses];
 
 export type ListAgentCapabilitiesData = {
     body?: never;

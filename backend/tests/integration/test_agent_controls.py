@@ -192,8 +192,9 @@ def test_actual_count_trims_history_then_attachment_preserving_question(monkeypa
     )
 
 
-def test_disabled_tools_not_advertised():
-    from types import SimpleNamespace
+@pytest.mark.django_db
+def test_disabled_tools_not_advertised(setup_agent):  # noqa: F811
+    from django.contrib.auth.models import Permission
 
     p = {
         "internetEnabled": False,
@@ -202,6 +203,15 @@ def test_disabled_tools_not_advertised():
         "allowDocuments": True,
         "allowCompare": True,
     }
-    run = SimpleNamespace(internet_enabled=True)
+    env = setup_agent
+    permission = Permission.objects.get(
+        content_type__app_label="compute", codename="submit_task"
+    )
+    env["user"].user_permissions.add(permission)
+    with project_scope(env["scope"]):
+        run = new_run(env, internet_enabled=True)
     assert not tool_enabled(TOOLS["search_web"], p, run)
     assert tool_enabled(TOOLS["execute_operator"], p, run)
+    env["user"].user_permissions.remove(permission)
+    run.refresh_from_db()
+    assert not tool_enabled(TOOLS["execute_operator"], p, run)

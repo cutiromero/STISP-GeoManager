@@ -155,6 +155,8 @@ def test_slot_migration_preserves_old_parked_data_and_allows_new_work(demo):
     before = ("agent", "0021_logic_configuration")
     after = ("agent", "0022_parked_workflow_slots")
     executor = MigrationExecutor(connection)
+    restore_targets = executor.loader.graph.leaf_nodes()
+    expected_tables = set(connection.introspection.table_names())
     try:
         executor.migrate([before])
         historical = executor.loader.project_state([before]).apps.get_model(
@@ -192,4 +194,5 @@ def test_slot_migration_preserves_old_parked_data_and_allows_new_work(demo):
             create(demo, "paused")
             assert create(demo, "queued").status == "queued"
     finally:
-        MigrationExecutor(connection).migrate([after])
+        MigrationExecutor(connection).migrate(restore_targets)
+    assert expected_tables <= set(connection.introspection.table_names())

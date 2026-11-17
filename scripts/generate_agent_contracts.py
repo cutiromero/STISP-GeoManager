@@ -25,6 +25,55 @@ EFFECTS = {
 }
 
 
+def validate_schema(schema, tool, path=()):
+    supported = {
+        "type",
+        "description",
+        "title",
+        "default",
+        "examples",
+        "example",
+        "deprecated",
+        "readOnly",
+        "writeOnly",
+        "properties",
+        "additionalProperties",
+        "required",
+        "items",
+        "minItems",
+        "maxItems",
+        "uniqueItems",
+        "minLength",
+        "maxLength",
+        "pattern",
+        "format",
+        "minimum",
+        "maximum",
+        "maxProperties",
+        "enum",
+        "const",
+        "oneOf",
+        "anyOf",
+        "x-business-validation",
+    }
+    if not isinstance(schema, dict) or set(schema) - supported:
+        raise ValueError(f"工具{tool}使用了未支持的参数schema关键字")
+    if schema.get("format") not in {None, "uuid", "date-time"}:
+        raise ValueError(f"工具{tool}使用了未支持的格式校验")
+    if schema.get("x-business-validation") and not (
+        tool == "execute_operator" and path in {("inputs",), ("parameters",)}
+    ):
+        raise ValueError("动态清单校验只允许固定算子输入和参数信封")
+    for name, child in schema.get("properties", {}).items():
+        validate_schema(child, tool, (*path, name))
+    for key in ("items", "additionalProperties"):
+        if isinstance(schema.get(key), dict):
+            validate_schema(schema[key], tool, path)
+    for key in ("oneOf", "anyOf"):
+        for child in schema.get(key, []):
+            validate_schema(child, tool, path)
+
+
 def registrations(source):
     result = {}
     for node in ast.walk(ast.parse(source)):
@@ -84,6 +133,7 @@ def generate(spec, registered):
             ):
                 raise ValueError(f"工具{name}权限声明无效")
         schema = resolve(declaration["inputSchema"])
+        validate_schema(schema, name)
         if (
             schema.get("type") != "object"
             or schema.get("additionalProperties") is not False

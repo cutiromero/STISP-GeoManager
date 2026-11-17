@@ -338,6 +338,8 @@ pnpm run api:docs
 
 Agent能力准入、参数与执行规则见[平台API与Agent能力开放规范](agent-api-governance.md)。`GET /api/agent/capabilities/`要求正式登录、当前单项目及智能体权限，返回经当前策略过滤的工具合同，不读取业务资料或执行业务操作。目录中的参数Schema和运行合同由OpenAPI的`x-agent-tools`生成，构建必须通过`agent:contracts:check`，发现能力不授予执行或对象访问权。
 
+`GET /api/agent/runs/{runId}/tool-calls/`按offset和limit读取本人的当前项目调用回执，limit为1至100。回执不返回实际参数值；成功调用仍通过resultRefs指向真实任务或对象。通用工具执行使用同一生成参数合同及可用性判断，失败提供兼容detail的code、retryable、requestId和fieldErrors；参数修正与同参数重试分别处理，权限和结构故障不盲目重试。动态算法输入继续由冻结manifest校验。
+
 超管项目删除先通过 `GET /api/projects/{projectTagId}/deletion-preview/` 检查范围，再提交 `DELETE /api/projects/{projectTagId}/`，携带完整名称、独占内容清理确认及短期令牌。公开项目、有活动任务、内容或共享关联已变化时拒绝删除。独占的原始资料、任务、成果及可确认归属的文件会清理；其他项目引用、共享邀请、共用存储及无法确认独占的内容保留，不扩大其访问范围。项目从可用和分配清单移除，内部保留停用的审计身份及原编码；不能通过普通编辑重新启用，也不复用该编码。共享文件通过真实路径和文件身份核对，符号链接与硬链接不能导致共用文件或数据库被误删。新增可空 `Project.deleted_at` 列，通过标准 full 发布及兼容检查。
 
 业务流定义的 `BusinessFlowNode.contract` 为可选节点执行合同，缺省保持旧节点行为；运行状态增加有界 `toolProgress` 和 `recovery`。节点决定沿用原接口，`retry_recovery` 携带当前节点 `recoveryInputs / recoveryParameters`，`skip_node` 仅供定义允许且无人工门禁的通用节点；不批准科研结果、不重置额度。工具观察正文只保留在节点私有证据中，公共轮询与事件仅投影摘要。完整合同和权限约束见 `business-flows.md`。
