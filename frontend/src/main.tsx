@@ -37,11 +37,15 @@ function LocalizedApplication() {
 
 const rootElement = document.getElementById("root");
 if (rootElement) {
-  ReactDOM.createRoot(rootElement).render(
+  const root = ReactDOM.createRoot(rootElement);
+  root.render(
     <React.StrictMode>
       <ApplicationErrorBoundary>
         <LocalizedApplication />
       </ApplicationErrorBoundary>
     </React.StrictMode>,
   );
+  if (import.meta.hot) {
+    import.meta.hot.dispose(() => root.unmount());
+  }
 }
