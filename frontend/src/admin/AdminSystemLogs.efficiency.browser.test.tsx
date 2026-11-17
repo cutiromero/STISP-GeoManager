@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { App as AntApp } from "antd";
 import { beforeEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
@@ -52,7 +52,7 @@ it("loads the default file once and keeps a later selection when an older refres
   await userEvent.click(await screen.findByText(/200 行|200 lines/));
   await waitFor(() => expect(mocks.load).toHaveBeenCalledTimes(3));
   expect(await screen.findByText("最近200行")).toBeInTheDocument();
-  old.resolve(log("迟到的500行"));
+  await act(async () => old.resolve(log("迟到的500行")));
   await waitFor(() =>
     expect(screen.queryByText("迟到的500行")).not.toBeInTheDocument(),
   );
