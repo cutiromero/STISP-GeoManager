@@ -139,6 +139,9 @@ def describe(config, *, strict=True):
     groups = {}
     with server.readonly_db(config) as database:
         for table, statuses in server.ACTIVE.items():
+            if not server.queue_exists(database, table):
+                groups[table] = {status: 0 for status in statuses}
+                continue
             placeholders = ",".join("?" for _ in statuses)
             counts = dict(
                 database.execute(

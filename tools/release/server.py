@@ -166,24 +166,29 @@ def readonly_db(config):
         connection.close()
 
 
+def queue_exists(db, table):
+    if (
+        table not in ADDITIVE_QUEUES
+        or db.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)
+        ).fetchone()
+    ):
+        return True
+    require(
+        not db.execute(
+            "SELECT 1 FROM django_migrations WHERE app=? AND name=?",
+            ADDITIVE_QUEUES[table],
+        ).fetchone(),
+        "An applied operation migration is missing its queue table",
+    )
+    return False
+
+
 def active_counts(config):
     with readonly_db(config) as db:
         counts = {}
         for table, statuses in ACTIVE.items():
-            if (
-                table in ADDITIVE_QUEUES
-                and not db.execute(
-                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
-                    (table,),
-                ).fetchone()
-            ):
-                require(
-                    not db.execute(
-                        "SELECT 1 FROM django_migrations WHERE app=? AND name=?",
-                        ADDITIVE_QUEUES[table],
-                    ).fetchone(),
-                    "An applied operation migration is missing its queue table",
-                )
+            if not queue_exists(db, table):
                 counts[table] = 0
                 continue
             placeholders = ",".join("?" for _ in statuses)

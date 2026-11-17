@@ -226,6 +226,8 @@ def test_operation_queue_is_drained_and_only_absent_before_its_migration(layout)
     with sqlite3.connect(database) as db:
         db.execute("DROP TABLE agent_agentoperation")
     assert server.active_counts(layout.config)["agent_agentoperation"] == 0
+    described = protocol.describe(layout.config, strict=False)
+    assert described["taskCounts"]["agent_agentoperation"] == {"executing": 0}
     with sqlite3.connect(database) as db:
         db.execute(
             "INSERT INTO django_migrations VALUES ('agent','0024_governed_operation_previews')"
