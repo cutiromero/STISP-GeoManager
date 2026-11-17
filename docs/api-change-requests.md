@@ -2,7 +2,7 @@
 
 ## API-20261117-004 - 受控操作预览、真实用户决定与操作面板
 
-- Status: BackendReady
+- Status: Verified
 - Owner: codex/xintao。
 - Endpoints: GET/POST /api/agent/runs/{runId}/operations/；GET/POST /api/agent/operations/{operationId}/；既有成果发布和分享接口共用业务服务。
 - Change type: 新增操作预览与真实用户决定；5项发现/预览工具不含确认工具。
@@ -11,7 +11,7 @@
 - Frontend reason: 平台操作面板按需展示当前授权能力、真实回执与具体预览；用户核对范围后确认或拒绝，账号/项目/会话改变清除旧状态。
 - Backend implementation notes: 新表保存绑定用户/项目/运行/参数/对象修订/范围及15分钟有效期的服务端预览；真实会话与CSRF边界决定，重验权限与版本，并发确认单次认领；未知中断不盲目重试外部存储写入。CSV仅新增独立私有表，5MiB、5000行、200列，不接受服务器路径或覆盖原件。
 - Verification: 真实表格/地理表、发布、邀请，预览零业务写入、重复及并发确认、过期/换版/撤权/跨人跨项目、CSRF、模型不冒充执行、状态读取不重开CSV、浏览器确认与账号切换；标准full候选与正式复核。
-- Result: 阶段4实现，专项通过后进行集中门禁、候选验收及正式发布。
+- Result: 已通过集中回归、83项标准full候选检查及正式HTTP/公网界面验收，上线0.6.0 / 11342f9；原件记录与原始表摘要一致，候选和旧程序清理完成。
 
 ## API-20261117-003 - Agent个人工程、任务控制与异步导出
 
@@ -874,7 +874,7 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| API-20261117-004 | BackendReady | agent/operations | 新增真实确认与操作面板 | AgentOperation系列 | 183 | 已实现 | 并发、版本、权限及CSRF | 不注册模型确认能力 |
+| API-20261117-004 | Verified | agent/operations | 新增真实确认与操作面板 | AgentOperation系列 | 183 | 已实现 | 并发、版本、权限及CSRF | 不注册模型确认能力 |
 | API-20261117-003 | Verified | 工程/导出/科研任务控制 | 新增10项工具与取消 | AgentTool系列、ExportCancellation | 182 | 已实现 | 幂等、撤权、取消及续接 | 复用原业务与队列 |
 | API-20261117-002 | Verified | agent/runs/tool-calls | 新增审计及可选错误字段 | AgentToolCallList、ErrorResponse | 180、181 | 已实现 | 执行合同及隔离 | 新增表，不保存原始参数 |
 | API-20261117-001 | Verified | agent/capabilities | 新增只读能力发现 | AgentCapabilityCatalog及工具schema | 180 | 已实现 | 参数漂移及授权回归 | 目录不授予执行权 |
