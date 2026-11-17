@@ -27,10 +27,10 @@ def scale_array(
     from apps.raster.services.rules_engine import stretch_min_max
 
     if not rules.get("stretch", {}).get("enabled", True):
-        return np.clip(values, 0, 255).astype(np.uint8)
+        return np.nan_to_num(np.clip(values, 0, 255), nan=0).astype(np.uint8)
     minimum, maximum = stretch_min_max(rules, metadata, band_index)
     scaled = (values - minimum) / (maximum - minimum)
-    return np.clip(scaled * 255.0, 0, 255).astype(np.uint8)
+    return np.nan_to_num(np.clip(scaled * 255.0, 0, 255), nan=0).astype(np.uint8)
 
 
 def array_to_rgba(
@@ -45,13 +45,12 @@ def array_to_rgba(
     else:
         valid = ~np.any(masks, axis=0)
     values = np.ma.filled(data, 0).astype(np.float32)
+    valid &= np.all(np.isfinite(values), axis=0)
+    values = np.nan_to_num(values, nan=0, posinf=0, neginf=0)
     output = np.zeros((values.shape[-2], values.shape[-1], 4), dtype=np.uint8)
 
     if mode == "rgb":
-        if (
-            rules.get("nodata", {}).get("enabled", True)
-            and values.shape[0] == 3
-        ):
+        if rules.get("nodata", {}).get("enabled", True) and values.shape[0] == 3:
             valid &= ~np.all(values[:3] == 0, axis=0)
         for index, band_index in enumerate(output_source_bands(rules)[:3]):
             output[..., index] = scale_array(values[index], rules, metadata, band_index)

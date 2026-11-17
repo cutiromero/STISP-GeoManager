@@ -99,6 +99,23 @@ def test_external_masks_are_materialized_instead_of_exporting_an_incomplete_tiff
             assert result.width == 32 and result.height == 32
 
 
+def test_explicit_existing_crs_preserves_native_bytes_without_full_scene_warp(
+    setup_compute, tmp_path
+):
+    env = setup_compute
+    with project_scope(
+        ProjectScope((env["project"].pk,), env["project"].pk, env["owner"].pk)
+    ):
+        source, dataset, _ = source_dataset()
+        target = tmp_path / "same-crs.tif"
+        with patch(
+            "apps.catalog.export.run_gdal_command",
+            side_effect=AssertionError("Same CRS must not resample scientific pixels"),
+        ):
+            export_raster_tif(dataset.pk, 4326, target)
+        assert target.read_bytes() == source.read_bytes()
+
+
 def test_requested_reprojection_is_still_performed(setup_compute, tmp_path):
     env = setup_compute
     with project_scope(

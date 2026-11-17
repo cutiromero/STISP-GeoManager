@@ -52,6 +52,20 @@ class ScaleArrayTests(SimpleTestCase):
 
 
 class ArrayToRgbaTests(SimpleTestCase):
+    def test_nonfinite_pixels_are_transparent_without_cast_warnings(self):
+        for mode in ("rgb", "gray", "unique", "palette"):
+            bands = 3 if mode == "rgb" else 1
+            data = np.ma.array(np.array([[[10, np.nan, np.inf, -np.inf]]] * bands))
+            rules = {
+                "mode": mode,
+                "bands": list(range(1, bands + 1)),
+                "stretch": {"enabled": False},
+                "uniqueValues": [{"value": 10, "color": "#65d8a4"}],
+            }
+            with np.errstate(invalid="raise"):
+                result = array_to_rgba(data, rules, {})
+            np.testing.assert_array_equal(result[0, :, 3], [255, 0, 0, 0])
+
     def test_gray_mode(self):
         data = np.ma.MaskedArray(np.array([[0, 128]], dtype=np.float32), mask=False)
         rules = {

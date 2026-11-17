@@ -6,6 +6,7 @@ import type {
 } from "@ant-design/pro-components";
 import { ProTable } from "@ant-design/pro-components";
 import {
+  Alert,
   App,
   AutoComplete,
   Button,
@@ -197,8 +198,7 @@ export default function AdminOperationLogsPage() {
   return <Tabs className="admin-logs-tabs" items={tabItems} />;
 }
 
-function AdminSystemLogsPanel() {
-  const { message } = App.useApp();
+export function AdminSystemLogsPanel() {
   const { i18n } = useTranslation();
   const english =
     i18n.resolvedLanguage?.toLowerCase().startsWith("en") ?? false;
@@ -206,19 +206,24 @@ function AdminSystemLogsPanel() {
   const [selectedFile, setSelectedFile] = useState("");
   const [lineCount, setLineCount] = useState(500);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const loadSequence = useRef(0);
 
   const loadSystemLogs = useCallback(
     async (file: string, lines: number) => {
+      const sequence = ++loadSequence.current;
       setLoading(true);
+      setError("");
       try {
         const result = await api.adminSystemLogs({
           file: file || undefined,
           lines,
         });
+        if (sequence !== loadSequence.current) return;
         setLog(result);
-        setSelectedFile(result.selectedFile);
       } catch (error) {
-        message.error(
+        if (sequence !== loadSequence.current) return;
+        setError(
           error instanceof Error
             ? error.message
             : english
@@ -226,14 +231,17 @@ function AdminSystemLogsPanel() {
               : "系统日志加载失败",
         );
       } finally {
-        setLoading(false);
+        if (sequence === loadSequence.current) setLoading(false);
       }
     },
-    [english, message],
+    [english],
   );
 
   useEffect(() => {
     void loadSystemLogs(selectedFile, lineCount);
+    return () => {
+      loadSequence.current += 1;
+    };
   }, [lineCount, loadSystemLogs, selectedFile]);
 
   const fileOptions = (log?.files ?? []).map((file) => ({
@@ -250,7 +258,7 @@ function AdminSystemLogsPanel() {
       extra={
         <Space wrap>
           <Select
-            value={selectedFile || undefined}
+            value={selectedFile || log?.selectedFile || undefined}
             options={fileOptions}
             placeholder={english ? "Select log file" : "选择日志文件"}
             style={{ width: 260 }}
@@ -279,7 +287,9 @@ function AdminSystemLogsPanel() {
       }
     >
       <Spin spinning={loading}>
-        {!log?.files.length ? (
+        {error ? (
+          <Alert type="error" showIcon title={error} />
+        ) : !log?.files.length ? (
           <Empty
             description={english ? "No system log files" : "暂无系统日志文件"}
           />

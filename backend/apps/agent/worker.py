@@ -18,7 +18,7 @@ from apps.projects.context import ProjectScope, project_scope
 from apps.core.storage import app_path
 from .config import registry
 from .identity import assistant_identity
-from .models import AgentAttachment, AgentRun, AgentRuntime, RunEvent
+from .models import AgentAttachment, AgentRun, RunEvent
 from .policy import fresh_user, require_access, policy
 from .provider import stream, check_model, model_window, ModelError
 from .context import prepare_context
@@ -924,10 +924,12 @@ def run_task(run_id):
 
 
 def claim():
+    from .runtime_heartbeat import pulse
+
+    if not AgentRun._base_manager.filter(status="queued").exists():
+        return None
     with transaction.atomic():
-        AgentRuntime.objects.update_or_create(
-            name="queue", defaults={"heartbeat": timezone.now()}
-        )
+        pulse("queue")
         running = AgentRun._base_manager.filter(status="running")
         if running.count() >= 3:
             return None
@@ -960,6 +962,7 @@ def recover():
 def serve(stop=None, once=False):
     from .compute_tools import resume_followups
     from .interactions import resume_compute
+    from .runtime_heartbeat import pulse
 
     stop = stop or threading.Event()
     futures = {}
@@ -972,9 +975,7 @@ def serve(stop=None, once=False):
                 resume_followups()
                 resume_compute()
                 now = timezone.now()
-                AgentRuntime.objects.update_or_create(
-                    name="worker", defaults={"heartbeat": now}
-                )
+                pulse("worker")
                 for run_id, future in list(futures.items()):
                     if future.done():
                         future.result()
@@ -986,16 +987,13 @@ def serve(stop=None, once=False):
                 if time.monotonic() - last_health > 30:
                     for model in registry().values():
                         online = check_model(model)
-                        AgentRuntime.objects.update_or_create(
-                            name="model:" + model.alias,
-                            defaults={
-                                "heartbeat": timezone.now(),
-                                "detail": {
-                                    "status": "online" if online else "offline",
-                                    "contextWindowTokens": live_window(model)
-                                    if online
-                                    else model.context_window_tokens,
-                                },
+                        pulse(
+                            "model:" + model.alias,
+                            detail={
+                                "status": "online" if online else "offline",
+                                "contextWindowTokens": live_window(model)
+                                if online
+                                else model.context_window_tokens,
                             },
                         )
                     last_health = time.monotonic()

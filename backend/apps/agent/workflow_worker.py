@@ -11,7 +11,8 @@ from django.db import OperationalError, close_old_connections, transaction
 from django.db.models import Q
 from django.utils import timezone
 
-from .models import AgentRuntime, AgentWorkflow
+from .models import AgentWorkflow
+from .runtime_heartbeat import pulse
 from .workflow import resume_waiting, run_workflow
 
 logger = logging.getLogger(__name__)
@@ -21,17 +22,14 @@ MAX_ACTIVE_WORKFLOWS = 3
 
 
 def claim(*, exclude=()):
+    queued = AgentWorkflow.objects.filter(
+        status="queued", cancel_requested=False, pause_requested=False
+    ).exclude(pk__in=exclude)
+    if not queued.exists():
+        return None
     with transaction.atomic():
-        AgentRuntime.objects.update_or_create(
-            name="workflow-queue", defaults={"heartbeat": timezone.now()}
-        )
-        candidate = (
-            AgentWorkflow.objects.select_for_update()
-            .filter(status="queued", cancel_requested=False, pause_requested=False)
-            .exclude(pk__in=exclude)
-            .order_by("created_at")
-            .first()
-        )
+        pulse("workflow-queue")
+        candidate = queued.select_for_update().order_by("created_at").first()
         if not candidate:
             return None
         candidate.status = "running"
@@ -119,9 +117,7 @@ def serve(stop=None, once=False):
                     heartbeat=timezone.now()
                 )
                 recover()
-                AgentRuntime.objects.update_or_create(
-                    name="workflow-worker", defaults={"heartbeat": timezone.now()}
-                )
+                pulse("workflow-worker")
                 if once:
                     resume_waiting()
                     workflow_id = claim()
@@ -144,6 +140,11 @@ def serve(stop=None, once=False):
                         _run_task, workflow_id, waiting=True
                     )
             except OperationalError as exc:
+                if not any(word in str(exc).casefold() for word in ("locked", "busy")):
+                    logger.exception(
+                        "workflow database failure; verify migrations before restart"
+                    )
+                    raise
                 logger.warning(
                     "workflow queue busy (%s, database code=%s); retrying next heartbeat",
                     type(exc).__name__,

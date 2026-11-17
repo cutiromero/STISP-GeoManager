@@ -256,41 +256,45 @@ def export_raster_tif(
         raise ExportError("栅格源文件不存在")
 
     try:
-        if epsg is None and clip_cutline is None and dataset.source_format == "GTiff":
+        if clip_cutline is None and dataset.source_format == "GTiff":
             import rasterio
 
             with rasterio.open(source) as native:
+                same_crs = epsg is None or native.crs == rasterio.crs.CRS.from_epsg(
+                    epsg
+                )
                 standalone = native.driver == "GTiff" and {
                     Path(name).resolve() for name in native.files
                 } == {source.resolve()}
-            if standalone:
+            if same_crs and standalone:
                 # Preserve native pixels, masks, overviews and metadata byte-for-byte.
                 shutil.copyfile(source, output)
                 return
             # Embed sidecar masks/georeferencing in a self-contained native TIFF.
-            run_gdal_command(
-                [
-                    "gdal_translate",
-                    "--config",
-                    "GDAL_CACHEMAX",
-                    "128",
-                    "--config",
-                    "GDAL_TIFF_INTERNAL_MASK",
-                    "YES",
-                    "-of",
-                    "GTiff",
-                    "-co",
-                    "TILED=YES",
-                    "-co",
-                    "COMPRESS=DEFLATE",
-                    "-co",
-                    "BIGTIFF=IF_SAFER",
-                    str(source),
-                    str(output),
-                ],
-                progress=progress,
-            )
-            return
+            if same_crs:
+                run_gdal_command(
+                    [
+                        "gdal_translate",
+                        "--config",
+                        "GDAL_CACHEMAX",
+                        "128",
+                        "--config",
+                        "GDAL_TIFF_INTERNAL_MASK",
+                        "YES",
+                        "-of",
+                        "GTiff",
+                        "-co",
+                        "TILED=YES",
+                        "-co",
+                        "COMPRESS=DEFLATE",
+                        "-co",
+                        "BIGTIFF=IF_SAFER",
+                        str(source),
+                        str(output),
+                    ],
+                    progress=progress,
+                )
+                return
         command = [
             "gdalwarp",
             "--config",

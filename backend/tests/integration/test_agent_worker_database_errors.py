@@ -5,7 +5,7 @@ from unittest.mock import Mock
 import pytest
 from django.db import OperationalError
 
-from apps.agent import worker
+from apps.agent import worker, workflow_worker
 from apps.agent.models import AgentRuntime
 
 pytestmark = pytest.mark.django_db
@@ -37,3 +37,26 @@ def test_temporary_sqlite_lock_is_retried_before_real_heartbeat(monkeypatch):
     worker.serve(once=True)
     assert resume.call_count == 2
     assert AgentRuntime.objects.filter(name="worker", heartbeat__isnull=False).exists()
+
+
+@pytest.mark.parametrize("locked", [False, True])
+def test_workflow_schema_errors_stop_but_temporary_locks_retry(monkeypatch, locked):
+    monkeypatch.setattr(workflow_worker, "close_old_connections", lambda: None)
+    monkeypatch.setattr(workflow_worker, "claim", lambda: None)
+    monkeypatch.setattr(workflow_worker, "resume_waiting", lambda: None)
+    failure = OperationalError(
+        "database is locked" if locked else "no such column: workflow.plan"
+    )
+    recover = Mock(side_effect=[failure, None])
+    monkeypatch.setattr(workflow_worker, "recover", recover)
+    if locked:
+        workflow_worker.serve(once=True)
+        assert recover.call_count == 2
+        assert AgentRuntime.objects.filter(
+            name="workflow-worker", heartbeat__isnull=False
+        ).exists()
+    else:
+        with pytest.raises(OperationalError, match="no such column"):
+            workflow_worker.serve(once=True)
+        assert recover.call_count == 1
+        assert not AgentRuntime.objects.filter(name="workflow-worker").exists()
