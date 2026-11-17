@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+from contextlib import contextmanager
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
@@ -13,6 +14,19 @@ from apps.compute.services import task_action
 from .models import AgentRun, AgentWorkflow, AgentWorkflowStep, AgentToolCall
 from .policy import fresh_user, require_access
 from .workflow_control_service import control_workflow
+
+
+@contextmanager
+def active_control_actor(run, user):
+    """Reserve the writer before checking cancellation and current authority."""
+    with transaction.atomic():
+        if not AgentRun.objects.filter(
+            pk=run.pk, owner=user, status="running", cancel_requested=False
+        ).update(heartbeat=F("heartbeat")):
+            raise ComputeError("本轮已停止，未控制其他任务", 409)
+        actor = fresh_user(user.pk)
+        require_access(actor, "agent", run.model)
+        yield actor
 
 
 def workflow_summary(workflow):
@@ -43,7 +57,8 @@ def execute_tasks(run, user, policy, name, args, call):
     if name == "cancel_export_task":
         from apps.raster.services.jobs import request_export_cancel
 
-        result = request_export_cancel(args["jobId"], user.pk)
+        with active_control_actor(run, user) as actor:
+            result = request_export_cancel(args["jobId"], actor.pk)
         return result, [(None, result)]
     if name == "list_research_tasks":
         query = AgentWorkflow.objects.filter(
@@ -59,14 +74,15 @@ def execute_tasks(run, user, policy, name, args, call):
             "nextOffset": offset + limit if offset + limit < total else None,
         }, []
     if name == "cancel_compute_task":
-        task = ComputeTask.objects.filter(pk=args["taskId"], owner=user).first()
-        if task is None:
-            raise ComputeError("本人计算任务不存在或无权访问", 404)
-        if AgentWorkflowStep.objects.filter(compute_task=task).exists():
-            raise ComputeError(
-                "该计算由科研任务调度，请停止所属科研任务，不能绕过其状态机"
-            )
-        task = task_action(task, user, "cancel")
+        with active_control_actor(run, user) as actor:
+            task = ComputeTask.objects.filter(pk=args["taskId"], owner=actor).first()
+            if task is None:
+                raise ComputeError("本人计算任务不存在或无权访问", 404)
+            if AgentWorkflowStep.objects.filter(compute_task_id=task.pk).exists():
+                raise ComputeError(
+                    "该计算由科研任务调度，请停止所属科研任务，不能绕过其状态机"
+                )
+            task = task_action(task, actor, "cancel")
         result = {
             "taskId": str(task.pk),
             "status": task.status,

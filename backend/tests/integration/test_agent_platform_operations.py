@@ -83,6 +83,114 @@ def wait_export(run, identity):
     raise AssertionError("Export did not finish")
 
 
+@pytest.mark.parametrize("state", ["cancelled", "succeeded", "cancel_requested"])
+@pytest.mark.parametrize("tool", ["cancel_export_task", "cancel_compute_task"])
+def test_stopped_agent_cannot_cancel_other_task(setup_agent, state, tool):
+    from apps.agent.models import AgentRun
+    from apps.compute.models import AlgorithmResource, AlgorithmVersion, ComputeTask
+    from apps.raster.services.executor_identity import current_identity
+
+    env = setup_agent
+    env["user"].user_permissions.add(
+        *Permission.objects.filter(codename__in=["view_own_task", "cancel_own_task"])
+    )
+    with project_scope(env["scope"]):
+        run = new_run(env)
+        if tool == "cancel_export_task":
+            job = RasterProcessingJob.objects.create(
+                id="a" * 32,
+                kind="export",
+                status="queued",
+                created_by=env["user"],
+                executor_identity=current_identity(),
+            )
+            args = {"jobId": job.pk}
+        else:
+            algorithm = AlgorithmResource.objects.create(
+                identifier="stopped-agent", name="合成算子", created_by=env["user"]
+            )
+            version = AlgorithmVersion.objects.create(
+                algorithm=algorithm,
+                version="1",
+                checksum="a" * 64,
+                package_path="test.zip",
+                manifest={},
+            )
+            job = ComputeTask.objects.create(
+                owner=env["user"],
+                version=version,
+                name="本人计算任务",
+                status="queued",
+                idempotency_key="stop-test",
+                request_hash="a" * 64,
+            )
+            args = {"taskId": str(job.pk)}
+        # Keep the in-memory run stale, as it can be during a model response.
+        AgentRun.objects.filter(pk=run.pk).update(
+            **(
+                {"cancel_requested": True}
+                if state == "cancel_requested"
+                else {"status": state}
+            )
+        )
+        with pytest.raises(ComputeError) as stopped:
+            execute(run, tool, args)
+        assert stopped.value.status == 409
+        job.refresh_from_db()
+        assert job.status == "queued"
+        if tool == "cancel_export_task":
+            assert not job.cancel_requested
+
+
+@pytest.mark.parametrize("in_workflow", [False, True])
+def test_active_agent_cancels_only_standalone_computation(setup_agent, in_workflow):
+    from apps.agent.models import AgentWorkflowStep
+    from apps.compute.models import AlgorithmResource, AlgorithmVersion, ComputeTask
+
+    env = setup_agent
+    env["user"].user_permissions.add(
+        *Permission.objects.filter(codename__in=["view_own_task", "cancel_own_task"])
+    )
+    with project_scope(env["scope"]):
+        run = new_run(env)
+        algorithm = AlgorithmResource.objects.create(
+            identifier="cancel-agent", name="合成算子", created_by=env["user"]
+        )
+        version = AlgorithmVersion.objects.create(
+            algorithm=algorithm,
+            version="1",
+            checksum="a" * 64,
+            package_path="test.zip",
+            manifest={},
+        )
+        task = ComputeTask.objects.create(
+            owner=env["user"],
+            version=version,
+            name="本人合成任务",
+            status="queued",
+            idempotency_key="active-cancel",
+            request_hash="a" * 64,
+        )
+        if in_workflow:
+            workflow = AgentWorkflow.objects.create(
+                owner=env["user"],
+                goal="合成父流程",
+                model="mock",
+                status="waiting_compute",
+                idempotency_key="parent-control",
+            )
+            AgentWorkflowStep.objects.create(
+                workflow=workflow, sequence=1, kind="compute", compute_task_id=task.pk
+            )
+            with pytest.raises(ComputeError, match="所属科研任务"):
+                execute(run, "cancel_compute_task", {"taskId": str(task.pk)})
+        else:
+            result, _ = execute(run, "cancel_compute_task", {"taskId": str(task.pk)})
+            assert result["status"] == "cancelled"
+        task.refresh_from_db()
+        assert task.status == ("queued" if in_workflow else "cancelled")
+
+
 @pytest.mark.django_db(transaction=True)
 def test_private_workspace_revision_and_visibility_never_modify_original(operations):
     env = operations

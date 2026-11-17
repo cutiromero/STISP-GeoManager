@@ -108,6 +108,86 @@ def decide(env, operation, decision="confirm", **extra):
     )
 
 
+def test_stopped_run_never_advertises_confirmation(governed):
+    from apps.agent.models import AgentRun
+
+    env = governed
+    operation = preview(
+        env, "preview_publication", {"kind": "result", "objectId": env["artifact"].pk}
+    )
+    AgentRun.objects.filter(pk=env["run"].pk).update(cancel_requested=True)
+    response = env["client"].get(
+        f"/api/agent/operations/{operation['id']}/", **env["header"]
+    )
+    assert response.status_code == 200
+    assert response.json()["canConfirm"] is False
+    assert "停止" in response.json()["detail"]
+
+
+@pytest.mark.parametrize("switch", ["allowAttachments", "allowDocuments"])
+def test_import_rechecks_attachment_policy_after_preview_read(
+    governed, monkeypatch, switch
+):
+    from apps.agent import operation_proposals
+    from apps.agent.models import AgentPolicy
+    from apps.agent.policy import default_policy
+
+    env = governed
+    operation = preview(
+        env,
+        "preview_data_import",
+        {
+            "attachmentId": env["attachment"].pk,
+            "name": "撤权后不能导入",
+            "importMode": "table",
+        },
+    )
+    original = operation_proposals.inspect
+
+    def revoke_after_inspection(*args, **kwargs):
+        value = original(*args, **kwargs)
+        AgentPolicy.objects.update_or_create(
+            pk=1, defaults={"value": {**default_policy(), switch: False}}
+        )
+        return value
+
+    monkeypatch.setattr(operation_proposals, "inspect", revoke_after_inspection)
+    before = DataResource._base_manager.count()
+    response = decide(env, operation)
+    assert response.status_code == 403, response.content
+    assert DataResource._base_manager.count() == before
+    assert AgentOperation._base_manager.get(pk=operation["id"]).status == "failed"
+
+
+def test_unavailable_proposal_does_not_hide_other_operations_or_leak_old_preview(
+    governed,
+):
+    env = governed
+    unavailable = preview(
+        env, "preview_publication", {"kind": "result", "objectId": env["artifact"].pk}
+    )
+    available = preview(
+        env,
+        "preview_share",
+        {
+            "kind": "workspace",
+            "objectId": env["scene"].pk,
+            "username": env["other"].username,
+        },
+    )
+    env["artifact"].delete()
+    response = env["client"].get(
+        f"/api/agent/runs/{env['run'].pk}/operations/", **env["header"]
+    )
+    assert response.status_code == 200
+    items = {item["id"]: item for item in response.json()["items"]}
+    assert items[available["id"]]["canConfirm"] is True
+    hidden = items[unavailable["id"]]
+    assert hidden["canConfirm"] is False and hidden["result"] == {}
+    assert env["artifact"].name not in json.dumps(hidden, ensure_ascii=False)
+    assert decide(env, available).status_code == 200
+
+
 @pytest.mark.parametrize("mode", ["table", "geographic"])
 def test_import_is_new_private_real_and_confirmation_is_idempotent(governed, mode):
     env = governed

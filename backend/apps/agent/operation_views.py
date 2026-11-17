@@ -6,7 +6,13 @@ from django.http import Http404, JsonResponse
 from apps.compute.packages import ComputeError
 
 from .models import AgentOperation, AgentRun
-from .operation_proposals import authorize, decide, prepare, read_operation
+from .operation_proposals import (
+    authorize,
+    decide,
+    prepare,
+    read_operation,
+    list_operation,
+)
 from .tool_contract_runtime import validate_arguments, failure
 from .views import ApiProblem, body, endpoint
 
@@ -55,7 +61,7 @@ def operations(request, run_id):
             "runId": run.pk,
             "projectId": run.project_tag_id,
             "items": [
-                read_operation(item, request.user)
+                list_operation(item, request.user)
                 for item in run.operations.order_by("created_at", "id")[:8]
             ],
         }

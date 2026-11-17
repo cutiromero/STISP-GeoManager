@@ -9,6 +9,7 @@ import uuid
 
 from django.contrib.auth.models import Group
 from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import transaction
 from django.db.models import F
@@ -273,6 +274,10 @@ def public(operation):
             status="interrupted"
         )
         status = "interrupted"
+    stopped = operation.run.cancel_requested or operation.run.status in {
+        "cancelled",
+        "interrupted",
+    }
     return {
         "id": str(operation.pk),
         "runId": operation.run_id,
@@ -285,8 +290,10 @@ def public(operation):
         "expiresAt": operation.expires_at.isoformat(),
         "createdAt": operation.created_at.isoformat(),
         "decidedAt": operation.decided_at.isoformat() if operation.decided_at else None,
-        "canConfirm": status == "pending",
-        "detail": "执行进程已结束，操作结果需核对，不能盲目重复提交"
+        "canConfirm": status == "pending" and not stopped,
+        "detail": "本轮已停止，不能执行待确认操作"
+        if status == "pending" and stopped
+        else "执行进程已结束，操作结果需核对，不能盲目重复提交"
         if status == "interrupted"
         else "已受理，正在执行；重复确认不会再次执行"
         if status == "executing"
@@ -333,6 +340,28 @@ def read_operation(operation, user):
                 "detail": "对象、版本或范围已变化，请重新准备操作预览",
             }
     return public(operation)
+
+
+def list_operation(operation, user):
+    """An unavailable target must not reveal cached data or hide other cards."""
+    try:
+        return read_operation(operation, user)
+    except (ComputeError, PermissionDenied):
+        return {
+            **public(operation),
+            "status": "failed",
+            "canConfirm": False,
+            "preview": {
+                "projectId": operation.project_tag_id,
+                "title": "操作对象当前不可访问",
+                "target": "对象已失效或访问权限已变化",
+                "scope": "当前项目",
+                "effect": "请核对对象与权限后重新准备操作",
+                "details": [],
+            },
+            "result": {},
+            "detail": "当前无法核对该操作；其他可用操作仍可分别处理",
+        }
 
 
 def prepare(run, user, kind, payload):
@@ -482,15 +511,19 @@ def decide(operation, user, decision, expected_digest):
             }:
                 raise ComputeError("本轮已停止，操作未执行", 409)
             actor = fresh_user(actor.pk)
-            require_access(actor, "agent", run.model)
+            current_policy = require_access(actor, "agent", run.model)
             if operation.kind != "import":
                 _, latest_binding, _ = inspect(
                     run, actor, operation.kind, operation.payload
                 )
                 if digest(latest_binding) != operation.binding_hash:
                     raise ComputeError("对象或分享范围已更新，请重新预览", 409)
-            elif not has_feature_perm(actor, "catalog.add_dataresource"):
-                raise ComputeError("新增资料权限已撤销", 403)
+            elif (
+                not has_feature_perm(actor, "catalog.add_dataresource")
+                or not current_policy.get("allowAttachments")
+                or not current_policy.get("allowDocuments")
+            ):
+                raise ComputeError("新增资料或附件访问权限已撤销", 403)
             value = operation.payload
             if operation.kind == "import":
                 from apps.catalog.importer import import_uploaded_table
