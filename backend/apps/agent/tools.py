@@ -1213,6 +1213,10 @@ def execute(run, name, args):
                 raise PermissionDenied("文档正文读取未开启")
             if name == "compare_summaries" and not p["allowCompare"]:
                 raise PermissionDenied("跨资源比较已关闭")
+            from .selections import KNOWLEDGE_TOOLS, require_knowledge
+
+            if name in KNOWLEDGE_TOOLS:
+                require_knowledge(run)
             raise PermissionDenied("当前账号、会话或策略未开放该工具")
         validate_arguments(name, args)
         result, pairs = _execute_authorized(run, name, args, user, p, call)

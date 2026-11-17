@@ -80,7 +80,7 @@ print("旧代码列集 INSERT 成功；三个数据库默认值为空对象；ma
 
 
 def test_compute_0007_legacy_insert_and_makemigrations(tmp_path):
-    raw = tomlkit.parse((ROOT / "config/app.test.toml").read_text())
+    raw = tomlkit.parse((ROOT / "config/app.example.toml").read_text())
     raw["application"]["storage"]["app_data"] = str(tmp_path / "app")
     raw["application"]["storage"]["research_data_root"] = str(tmp_path / "research")
     for name in ("app/database", "app/logs", "research"):

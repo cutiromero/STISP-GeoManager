@@ -38,6 +38,8 @@ BACKEND_TESTS = {
         "unit/test_*workflow*.py",
         "unit/test_*model*.py",
         "integration/test_agent*.py",
+        "integration/test_knowledge_zones.py",
+        "unit/test_agent_tool_contract_runtime.py",
         "integration/test_workflow*.py",
         "integration/test_logic*.py",
         "integration/test_demo*.py",

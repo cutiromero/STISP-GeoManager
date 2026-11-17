@@ -101,6 +101,17 @@ def test_same_module_can_live_outside_app_patterns(tmp_path):
     }
 
 
+def test_agent_fallback_keeps_knowledge_selection_and_tool_contract_boundaries(
+    tmp_path,
+):
+    create(tmp_path, "backend/tests/integration/test_knowledge_zones.py")
+    create(tmp_path, "backend/tests/unit/test_agent_tool_contract_runtime.py")
+    assert fast.backend_tests(tmp_path, "backend/apps/agent/capability_catalog.py") == {
+        "tests/integration/test_knowledge_zones.py",
+        "tests/unit/test_agent_tool_contract_runtime.py",
+    }
+
+
 @pytest.mark.parametrize(
     "reference",
     [

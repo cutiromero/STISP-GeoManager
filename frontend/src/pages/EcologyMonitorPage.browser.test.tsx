@@ -626,7 +626,9 @@ it("目标分辨率和窄屏无横向溢出", async () => {
       );
   }
   await page.viewport(1920, 1080);
-  await page.screenshot({ path: "ecology-monitor-desktop.png" });
+  await page.screenshot({
+    path: "../../test-results/ecology-monitor-desktop.png",
+  });
 });
 
 it("研判长文本与低高度窗口均能读到末尾，底栏不遮挡卡片", async () => {

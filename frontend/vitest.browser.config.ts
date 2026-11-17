@@ -1,6 +1,6 @@
 import react from "@vitejs/plugin-react";
 import { playwright } from "@vitest/browser-playwright";
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { defineConfig } from "vitest/config";
 import { fileURLToPath } from "node:url";
 
@@ -13,6 +13,14 @@ const localLaunchOptions =
 
 export default defineConfig({
   plugins: [react()],
+  server: {
+    fs: {
+      allow: [
+        fileURLToPath(new URL(".", import.meta.url)),
+        realpathSync(fileURLToPath(new URL("./node_modules", import.meta.url))),
+      ],
+    },
+  },
   resolve: {
     alias: {
       "@card-assets": fileURLToPath(

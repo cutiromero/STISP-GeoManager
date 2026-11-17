@@ -366,7 +366,7 @@ export const zhCN = {
         "连接数据、知识与算法，让科研分析在同一工作空间中展开。",
       login: "用户登录",
       register: "用户注册",
-      loginSubtitle: "登录后进入数据资源总目录，后台功能按权限显示。",
+      loginSubtitle: "登录后进入地理工作台，后台功能按权限显示。",
       registerSubtitle:
         "自助注册默认获得普通用户权限，科研用户权限需提交申请并由管理员审核。",
       username: "账号",
@@ -1573,7 +1573,7 @@ export const enUS = {
       login: "Sign in",
       register: "Create account",
       loginSubtitle:
-        "Sign in to open the data catalog. Administrative features are shown according to your permissions.",
+        "Sign in to open the geographic workspace. Administrative features are shown according to your permissions.",
       registerSubtitle:
         "Self-registered accounts receive standard access. Research access requires an application and administrator approval.",
       username: "Account",
