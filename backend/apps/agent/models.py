@@ -46,6 +46,36 @@ class AgentToolCall(ProjectScopedModel):
         ]
 
 
+class AgentOperation(ProjectScopedModel):
+    """A frozen preview, decided only at the authenticated user boundary."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    run = models.ForeignKey(
+        "AgentRun", on_delete=models.CASCADE, related_name="operations"
+    )
+    kind = models.CharField(max_length=16)
+    request_hash = models.CharField(max_length=64)
+    payload = models.JSONField(default=dict)
+    binding_hash = models.CharField(max_length=64)
+    preview = models.JSONField(default=dict)
+    digest = models.CharField(max_length=64)
+    status = models.CharField(max_length=20, default="pending")
+    result = models.JSONField(default=dict)
+    execution_identity = models.JSONField(default=dict)
+    decided_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL
+    )
+    decided_at = models.DateTimeField(null=True)
+    expires_at = models.DateTimeField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=("run", "created_at"), name="agent_operation_run_time")
+        ]
+
+
 class LogicConfiguration(ProjectScopedModel):
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     value = models.JSONField(default=dict)

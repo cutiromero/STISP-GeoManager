@@ -45,6 +45,10 @@ def enabled(name, user, policy, *, run=None):
         and not policy["allowDocuments"]
     ):
         return False
+    if name == "preview_data_import" and not (
+        policy.get("allowDocuments") and policy.get("allowAttachments")
+    ):
+        return False
     if name == "compare_summaries" and not policy["allowCompare"]:
         return False
     if run is not None:

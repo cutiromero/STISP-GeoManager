@@ -9985,6 +9985,236 @@ paths:
 
   "/api/business-flows/runs/{workflowId}/input-script/": {"get": {"operationId": "getBusinessFlowInputScript", "tags": ["BusinessFlows"], "summary": "查看实际适配脚本", "description": "按需读取；每次核对当前账号、项目、原始来源与派生输入ACL，不触发生成或计算", "security": [{"sessionAuth": []}], "parameters": [{"name": "workflowId", "in": "path", "required": true, "description": "本人当前项目任务编号", "schema": {"type": "string", "description": "UUID", "format": "uuid"}}, {"name": "role", "in": "query", "required": true, "description": "真实输入衔接键", "schema": {"type": "string", "description": "输入键"}}, {"name": "attempt", "in": "query", "required": false, "description": "省略读取最新实际代码", "schema": {"type": "integer", "description": "尝试序号", "minimum": 1, "maximum": 3}}], "responses": {"200": {"description": "成功", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/BusinessFlowInputScriptDetail"}}}}, "400": {"description": "参数错误", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "401": {"description": "请先登录", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "403": {"description": "权限已变化", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "404": {"description": "不存在或无权访问", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "409": {"description": "任务或资料修订已变化", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}}}}
   "/api/business-flows/runs/{workflowId}/input-clarification/": {"post": {"operationId": "clarifyBusinessFlowInput", "tags": ["BusinessFlows"], "summary": "补充输入资料说明并继续", "description": "仅本人当前项目的实际待说明项；修订与幂等保护。补充说明不写入人工批准或AI审核通过标记", "security": [{"sessionAuth": []}], "parameters": [{"name": "workflowId", "in": "path", "required": true, "description": "本人当前项目任务编号", "schema": {"type": "string", "description": "UUID", "format": "uuid"}}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/BusinessFlowInputClarification"}}}}, "responses": {"200": {"description": "成功", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/BusinessFlowRun"}}}}, "400": {"description": "参数错误", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "401": {"description": "请先登录", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "403": {"description": "权限已变化", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "404": {"description": "不存在或无权访问", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "409": {"description": "任务或资料修订已变化", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}}}}
+  /api/agent/runs/{runId}/operations/:
+    parameters:
+    - name: X-Project-Id
+      in: header
+      required: true
+      description: 唯一当前项目
+      schema:
+        type: integer
+        minimum: 1
+    - name: runId
+      in: path
+      required: true
+      description: 本人真实运行或预览编号
+      schema:
+        type: integer
+        minimum: 1
+    get:
+      tags:
+      - 智能体
+      operationId: listAgentOperations
+      summary: 读取本轮待确认操作
+      description: 只允许本人当前项目；确认绑定范围、修订和15分钟有效期，模型confirmed=true无效。CSRF、浏览器会话和实时权限沿用平台边界；执行中重复提交不重做。
+      security:
+      - sessionAuth: []
+      responses:
+        '200':
+          description: 真实预览或决定状态
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentOperationList'
+        '400':
+          description: 参数无效
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: 当前权限拒绝
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: 对象不存在或无权访问
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: 预览过期、换版或决定冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      tags:
+      - 智能体
+      operationId: previewAgentOperation
+      summary: 创建无业务写入的操作预览
+      description: 只允许本人当前项目；确认绑定范围、修订和15分钟有效期，模型confirmed=true无效。CSRF、浏览器会话和实时权限沿用平台边界；执行中重复提交不重做。
+      security:
+      - sessionAuth: []
+      responses:
+        '200':
+          description: 真实预览或决定状态
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentOperation'
+        '400':
+          description: 参数无效
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: 当前权限拒绝
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: 对象不存在或无权访问
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: 预览过期、换版或决定冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentOperationPreviewInput'
+  /api/agent/operations/{operationId}/:
+    parameters:
+    - name: X-Project-Id
+      in: header
+      required: true
+      description: 唯一当前项目
+      schema:
+        type: integer
+        minimum: 1
+    - name: operationId
+      in: path
+      required: true
+      description: 本人真实运行或预览编号
+      schema:
+        type: string
+        format: uuid
+    get:
+      tags:
+      - 智能体
+      operationId: getAgentOperation
+      summary: 读取具体操作预览
+      description: 只允许本人当前项目；确认绑定范围、修订和15分钟有效期，模型confirmed=true无效。CSRF、浏览器会话和实时权限沿用平台边界；执行中重复提交不重做。
+      security:
+      - sessionAuth: []
+      responses:
+        '200':
+          description: 真实预览或决定状态
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentOperation'
+        '400':
+          description: 参数无效
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: 当前权限拒绝
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: 对象不存在或无权访问
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: 预览过期、换版或决定冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      tags:
+      - 智能体
+      operationId: decideAgentOperation
+      summary: 真实用户确认或拒绝冻结操作
+      description: 只允许本人当前项目；确认绑定范围、修订和15分钟有效期，模型confirmed=true无效。CSRF、浏览器会话和实时权限沿用平台边界；执行中重复提交不重做。
+      security:
+      - sessionAuth: []
+      responses:
+        '200':
+          description: 真实预览或决定状态
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentOperation'
+        '400':
+          description: 参数无效
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: 当前权限拒绝
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: 对象不存在或无权访问
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: 预览过期、换版或决定冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '202':
+          description: 相同决定已受理执行，不重复执行
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentOperation'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentOperationDecision'
 components:
   securitySchemes:
     sessionAuth:
@@ -22565,6 +22795,17 @@ components:
 
     JobInputReference: {"type": "object", "description": "导出来源标识；空对象表示客户端自带GeoJSON，不含服务端原始来源", "properties": {"resourceId": {"type": "integer", "minimum": 1, "description": "原资料编号"}, "layerId": {"type": "integer", "minimum": 1, "description": "图层编号"}, "datasetId": {"type": "integer", "minimum": 1, "description": "栅格数据集编号"}}, "additionalProperties": false}
 
+    AgentToolListOperationTargetsArguments: {"type": "object", "description": "分页列出本轮CSV附件或本人成果元信息", "properties": {"kind": {"type": "string", "description": "目录类型", "enum": ["import_sources", "results", "compositions"]}, "query": {"type": "string", "description": "名称关键词", "maxLength": 120}, "offset": {"type": "integer", "minimum": 0, "description": "分页偏移"}, "limit": {"type": "integer", "minimum": 1, "description": "分页大小", "maximum": 20}}, "required": ["kind"], "additionalProperties": false}
+    AgentToolPreviewDataImportArguments: {"type": "object", "description": "预览本轮CSV新建独立私有表；不执行导入，真实用户决定后才执行", "properties": {"attachmentId": {"type": "integer", "minimum": 1, "description": "本轮附件编号"}, "name": {"type": "string", "description": "新资料名称", "minLength": 1, "maxLength": 120}, "importMode": {"type": "string", "description": "导入方式", "enum": ["table", "geographic"]}, "longitudeColumn": {"type": "string", "description": "真实经度列", "minLength": 1, "maxLength": 200}, "latitudeColumn": {"type": "string", "description": "真实纬度列", "minLength": 1, "maxLength": 200}}, "required": ["attachmentId", "name", "importMode"], "additionalProperties": false}
+    AgentToolPreviewPublicationArguments: {"type": "object", "description": "预览指定本人成果与发布范围；专题图必须提供真实版本号", "properties": {"kind": {"type": "string", "description": "成果类型", "enum": ["result", "composition"]}, "objectId": {"type": "integer", "minimum": 1, "description": "本人当前项目真实对象编号"}, "versionNumber": {"type": "integer", "minimum": 1, "description": "专题图真实版本号"}, "audienceGroupIds": {"type": "array", "description": "可见角色，空数组表示当前项目具备查看权限的用户", "items": {"type": "integer", "minimum": 1, "description": "真实可选择角色编号"}, "maxItems": 30, "uniqueItems": true}}, "required": ["kind", "objectId"], "additionalProperties": false}
+    AgentToolPreviewShareArguments: {"type": "object", "description": "预览向准确用户名发送单对象只读邀请；用户确认后才发送", "properties": {"kind": {"type": "string", "description": "分享类型", "enum": ["workspace", "composition", "compute_output"]}, "objectId": {"type": "integer", "minimum": 1, "description": "本人当前项目真实对象编号"}, "username": {"type": "string", "description": "接收人准确用户名", "minLength": 1, "maxLength": 150}}, "required": ["kind", "objectId", "username"], "additionalProperties": false}
+    AgentToolGetOperationProposalArguments: {"type": "object", "description": "查询真实预览与决定；不能确认或代替用户操作", "properties": {"operationId": {"type": "string", "description": "操作预览UUID", "format": "uuid"}}, "required": ["operationId"], "additionalProperties": false}
+    AgentOperationPreview: {"type": "object", "description": "服务端冻结的用户可读操作预览", "properties": {"projectId": {"type": "integer", "minimum": 1, "description": "唯一当前项目"}, "title": {"type": "string", "description": "操作标题"}, "target": {"type": "string", "description": "具体目标"}, "scope": {"type": "string", "description": "可见范围或接收人"}, "effect": {"type": "string", "description": "确认后的具体影响"}, "details": {"type": "array", "description": "修订、字段或版本信息", "items": {"type": "string", "description": "详情"}, "maxItems": 20}}, "required": ["projectId", "title", "target", "scope", "effect", "details"], "additionalProperties": false}
+    AgentOperation: {"type": "object", "description": "本人当前项目待确认操作及真实决定。预览不代表执行；模型没有确认工具。", "properties": {"id": {"type": "string", "description": "真实预览UUID", "format": "uuid"}, "runId": {"type": "integer", "minimum": 1, "description": "所属Agent运行"}, "projectId": {"type": "integer", "minimum": 1, "description": "所属项目"}, "kind": {"type": "string", "description": "操作类型", "enum": ["import", "publish", "share"]}, "status": {"type": "string", "description": "真实状态", "enum": ["pending", "executing", "confirmed", "rejected", "expired", "failed", "interrupted"]}, "digest": {"type": "string", "description": "绑定预览、范围与版本的服务端凭据", "pattern": "^[a-f0-9]{64}$"}, "preview": {"$ref": "#/components/schemas/AgentOperationPreview"}, "result": {"type": "object", "description": "已执行操作的真实对象引用，不包含路径或文件正文", "additionalProperties": true}, "expiresAt": {"type": "string", "description": "确认期限", "format": "date-time"}, "createdAt": {"type": "string", "description": "预览创建时间", "format": "date-time"}, "decidedAt": {"type": ["string", "null"], "format": "date-time", "description": "真实用户决定时间"}, "canConfirm": {"type": "boolean", "description": "尚未过期且等待决定；执行仍重验当前授权"}, "detail": {"type": "string", "description": "真实状态说明"}}, "required": ["id", "runId", "projectId", "kind", "status", "digest", "preview", "result", "expiresAt", "createdAt", "decidedAt", "canConfirm", "detail"], "additionalProperties": false}
+    AgentOperationList: {"type": "object", "description": "本轮最多8项操作预览", "properties": {"runId": {"type": "integer", "minimum": 1, "description": "所属运行"}, "projectId": {"type": "integer", "minimum": 1, "description": "唯一当前项目"}, "items": {"type": "array", "description": "按创建顺序的操作", "items": {"$ref": "#/components/schemas/AgentOperation"}, "maxItems": 8}}, "required": ["runId", "projectId", "items"], "additionalProperties": false}
+    AgentOperationDecision: {"type": "object", "description": "只由真实用户在现有会话与CSRF约束下提交；没有Agent确认工具", "properties": {"decision": {"type": "string", "description": "真实用户决定", "enum": ["confirm", "reject"]}, "digest": {"type": "string", "description": "原样携带已展示预览的digest", "pattern": "^[a-f0-9]{64}$"}}, "required": ["decision", "digest"], "additionalProperties": false}
+    AgentOperationPreviewInput: {"description": "受控操作预览参数", "oneOf": [{"type": "object", "description": "预览import", "properties": {"kind": {"type": "string", "description": "预览种类", "enum": ["import"]}, "arguments": {"$ref": "#/components/schemas/AgentToolPreviewDataImportArguments"}}, "required": ["kind", "arguments"], "additionalProperties": false}, {"type": "object", "description": "预览publish", "properties": {"kind": {"type": "string", "description": "预览种类", "enum": ["publish"]}, "arguments": {"$ref": "#/components/schemas/AgentToolPreviewPublicationArguments"}}, "required": ["kind", "arguments"], "additionalProperties": false}, {"type": "object", "description": "预览share", "properties": {"kind": {"type": "string", "description": "预览种类", "enum": ["share"]}, "arguments": {"$ref": "#/components/schemas/AgentToolPreviewShareArguments"}}, "required": ["kind", "arguments"], "additionalProperties": false}]}
+
 x-agent-tools:
   list_business_flows:
     version: 1.0.1
@@ -23167,6 +23408,96 @@ x-agent-tools:
     retry: 权限或不存在不盲目重试；取消按真实保存点完成
     completion: cancelRequested是受理状态，真实终态以status为准
     limitations: 本人当前项目，取消不需要重新获得源资料读取权限，不删除原件或已完成文件
+    implementation: shared_service
+    requiredPermissions: []
+    anyPermissions: []
+  list_operation_targets:
+    version: 1.0.0
+    inputSchema:
+      $ref: '#/components/schemas/AgentToolListOperationTargetsArguments'
+    operationIds: []
+    effect: read
+    risk: low
+    approval: none
+    idempotency: 同运行、参数及来源修订复用预览；确认按真实预览只执行一次
+    retry: 过期、换版、撤权重新预览；执行不明不能盲目重试
+    completion: 仅confirmed和真实对象引用表示用户确认后的操作完成；pending不表示已执行
+    limitations: 本人当前项目；导入仅本轮CSV附件，5MiB/5000行/200列，每轮8项预览。预览15分钟有效，发布分享不伪造科学批准；模型没有确认工具。
+    implementation: internal_service
+    requiredPermissions: []
+    anyPermissions:
+    - catalog.add_dataresource
+    - catalog.view_resultartifact
+    - catalog.view_mapcomposition
+  preview_data_import:
+    version: 1.0.0
+    inputSchema:
+      $ref: '#/components/schemas/AgentToolPreviewDataImportArguments'
+    operationIds:
+    - previewAgentOperation
+    effect: draft
+    risk: medium
+    approval: human_decision
+    idempotency: 同运行、参数及来源修订复用预览；确认按真实预览只执行一次
+    retry: 过期、换版、撤权重新预览；执行不明不能盲目重试
+    completion: 仅confirmed和真实对象引用表示用户确认后的操作完成；pending不表示已执行
+    limitations: 本人当前项目；导入仅本轮CSV附件，5MiB/5000行/200列，每轮8项预览。预览15分钟有效，发布分享不伪造科学批准；模型没有确认工具。
+    implementation: shared_service
+    requiredPermissions:
+    - catalog.add_dataresource
+    anyPermissions: []
+  preview_publication:
+    version: 1.0.0
+    inputSchema:
+      $ref: '#/components/schemas/AgentToolPreviewPublicationArguments'
+    operationIds:
+    - previewAgentOperation
+    effect: draft
+    risk: medium
+    approval: human_decision
+    idempotency: 同运行、参数及来源修订复用预览；确认按真实预览只执行一次
+    retry: 过期、换版、撤权重新预览；执行不明不能盲目重试
+    completion: 仅confirmed和真实对象引用表示用户确认后的操作完成；pending不表示已执行
+    limitations: 本人当前项目；导入仅本轮CSV附件，5MiB/5000行/200列，每轮8项预览。预览15分钟有效，发布分享不伪造科学批准；模型没有确认工具。
+    implementation: shared_service
+    requiredPermissions: []
+    anyPermissions:
+    - catalog.publish_resultartifact
+    - catalog.publish_mapcomposition
+  preview_share:
+    version: 1.0.0
+    inputSchema:
+      $ref: '#/components/schemas/AgentToolPreviewShareArguments'
+    operationIds:
+    - previewAgentOperation
+    effect: draft
+    risk: medium
+    approval: human_decision
+    idempotency: 同运行、参数及来源修订复用预览；确认按真实预览只执行一次
+    retry: 过期、换版、撤权重新预览；执行不明不能盲目重试
+    completion: 仅confirmed和真实对象引用表示用户确认后的操作完成；pending不表示已执行
+    limitations: 本人当前项目；导入仅本轮CSV附件，5MiB/5000行/200列，每轮8项预览。预览15分钟有效，发布分享不伪造科学批准；模型没有确认工具。
+    implementation: shared_service
+    requiredPermissions:
+    - core.browse_data
+    anyPermissions:
+    - catalog.view_workspacescene
+    - catalog.view_mapcomposition
+    - compute.view_own_task
+    - compute.manage_tasks
+  get_operation_proposal:
+    version: 1.0.0
+    inputSchema:
+      $ref: '#/components/schemas/AgentToolGetOperationProposalArguments'
+    operationIds:
+    - getAgentOperation
+    effect: read
+    risk: low
+    approval: none
+    idempotency: 同运行、参数及来源修订复用预览；确认按真实预览只执行一次
+    retry: 过期、换版、撤权重新预览；执行不明不能盲目重试
+    completion: 仅confirmed和真实对象引用表示用户确认后的操作完成；pending不表示已执行
+    limitations: 本人当前项目；导入仅本轮CSV附件，5MiB/5000行/200列，每轮8项预览。预览15分钟有效，发布分享不伪造科学批准；模型没有确认工具。
     implementation: shared_service
     requiredPermissions: []
     anyPermissions: []

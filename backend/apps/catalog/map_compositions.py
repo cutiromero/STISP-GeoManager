@@ -13,7 +13,6 @@ from django.contrib.auth.models import Group
 from django.db import IntegrityError, transaction
 from django.db.models import F, Max, Q
 from django.http import FileResponse, Http404, JsonResponse
-from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST, require_http_methods
 from PIL import Image, UnidentifiedImageError
 
@@ -273,40 +272,20 @@ def publish_map_composition(request, composition_id: int):
     payload = _json_payload(request)
     if isinstance(payload, JsonResponse):
         return payload
-    version_number = payload.get("versionNumber")
-    if not isinstance(version_number, int) or version_number <= 0:
-        return JsonResponse({"detail": "versionNumber 必须是正整数"}, status=400)
-    version = composition.versions.filter(version_number=version_number).first()
-    if version is None:
-        return JsonResponse({"detail": "专题成果版本不存在"}, status=404)
-    if not all(
-        app_path(path).is_file()
-        for path in (version.preview_path, version.artifact_path)
-    ):
-        return JsonResponse(
-            {"detail": "专题成果文件不可用，请从原工程重新生成后发布"}, status=400
+    from .publication_commands import publish
+    from apps.compute.packages import ComputeError
+
+    try:
+        composition = publish(
+            request.user,
+            "composition",
+            composition_id,
+            payload.get("audienceGroupIds", []),
+            version_number=payload.get("versionNumber"),
         )
-    group_ids = _group_ids(payload.get("audienceGroupIds", []), required=False)
-    if isinstance(group_ids, JsonResponse):
-        return group_ids
-    group_error = _validate_selectable_groups(group_ids, request.user)
-    if group_error:
-        return JsonResponse({"detail": group_error}, status=400)
-    with transaction.atomic():
-        composition.published_version = version
-        composition.published_by = request.user
-        composition.published_at = timezone.now()
-        composition.status = MapComposition.Status.PUBLISHED
-        composition.save(
-            update_fields=[
-                "published_version",
-                "published_by",
-                "published_at",
-                "status",
-                "updated_at",
-            ]
-        )
-        composition.audience_groups.set(group_ids)
+    except ComputeError as error:
+        return JsonResponse({"detail": str(error)}, status=error.status)
+    version = composition.published_version
     log_operation(
         request.user,
         "专题制图",

@@ -15564,6 +15564,246 @@ export type JobInputReference = {
 };
 
 /**
+ * 分页列出本轮CSV附件或本人成果元信息
+ */
+export type AgentToolListOperationTargetsArguments = {
+    /**
+     * 目录类型
+     */
+    kind: 'import_sources' | 'results' | 'compositions';
+    /**
+     * 名称关键词
+     */
+    query?: string;
+    /**
+     * 分页偏移
+     */
+    offset?: number;
+    /**
+     * 分页大小
+     */
+    limit?: number;
+};
+
+/**
+ * 预览本轮CSV新建独立私有表；不执行导入，真实用户决定后才执行
+ */
+export type AgentToolPreviewDataImportArguments = {
+    /**
+     * 本轮附件编号
+     */
+    attachmentId: number;
+    /**
+     * 新资料名称
+     */
+    name: string;
+    /**
+     * 导入方式
+     */
+    importMode: 'table' | 'geographic';
+    /**
+     * 真实经度列
+     */
+    longitudeColumn?: string;
+    /**
+     * 真实纬度列
+     */
+    latitudeColumn?: string;
+};
+
+/**
+ * 预览指定本人成果与发布范围；专题图必须提供真实版本号
+ */
+export type AgentToolPreviewPublicationArguments = {
+    /**
+     * 成果类型
+     */
+    kind: 'result' | 'composition';
+    /**
+     * 本人当前项目真实对象编号
+     */
+    objectId: number;
+    /**
+     * 专题图真实版本号
+     */
+    versionNumber?: number;
+    /**
+     * 可见角色，空数组表示当前项目具备查看权限的用户
+     */
+    audienceGroupIds?: Array<number>;
+};
+
+/**
+ * 预览向准确用户名发送单对象只读邀请；用户确认后才发送
+ */
+export type AgentToolPreviewShareArguments = {
+    /**
+     * 分享类型
+     */
+    kind: 'workspace' | 'composition' | 'compute_output';
+    /**
+     * 本人当前项目真实对象编号
+     */
+    objectId: number;
+    /**
+     * 接收人准确用户名
+     */
+    username: string;
+};
+
+/**
+ * 查询真实预览与决定；不能确认或代替用户操作
+ */
+export type AgentToolGetOperationProposalArguments = {
+    /**
+     * 操作预览UUID
+     */
+    operationId: string;
+};
+
+/**
+ * 服务端冻结的用户可读操作预览
+ */
+export type AgentOperationPreview = {
+    /**
+     * 唯一当前项目
+     */
+    projectId: number;
+    /**
+     * 操作标题
+     */
+    title: string;
+    /**
+     * 具体目标
+     */
+    target: string;
+    /**
+     * 可见范围或接收人
+     */
+    scope: string;
+    /**
+     * 确认后的具体影响
+     */
+    effect: string;
+    /**
+     * 修订、字段或版本信息
+     */
+    details: Array<string>;
+};
+
+/**
+ * 本人当前项目待确认操作及真实决定。预览不代表执行；模型没有确认工具。
+ */
+export type AgentOperation = {
+    /**
+     * 真实预览UUID
+     */
+    id: string;
+    /**
+     * 所属Agent运行
+     */
+    runId: number;
+    /**
+     * 所属项目
+     */
+    projectId: number;
+    /**
+     * 操作类型
+     */
+    kind: 'import' | 'publish' | 'share';
+    /**
+     * 真实状态
+     */
+    status: 'pending' | 'executing' | 'confirmed' | 'rejected' | 'expired' | 'failed' | 'interrupted';
+    /**
+     * 绑定预览、范围与版本的服务端凭据
+     */
+    digest: string;
+    preview: AgentOperationPreview;
+    /**
+     * 已执行操作的真实对象引用，不包含路径或文件正文
+     */
+    result: {
+        [key: string]: unknown;
+    };
+    /**
+     * 确认期限
+     */
+    expiresAt: string;
+    /**
+     * 预览创建时间
+     */
+    createdAt: string;
+    /**
+     * 真实用户决定时间
+     */
+    decidedAt: string | null;
+    /**
+     * 尚未过期且等待决定；执行仍重验当前授权
+     */
+    canConfirm: boolean;
+    /**
+     * 真实状态说明
+     */
+    detail: string;
+};
+
+/**
+ * 本轮最多8项操作预览
+ */
+export type AgentOperationList = {
+    /**
+     * 所属运行
+     */
+    runId: number;
+    /**
+     * 唯一当前项目
+     */
+    projectId: number;
+    /**
+     * 按创建顺序的操作
+     */
+    items: Array<AgentOperation>;
+};
+
+/**
+ * 只由真实用户在现有会话与CSRF约束下提交；没有Agent确认工具
+ */
+export type AgentOperationDecision = {
+    /**
+     * 真实用户决定
+     */
+    decision: 'confirm' | 'reject';
+    /**
+     * 原样携带已展示预览的digest
+     */
+    digest: string;
+};
+
+/**
+ * 受控操作预览参数
+ */
+export type AgentOperationPreviewInput = {
+    /**
+     * 预览种类
+     */
+    kind: 'import';
+    arguments: AgentToolPreviewDataImportArguments;
+} | {
+    /**
+     * 预览种类
+     */
+    kind: 'publish';
+    arguments: AgentToolPreviewPublicationArguments;
+} | {
+    /**
+     * 预览种类
+     */
+    kind: 'share';
+    arguments: AgentToolPreviewShareArguments;
+};
+
+/**
  * 可选的页面登录 familyId，仅用于发现跨标签页账号变化，不是身份凭据；不匹配当前 Cookie 身份时返回409，原有项目与数据权限仍实时检查。
  */
 export type BrowserSessionFamily = string;
@@ -28059,3 +28299,215 @@ export type ClarifyBusinessFlowInputResponses = {
 };
 
 export type ClarifyBusinessFlowInputResponse = ClarifyBusinessFlowInputResponses[keyof ClarifyBusinessFlowInputResponses];
+
+export type ListAgentOperationsData = {
+    body?: never;
+    headers: {
+        /**
+         * 唯一当前项目
+         */
+        'X-Project-Id': number;
+    };
+    path: {
+        /**
+         * 本人真实运行或预览编号
+         */
+        runId: number;
+    };
+    query?: never;
+    url: '/api/agent/runs/{runId}/operations/';
+};
+
+export type ListAgentOperationsErrors = {
+    /**
+     * 参数无效
+     */
+    400: ErrorResponse;
+    /**
+     * 未登录
+     */
+    401: ErrorResponse;
+    /**
+     * 当前权限拒绝
+     */
+    403: ErrorResponse;
+    /**
+     * 对象不存在或无权访问
+     */
+    404: ErrorResponse;
+    /**
+     * 预览过期、换版或决定冲突
+     */
+    409: ErrorResponse;
+};
+
+export type ListAgentOperationsError = ListAgentOperationsErrors[keyof ListAgentOperationsErrors];
+
+export type ListAgentOperationsResponses = {
+    /**
+     * 真实预览或决定状态
+     */
+    200: AgentOperationList;
+};
+
+export type ListAgentOperationsResponse = ListAgentOperationsResponses[keyof ListAgentOperationsResponses];
+
+export type PreviewAgentOperationData = {
+    body: AgentOperationPreviewInput;
+    headers: {
+        /**
+         * 唯一当前项目
+         */
+        'X-Project-Id': number;
+    };
+    path: {
+        /**
+         * 本人真实运行或预览编号
+         */
+        runId: number;
+    };
+    query?: never;
+    url: '/api/agent/runs/{runId}/operations/';
+};
+
+export type PreviewAgentOperationErrors = {
+    /**
+     * 参数无效
+     */
+    400: ErrorResponse;
+    /**
+     * 未登录
+     */
+    401: ErrorResponse;
+    /**
+     * 当前权限拒绝
+     */
+    403: ErrorResponse;
+    /**
+     * 对象不存在或无权访问
+     */
+    404: ErrorResponse;
+    /**
+     * 预览过期、换版或决定冲突
+     */
+    409: ErrorResponse;
+};
+
+export type PreviewAgentOperationError = PreviewAgentOperationErrors[keyof PreviewAgentOperationErrors];
+
+export type PreviewAgentOperationResponses = {
+    /**
+     * 真实预览或决定状态
+     */
+    200: AgentOperation;
+};
+
+export type PreviewAgentOperationResponse = PreviewAgentOperationResponses[keyof PreviewAgentOperationResponses];
+
+export type GetAgentOperationData = {
+    body?: never;
+    headers: {
+        /**
+         * 唯一当前项目
+         */
+        'X-Project-Id': number;
+    };
+    path: {
+        /**
+         * 本人真实运行或预览编号
+         */
+        operationId: string;
+    };
+    query?: never;
+    url: '/api/agent/operations/{operationId}/';
+};
+
+export type GetAgentOperationErrors = {
+    /**
+     * 参数无效
+     */
+    400: ErrorResponse;
+    /**
+     * 未登录
+     */
+    401: ErrorResponse;
+    /**
+     * 当前权限拒绝
+     */
+    403: ErrorResponse;
+    /**
+     * 对象不存在或无权访问
+     */
+    404: ErrorResponse;
+    /**
+     * 预览过期、换版或决定冲突
+     */
+    409: ErrorResponse;
+};
+
+export type GetAgentOperationError = GetAgentOperationErrors[keyof GetAgentOperationErrors];
+
+export type GetAgentOperationResponses = {
+    /**
+     * 真实预览或决定状态
+     */
+    200: AgentOperation;
+};
+
+export type GetAgentOperationResponse = GetAgentOperationResponses[keyof GetAgentOperationResponses];
+
+export type DecideAgentOperationData = {
+    body: AgentOperationDecision;
+    headers: {
+        /**
+         * 唯一当前项目
+         */
+        'X-Project-Id': number;
+    };
+    path: {
+        /**
+         * 本人真实运行或预览编号
+         */
+        operationId: string;
+    };
+    query?: never;
+    url: '/api/agent/operations/{operationId}/';
+};
+
+export type DecideAgentOperationErrors = {
+    /**
+     * 参数无效
+     */
+    400: ErrorResponse;
+    /**
+     * 未登录
+     */
+    401: ErrorResponse;
+    /**
+     * 当前权限拒绝
+     */
+    403: ErrorResponse;
+    /**
+     * 对象不存在或无权访问
+     */
+    404: ErrorResponse;
+    /**
+     * 预览过期、换版或决定冲突
+     */
+    409: ErrorResponse;
+};
+
+export type DecideAgentOperationError = DecideAgentOperationErrors[keyof DecideAgentOperationErrors];
+
+export type DecideAgentOperationResponses = {
+    /**
+     * 真实预览或决定状态
+     */
+    200: AgentOperation;
+    /**
+     * 相同决定已受理执行，不重复执行
+     */
+    202: AgentOperation;
+};
+
+export type DecideAgentOperationResponse = DecideAgentOperationResponses[keyof DecideAgentOperationResponses];

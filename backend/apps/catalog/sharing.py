@@ -210,7 +210,15 @@ def invitations(request):
 
 
 def create(request):
-    body = payload(request)
+    invitation, created = create_invitation(
+        request.user, payload(request), request=request
+    )
+    return JsonResponse(
+        serialize(invitation, request.user), status=201 if created else 200
+    )
+
+
+def create_invitation(user, body, *, request=None):
     key = text(body.get("idempotencyKey"), "幂等键", 80)
     kind, identity, recipient = check_request(body)
     project_id = selected_project_id()
@@ -219,19 +227,19 @@ def create(request):
     ).hexdigest()
     with transaction.atomic():
         # An UPDATE reserves SQLite's writer before checking unique live invitations.
-        ShareInvitation._base_manager.filter(sender=request.user).update(
+        ShareInvitation._base_manager.filter(sender=user).update(
             sender_read_at=F("sender_read_at")
         )
         same_key = ShareInvitation._base_manager.filter(
-            sender=request.user, request_key=key
+            sender=user, request_key=key
         ).first()
         if same_key and same_key.request_hash != digest:
             raise ComputeError("幂等键已用于另一个邀请", 409)
-        item = validate_share(kind, identity, request.user, recipient, project_id)
+        item = validate_share(kind, identity, user, recipient, project_id)
         existing = (
             same_key
             or ShareInvitation._base_manager.filter(
-                sender=request.user,
+                sender=user,
                 recipient=recipient,
                 project_tag_id=project_id,
                 kind=kind,
@@ -240,9 +248,9 @@ def create(request):
             ).first()
         )
         if existing:
-            return JsonResponse(serialize(existing, request.user))
+            return existing, False
         invitation = ShareInvitation.objects.create(
-            sender=request.user,
+            sender=user,
             recipient=recipient,
             kind=kind,
             object_id=identity,
@@ -251,7 +259,7 @@ def create(request):
             request_hash=digest,
         )
         log_operation(
-            request.user,
+            user,
             "邀请分享",
             "发送邀请",
             "success",
@@ -260,7 +268,7 @@ def create(request):
             target_type="share_invitation",
             target_id=invitation.id,
         )
-    return JsonResponse(serialize(invitation, request.user), status=201)
+    return invitation, True
 
 
 @endpoint(["POST"])

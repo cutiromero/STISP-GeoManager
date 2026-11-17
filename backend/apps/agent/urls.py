@@ -3,9 +3,12 @@ from . import views, workflow_report_views, workflow_validation_views
 from .run_stream import response as run_stream
 from .capability_views import capabilities
 from .tool_call_views import tool_calls
+from .operation_views import operations, operation_detail
 
 urlpatterns = [
     path("capabilities/", capabilities),
+    path("runs/<int:run_id>/operations/", operations),
+    path("operations/<uuid:operation_id>/", operation_detail),
     path("runs/<int:run_id>/tool-calls/", tool_calls),
     path("bootstrap/", views.bootstrap),
     path("attachments/", views.upload_attachment),

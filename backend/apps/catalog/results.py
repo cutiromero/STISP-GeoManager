@@ -241,34 +241,19 @@ def result_artifact_detail(request, result_id: int):
     if action == "publish":
         if not has_feature_perm(request.user, "catalog.publish_resultartifact"):
             return feature_denied_response(request.user)
-        group_ids = _positive_integer_list(payload.get("accessGroupIds", []))
-        if isinstance(group_ids, JsonResponse):
-            return group_ids
-        group_error = _validate_access_groups(group_ids, request.user)
-        if group_error:
-            return JsonResponse({"detail": group_error}, status=400)
-        related = None
-        if "resourceIds" in payload:
-            related = _related_resources(
-                payload["resourceIds"], request.user, artifact.project_tag_id
+        from .publication_commands import publish
+        from apps.compute.packages import ComputeError
+
+        try:
+            artifact = publish(
+                request.user,
+                "result",
+                result_id,
+                payload.get("accessGroupIds", []),
+                resource_ids=payload.get("resourceIds"),
             )
-            if isinstance(related, JsonResponse):
-                return related
-        with transaction.atomic():
-            artifact.status = ResultArtifact.Status.PUBLISHED
-            artifact.published_by = request.user
-            artifact.published_at = timezone.now()
-            artifact.save(
-                update_fields=[
-                    "status",
-                    "published_by",
-                    "published_at",
-                    "updated_at",
-                ]
-            )
-            artifact.access_groups.set(group_ids)
-            if related is not None:
-                artifact.related_resources.set(related)
+        except ComputeError as error:
+            return JsonResponse({"detail": str(error)}, status=error.status)
         operation = "发布成果文件"
     elif action == "unpublish":
         if "resourceIds" in payload:

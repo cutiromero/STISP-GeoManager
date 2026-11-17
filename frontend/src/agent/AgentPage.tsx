@@ -1,4 +1,5 @@
 import PlatformActions from "./PlatformActions";
+import PlatformOperationsPanel from "./PlatformOperationsPanel";
 import BusinessFlowActivity from "../businessflows/BusinessFlowActivity";
 import BusinessFlowMonitor from "../businessflows/BusinessFlowMonitor";
 import { workflowModelActivity } from "../api/workflowModelStream";
@@ -1382,6 +1383,14 @@ function AgentWorkspace() {
                 </strong>
               </div>
             </div>
+            {mode === "agent" && canUse && (
+              <PlatformOperationsPanel
+                key={`platform-operations:${user?.id}:${project?.current}:${current?.id}`}
+                accountId={user?.id ?? 0}
+                projectId={Number(project?.current ?? 1)}
+                runIds={runs.map((run) => run.id)}
+              />
+            )}
             <Tag className="agent-project-badge">
               {project?.projects.find((p) => String(p.id) === project.current)
                 ?.name ?? ui("当前项目", "Current project")}
@@ -1765,6 +1774,21 @@ function AgentWorkspace() {
                         }}
                       />
                     )}
+                  {r.evidence.some((item) =>
+                    [
+                      "preview_data_import",
+                      "preview_publication",
+                      "preview_share",
+                    ].includes(item.tool),
+                  ) && (
+                    <PlatformOperationsPanel
+                      key={`operation-${user?.id}-${project?.current}-${r.id}`}
+                      accountId={user?.id ?? 0}
+                      projectId={Number(project?.current ?? 1)}
+                      runIds={[r.id]}
+                      inline
+                    />
+                  )}
                   <PlatformActions
                     actions={r.platformActions}
                     projectId={Number(project?.current ?? 1)}

@@ -298,7 +298,9 @@ def attach_inputs(messages, run, model, policy_value):
             text = attachment.extracted_text.strip()
             if not text:
                 text = "（该文档没有可提取的文本，可能是扫描件）"
-            parts[0]["text"] += f"\n\n【附件：{attachment.name}】\n{text}"
+            parts[0]["text"] += (
+                f"\n\n【附件：{attachment.name}；attachmentId={attachment.pk}】\n{text}"
+            )
             continue
         if not getattr(model, "vision", False):
             raise ModelError("当前模型未验收图片分析能力")
@@ -720,6 +722,10 @@ def run_task(run_id):
                             if is_agent
                             else command["answer"]
                         )
+                        if is_agent:
+                            from .operation_proposals import append_operation_status
+
+                            run.answer = append_operation_status(run.answer, run)
                         AgentRun.objects.filter(pk=run.id).update(answer=run.answer)
                         reset_preview()
                         event(run, "text", run.answer)
@@ -977,6 +983,7 @@ def serve(stop=None, once=False):
     from .interactions import resume_compute
     from .runtime_heartbeat import pulse
     from .export_followups import resume_exports
+    from .operation_proposals import reconcile_operations
 
     stop = stop or threading.Event()
     futures = {}
@@ -989,6 +996,7 @@ def serve(stop=None, once=False):
                 resume_followups()
                 resume_compute()
                 resume_exports()
+                reconcile_operations()
                 now = timezone.now()
                 pulse("worker")
                 for run_id, future in list(futures.items()):

@@ -693,6 +693,40 @@
       "risk": "low",
       "version": "1.0.0"
     },
+    "get_operation_proposal": {
+      "anyPermissions": [],
+      "approval": "none",
+      "capability": "prepare_operation",
+      "completion": "仅confirmed和真实对象引用表示用户确认后的操作完成；pending不表示已执行",
+      "description": "读取本人当前项目操作预览和真实决定状态，operationId为UUID。pending/执行中不能说已完成；确认只能由用户在平台操作面板完成，没有确认工具。",
+      "effect": "read",
+      "idempotency": "同运行、参数及来源修订复用预览；确认按真实预览只执行一次",
+      "implementation": "shared_service",
+      "inputSchema": {
+        "additionalProperties": false,
+        "description": "查询真实预览与决定；不能确认或代替用户操作",
+        "properties": {
+          "operationId": {
+            "description": "操作预览UUID",
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "operationId"
+        ],
+        "type": "object"
+      },
+      "limitations": "本人当前项目；导入仅本轮CSV附件，5MiB/5000行/200列，每轮8项预览。预览15分钟有效，发布分享不伪造科学批准；模型没有确认工具。",
+      "name": "get_operation_proposal",
+      "operationIds": [
+        "getAgentOperation"
+      ],
+      "requiredPermissions": [],
+      "retry": "过期、换版、撤权重新预览；执行不明不能盲目重试",
+      "risk": "low",
+      "version": "1.0.0"
+    },
     "get_platform_link": {
       "anyPermissions": [],
       "approval": "none",
@@ -1033,6 +1067,62 @@
       "risk": "low",
       "version": "1.0.0"
     },
+    "list_operation_targets": {
+      "anyPermissions": [
+        "catalog.add_dataresource",
+        "catalog.view_resultartifact",
+        "catalog.view_mapcomposition"
+      ],
+      "approval": "none",
+      "capability": "prepare_operation",
+      "completion": "仅confirmed和真实对象引用表示用户确认后的操作完成；pending不表示已执行",
+      "description": "分页列出本人本轮CSV附件(import_sources)、成果文件(results)或专题图(compositions)的真实编号和修订；kind必需，query、offset、limit可选。只读，不发布或导入。",
+      "effect": "read",
+      "idempotency": "同运行、参数及来源修订复用预览；确认按真实预览只执行一次",
+      "implementation": "internal_service",
+      "inputSchema": {
+        "additionalProperties": false,
+        "description": "分页列出本轮CSV附件或本人成果元信息",
+        "properties": {
+          "kind": {
+            "description": "目录类型",
+            "enum": [
+              "import_sources",
+              "results",
+              "compositions"
+            ],
+            "type": "string"
+          },
+          "limit": {
+            "description": "分页大小",
+            "maximum": 20,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "offset": {
+            "description": "分页偏移",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "query": {
+            "description": "名称关键词",
+            "maxLength": 120,
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "type": "object"
+      },
+      "limitations": "本人当前项目；导入仅本轮CSV附件，5MiB/5000行/200列，每轮8项预览。预览15分钟有效，发布分享不伪造科学批准；模型没有确认工具。",
+      "name": "list_operation_targets",
+      "operationIds": [],
+      "requiredPermissions": [],
+      "retry": "过期、换版、撤权重新预览；执行不明不能盲目重试",
+      "risk": "low",
+      "version": "1.0.0"
+    },
     "list_research_tasks": {
       "anyPermissions": [],
       "approval": "none",
@@ -1325,6 +1415,190 @@
       "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
       "risk": "low",
       "version": "1.0.1"
+    },
+    "preview_data_import": {
+      "anyPermissions": [],
+      "approval": "human_decision",
+      "capability": "prepare_operation",
+      "completion": "仅confirmed和真实对象引用表示用户确认后的操作完成；pending不表示已执行",
+      "description": "预览本轮CSV附件新增资料；attachmentId从list_operation_targets取得，name、importMode(table/geographic)必需，地理表提供longitudeColumn/latitudeColumn。限5MiB/5000行。仅生成待确认预览，用户确认后才新增独立私有表；不覆盖原件，不得声称已导入。",
+      "effect": "draft",
+      "idempotency": "同运行、参数及来源修订复用预览；确认按真实预览只执行一次",
+      "implementation": "shared_service",
+      "inputSchema": {
+        "additionalProperties": false,
+        "description": "预览本轮CSV新建独立私有表；不执行导入，真实用户决定后才执行",
+        "properties": {
+          "attachmentId": {
+            "description": "本轮附件编号",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "importMode": {
+            "description": "导入方式",
+            "enum": [
+              "table",
+              "geographic"
+            ],
+            "type": "string"
+          },
+          "latitudeColumn": {
+            "description": "真实纬度列",
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "longitudeColumn": {
+            "description": "真实经度列",
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "name": {
+            "description": "新资料名称",
+            "maxLength": 120,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "attachmentId",
+          "name",
+          "importMode"
+        ],
+        "type": "object"
+      },
+      "limitations": "本人当前项目；导入仅本轮CSV附件，5MiB/5000行/200列，每轮8项预览。预览15分钟有效，发布分享不伪造科学批准；模型没有确认工具。",
+      "name": "preview_data_import",
+      "operationIds": [
+        "previewAgentOperation"
+      ],
+      "requiredPermissions": [
+        "catalog.add_dataresource"
+      ],
+      "retry": "过期、换版、撤权重新预览；执行不明不能盲目重试",
+      "risk": "medium",
+      "version": "1.0.0"
+    },
+    "preview_publication": {
+      "anyPermissions": [
+        "catalog.publish_resultartifact",
+        "catalog.publish_mapcomposition"
+      ],
+      "approval": "human_decision",
+      "capability": "prepare_operation",
+      "completion": "仅confirmed和真实对象引用表示用户确认后的操作完成；pending不表示已执行",
+      "description": "预览发布本人成果，kind=result或composition，objectId从真实目录取得；专题图须versionNumber，audienceGroupIds可选。空角色表示当前项目有查看权限的用户。用户确认前不发布，不能伪造科学人工批准。",
+      "effect": "draft",
+      "idempotency": "同运行、参数及来源修订复用预览；确认按真实预览只执行一次",
+      "implementation": "shared_service",
+      "inputSchema": {
+        "additionalProperties": false,
+        "description": "预览指定本人成果与发布范围；专题图必须提供真实版本号",
+        "properties": {
+          "audienceGroupIds": {
+            "description": "可见角色，空数组表示当前项目具备查看权限的用户",
+            "items": {
+              "description": "真实可选择角色编号",
+              "minimum": 1,
+              "type": "integer"
+            },
+            "maxItems": 30,
+            "type": "array",
+            "uniqueItems": true
+          },
+          "kind": {
+            "description": "成果类型",
+            "enum": [
+              "result",
+              "composition"
+            ],
+            "type": "string"
+          },
+          "objectId": {
+            "description": "本人当前项目真实对象编号",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "versionNumber": {
+            "description": "专题图真实版本号",
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "kind",
+          "objectId"
+        ],
+        "type": "object"
+      },
+      "limitations": "本人当前项目；导入仅本轮CSV附件，5MiB/5000行/200列，每轮8项预览。预览15分钟有效，发布分享不伪造科学批准；模型没有确认工具。",
+      "name": "preview_publication",
+      "operationIds": [
+        "previewAgentOperation"
+      ],
+      "requiredPermissions": [],
+      "retry": "过期、换版、撤权重新预览；执行不明不能盲目重试",
+      "risk": "medium",
+      "version": "1.0.0"
+    },
+    "preview_share": {
+      "anyPermissions": [
+        "catalog.view_workspacescene",
+        "catalog.view_mapcomposition",
+        "compute.view_own_task",
+        "compute.manage_tasks"
+      ],
+      "approval": "human_decision",
+      "capability": "prepare_operation",
+      "completion": "仅confirmed和真实对象引用表示用户确认后的操作完成；pending不表示已执行",
+      "description": "预览单个本人工程(workspace)、专题图(composition)或计算结果(compute_output)只读分享，kind、objectId、准确username必需。仅创建待确认预览；用户确认后才发送邀请，接收人仍须接受。不能替用户接受邀请。",
+      "effect": "draft",
+      "idempotency": "同运行、参数及来源修订复用预览；确认按真实预览只执行一次",
+      "implementation": "shared_service",
+      "inputSchema": {
+        "additionalProperties": false,
+        "description": "预览向准确用户名发送单对象只读邀请；用户确认后才发送",
+        "properties": {
+          "kind": {
+            "description": "分享类型",
+            "enum": [
+              "workspace",
+              "composition",
+              "compute_output"
+            ],
+            "type": "string"
+          },
+          "objectId": {
+            "description": "本人当前项目真实对象编号",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "username": {
+            "description": "接收人准确用户名",
+            "maxLength": 150,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "objectId",
+          "username"
+        ],
+        "type": "object"
+      },
+      "limitations": "本人当前项目；导入仅本轮CSV附件，5MiB/5000行/200列，每轮8项预览。预览15分钟有效，发布分享不伪造科学批准；模型没有确认工具。",
+      "name": "preview_share",
+      "operationIds": [
+        "previewAgentOperation"
+      ],
+      "requiredPermissions": [
+        "core.browse_data"
+      ],
+      "retry": "过期、换版、撤权重新预览；执行不明不能盲目重试",
+      "risk": "medium",
+      "version": "1.0.0"
     },
     "read_compute_output": {
       "anyPermissions": [

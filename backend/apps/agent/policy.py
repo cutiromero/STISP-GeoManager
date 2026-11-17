@@ -23,6 +23,7 @@ CAPABILITIES = {
     "write_data": True,
     "export_data": True,
     "task_control": True,
+    "prepare_operation": True,
     "publish_result": False,
     "system_info": True,
     "internet": True,

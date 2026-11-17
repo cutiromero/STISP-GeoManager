@@ -52,6 +52,12 @@ ACTIVE = {
     "compute_computeimport": ("queued", "running"),
     "agent_agentworkflow": ("queued", "running", "waiting_compute"),
     "raster_rasterprocessingjob": ("queued", "running"),
+    "agent_agentoperation": ("executing",),
+}
+
+# These queues do not exist before their same-package additive migration.
+ADDITIVE_QUEUES = {
+    "agent_agentoperation": ("agent", "0024_governed_operation_previews")
 }
 
 
@@ -164,6 +170,22 @@ def active_counts(config):
     with readonly_db(config) as db:
         counts = {}
         for table, statuses in ACTIVE.items():
+            if (
+                table in ADDITIVE_QUEUES
+                and not db.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+                    (table,),
+                ).fetchone()
+            ):
+                require(
+                    not db.execute(
+                        "SELECT 1 FROM django_migrations WHERE app=? AND name=?",
+                        ADDITIVE_QUEUES[table],
+                    ).fetchone(),
+                    "An applied operation migration is missing its queue table",
+                )
+                counts[table] = 0
+                continue
             placeholders = ",".join("?" for _ in statuses)
             counts[table] = db.execute(
                 f'SELECT COUNT(*) FROM "{table}" WHERE status IN ({placeholders})',

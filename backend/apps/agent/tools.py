@@ -225,6 +225,36 @@ TOOLS = {
             ("query", "url", "maxResults"),
         ),
         ToolSpec(
+            "list_operation_targets",
+            "prepare_operation",
+            "分页列出本人本轮CSV附件(import_sources)、成果文件(results)或专题图(compositions)的真实编号和修订；kind必需，query、offset、limit可选。只读，不发布或导入。",
+            ("kind", "query", "offset", "limit"),
+        ),
+        ToolSpec(
+            "preview_data_import",
+            "prepare_operation",
+            "预览本轮CSV附件新增资料；attachmentId从list_operation_targets取得，name、importMode(table/geographic)必需，地理表提供longitudeColumn/latitudeColumn。限5MiB/5000行。仅生成待确认预览，用户确认后才新增独立私有表；不覆盖原件，不得声称已导入。",
+            ("attachmentId", "name", "importMode", "longitudeColumn", "latitudeColumn"),
+        ),
+        ToolSpec(
+            "preview_publication",
+            "prepare_operation",
+            "预览发布本人成果，kind=result或composition，objectId从真实目录取得；专题图须versionNumber，audienceGroupIds可选。空角色表示当前项目有查看权限的用户。用户确认前不发布，不能伪造科学人工批准。",
+            ("kind", "objectId", "versionNumber", "audienceGroupIds"),
+        ),
+        ToolSpec(
+            "preview_share",
+            "prepare_operation",
+            "预览单个本人工程(workspace)、专题图(composition)或计算结果(compute_output)只读分享，kind、objectId、准确username必需。仅创建待确认预览；用户确认后才发送邀请，接收人仍须接受。不能替用户接受邀请。",
+            ("kind", "objectId", "username"),
+        ),
+        ToolSpec(
+            "get_operation_proposal",
+            "prepare_operation",
+            "读取本人当前项目操作预览和真实决定状态，operationId为UUID。pending/执行中不能说已完成；确认只能由用户在平台操作面板完成，没有确认工具。",
+            ("operationId",),
+        ),
+        ToolSpec(
             "list_map_workspaces",
             "read_data",
             "分页列出本人当前项目的个人工程摘要，不读取原始数据；query、offset、limit可选。",
@@ -1208,6 +1238,53 @@ def _execute_authorized(run, name, args, user, p, call):
         require_knowledge,
     )
 
+    if name in {
+        "list_operation_targets",
+        "preview_data_import",
+        "preview_publication",
+        "preview_share",
+        "get_operation_proposal",
+    }:
+        from .operation_proposals import (
+            prepare,
+            list_targets,
+            read_operation,
+            authorize,
+        )
+        from .models import AgentOperation
+        from apps.compute.packages import ComputeError
+
+        if name == "list_operation_targets":
+            return list_targets(run, user, args), []
+        if name == "get_operation_proposal":
+            authorize(run, user)
+            operation = AgentOperation.objects.filter(
+                pk=args["operationId"], run__owner=user
+            ).first()
+            if operation is None:
+                raise ComputeError("操作预览不存在或无权访问", 404)
+            result = read_operation(operation, user)
+        else:
+            result = prepare(
+                run,
+                user,
+                {
+                    "preview_data_import": "import",
+                    "preview_publication": "publish",
+                    "preview_share": "share",
+                }[name],
+                args,
+            )
+        return result, [
+            (
+                None,
+                {
+                    "operationId": result["id"],
+                    "status": result["status"],
+                    "requiresConfirmation": result["status"] == "pending",
+                },
+            )
+        ]
     if name in {"list_map_workspaces", "get_map_workspace", "update_map_workspace"}:
         from .workspace_tools import execute_workspace
 

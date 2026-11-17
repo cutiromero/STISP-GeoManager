@@ -68,3 +68,14 @@ def test_unexpected_failure_does_not_expose_parameters_or_paths():
     problem = failure(RuntimeError("secret-token /root/private/input.tif"))
     assert problem["code"] == "TOOL_EXECUTION_FAILED"
     assert "secret-token" not in str(problem) and "/root" not in str(problem)
+
+
+def test_business_errors_are_classified_before_their_value_error_base():
+    from apps.compute.packages import ComputeError
+    from apps.agent.tool_contract_runtime import failure
+
+    assert isinstance(ComputeError("conflict", 409), ValueError)
+    assert failure(ComputeError("conflict", 409))["code"] == "REVISION_CONFLICT"
+    assert failure(ComputeError("denied", 403))["code"] == "PERMISSION_DENIED"
+    busy = failure(ComputeError("busy", 503))
+    assert busy["code"] == "SERVICE_BUSY" and busy["retryable"] is True

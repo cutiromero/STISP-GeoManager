@@ -186,8 +186,6 @@ def failure(error, request_id=None):
         code, retryable = "SERVICE_BUSY", True
     elif isinstance(error, PermissionDenied):
         code, retryable = "PERMISSION_DENIED", False
-    elif isinstance(error, (ValidationError, ValueError, TypeError, KeyError)):
-        code, retryable = "INVALID_TOOL_ARGUMENTS", False
     elif isinstance(error, OperationalError):
         retryable = any(word in str(error).casefold() for word in ("busy", "locked"))
         code = "SERVICE_BUSY" if retryable else "DATABASE_SCHEMA_ERROR"
@@ -204,6 +202,8 @@ def failure(error, request_id=None):
             else "BUSINESS_VALIDATION_FAILED"
         )
         retryable = error.status in {429, 503}
+    elif isinstance(error, (ValidationError, ValueError, TypeError, KeyError)):
+        code, retryable = "INVALID_TOOL_ARGUMENTS", False
     else:
         code, retryable = "TOOL_EXECUTION_FAILED", False
     detail = (
@@ -237,7 +237,15 @@ def result_refs(result):
         "importId",
         "sourceVersions",
         "controlEpoch",
+        "operationId",
     }
+    if (
+        isinstance(result, dict)
+        and "preview" in result
+        and "digest" in result
+        and "id" in result
+    ):
+        return {"operationId": result["id"], "status": result.get("status")}
     return (
         {key: value for key, value in result.items() if key in keys}
         if isinstance(result, dict)

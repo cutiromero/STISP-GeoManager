@@ -216,3 +216,19 @@ def test_explicit_rollback_rejects_modified_old_static_before_stopping(layout):
     assert [event for event in layout.state["events"] if event[0] == "stop"] == [
         event for event in before if event[0] == "stop"
     ]
+
+
+def test_operation_queue_is_drained_and_only_absent_before_its_migration(layout):
+    database = server.database(layout.config)
+    with sqlite3.connect(database) as db:
+        db.execute("INSERT INTO agent_agentoperation VALUES ('executing')")
+    assert server.active_counts(layout.config)["agent_agentoperation"] == 1
+    with sqlite3.connect(database) as db:
+        db.execute("DROP TABLE agent_agentoperation")
+    assert server.active_counts(layout.config)["agent_agentoperation"] == 0
+    with sqlite3.connect(database) as db:
+        db.execute(
+            "INSERT INTO django_migrations VALUES ('agent','0024_governed_operation_previews')"
+        )
+    with pytest.raises(server.ReleaseError, match="missing its queue table"):
+        server.active_counts(layout.config)
