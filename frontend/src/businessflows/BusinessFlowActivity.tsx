@@ -97,12 +97,14 @@ const statusLabels: Record<string, string> = {
   unavailable: "结果不可用",
 };
 const actorLabels = {
+  agent: "平台代办",
   executor: "任务执行",
   reviewer: "结果审核",
   human: "您",
   system: "流程",
 };
 const actorIcons = {
+  agent: <RobotOutlined />,
   executor: <RobotOutlined />,
   reviewer: <AuditOutlined />,
   human: <UserOutlined />,

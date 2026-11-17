@@ -1,0 +1,5 @@
+{
+  "POST /api/catalog/export/jobs/{job_id}/cancel/": {
+    "200": {"jobId":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "status":"running", "cancelRequested":true, "detail":"取消请求已登记，当前读取到保存点后停止"}
+  }
+}

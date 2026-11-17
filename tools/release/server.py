@@ -51,6 +51,7 @@ ACTIVE = {
     "compute_computetask": ("queued", "validating", "running", "cancelling"),
     "compute_computeimport": ("queued", "running"),
     "agent_agentworkflow": ("queued", "running", "waiting_compute"),
+    "raster_rasterprocessingjob": ("queued", "running"),
 }
 
 

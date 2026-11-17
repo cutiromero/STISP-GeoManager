@@ -13,8 +13,6 @@ from django.db.models import Q
 from django.db.models.deletion import ProtectedError
 from django.http import FileResponse, JsonResponse
 from django.shortcuts import get_object_or_404
-from django.utils import timezone
-from django.utils.dateparse import parse_datetime
 from django.views.decorators.gzip import gzip_page
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
@@ -81,7 +79,6 @@ from apps.core.principal_visibility import (
     selectable_access_groups_for,
     user_is_visible_to,
 )
-from apps.raster.models import RasterDataset
 from apps.raster.services import (
     RasterJobError,
     get_job,
@@ -678,7 +675,9 @@ def workspace_detail(request, workspace_id: int):
         setattr(scene, key, value)
     try:
         with transaction.atomic():
-            conflict = _save_workspace_conditionally(scene, payload, values)
+            conflict = _save_workspace_conditionally(
+                scene, payload, values, user=request.user
+            )
             if conflict is not None:
                 return conflict
             if group_ids is not None:
@@ -925,6 +924,7 @@ def admin_workspace_detail(request, workspace_id: int):
                 scene,
                 payload,
                 {field: getattr(scene, field) for field in update_fields},
+                user=request.user,
             )
             if conflict is not None:
                 return conflict
@@ -1346,46 +1346,13 @@ def resource_query(request, pk: int):
 
 
 def _validate_export_item_access(item: Any, user) -> JsonResponse | None:
-    if not isinstance(item, dict):
-        return JsonResponse({"detail": "items 中的图层必须是对象"}, status=400)
+    from .export_access import validate_item
+    from apps.compute.packages import ComputeError
 
-    resource_id = item.get("resourceId")
-    if item.get("layerType") != "raster":
-        if resource_id:
-            resource = get_object_or_404(
-                DataResource,
-                pk=resource_id,
-                status=DataResource.Status.ACTIVE,
-            )
-            if not user_can_access(resource, user):
-                return JsonResponse({"detail": "无权访问该数据资源"}, status=403)
-        return None
-
-    dataset_id = _positive_export_id(item.get("datasetId"))
-    if dataset_id is None:
-        return JsonResponse({"detail": "栅格图层缺少有效 datasetId"}, status=400)
-    dataset = (
-        RasterDataset.objects.select_related("data_resource")
-        .filter(pk=dataset_id)
-        .first()
-    )
-    if dataset is None:
-        return JsonResponse({"detail": "栅格数据集不存在"}, status=404)
-
-    resource = dataset.data_resource
-    if resource is None:
-        return JsonResponse({"detail": "栅格数据集未关联数据资源"}, status=400)
-    if resource.status != DataResource.Status.ACTIVE:
-        return JsonResponse({"detail": "数据资源不存在"}, status=404)
-    if not user_can_access(resource, user):
-        return JsonResponse({"detail": "无权访问该数据资源"}, status=403)
-
-    if "resourceId" in item:
-        supplied_resource_id = _positive_export_id(resource_id)
-        if supplied_resource_id is None:
-            return JsonResponse({"detail": "resourceId 不合法"}, status=400)
-        if supplied_resource_id != resource.id:
-            return JsonResponse({"detail": "resourceId 与栅格数据集不匹配"}, status=400)
+    try:
+        validate_item(item, user)
+    except ComputeError as error:
+        return JsonResponse({"detail": str(error)}, status=error.status)
     return None
 
 
@@ -1456,6 +1423,14 @@ def export_loaded_layers(request):
         raise
 
     filename = f"layers-export-{datetime.now().strftime('%Y%m%d%H%M%S')}.zip"
+    from .export_access import validate_items
+    from apps.compute.packages import ComputeError
+
+    try:
+        validate_items(items, request.user.pk)
+    except ComputeError as error:
+        temporary.cleanup()
+        return JsonResponse({"detail": str(error)}, status=error.status)
     try:
         artifact_file = _TemporaryExportFile(output_path.open("rb"), temporary)
         response = FileResponse(
@@ -1561,6 +1536,13 @@ def export_job_download(request, job_id: str):
         return JsonResponse({"detail": str(exc)}, status=404)
     if job.status != "ready":
         return JsonResponse({"detail": "导出任务尚未完成"}, status=409)
+    from .export_access import validate_download
+    from apps.compute.packages import ComputeError
+
+    try:
+        validate_download(job, request.user)
+    except ComputeError as error:
+        return JsonResponse({"detail": str(error)}, status=error.status)
     try:
         artifact_file = open_job_artifact_for_download(job_id)
     except RasterJobError as exc:
@@ -1586,6 +1568,26 @@ def export_job_download(request, job_id: str):
     except Exception:
         artifact_file.close()
         raise
+
+
+@require_POST
+@api_login_required
+def export_job_cancel(request, job_id):
+    from apps.raster.services.jobs import request_export_cancel
+    from apps.compute.packages import ComputeError
+
+    payload = _json_payload(request)
+    if isinstance(payload, JsonResponse):
+        return payload
+    if payload:
+        return JsonResponse({"detail": "取消导出不接受额外参数"}, status=400)
+    try:
+        result = request_export_cancel(job_id, request.user.pk)
+    except ComputeError as error:
+        return JsonResponse({"detail": str(error)}, status=error.status)
+    return JsonResponse(
+        result, status=202 if result["status"] in {"queued", "running"} else 200
+    )
 
 
 @require_GET
@@ -1651,25 +1653,12 @@ def _positive_query_int(value: Any, *, default: int) -> int | JsonResponse:
     return parsed
 
 
-def _save_workspace_conditionally(scene, payload, values):
-    expected = payload.get("expectedUpdatedAt")
+def _save_workspace_conditionally(scene, payload, values, *, user):
+    from apps.compute.packages import ComputeError
+    from .workspace_commands import save_revision
+
     try:
-        stamp = parse_datetime(expected) if isinstance(expected, str) else None
-    except ValueError:
-        stamp = None
-    if stamp is None or timezone.is_naive(stamp):
-        return JsonResponse(
-            {"detail": "保存须提供最后读取的 expectedUpdatedAt"}, status=400
-        )
-    scene.prepare_project_scope()
-    scene.validate_project_relations()
-    if not WorkspaceScene.objects.filter(pk=scene.pk, updated_at=stamp).update(
-        **values, updated_at=timezone.now()
-    ):
-        return JsonResponse(
-            {
-                "detail": "工程已被其他会话更新。当前修改未保存，请保留修改并重新读取工程。"
-            },
-            status=409,
-        )
+        save_revision(scene, payload.get("expectedUpdatedAt"), values, user=user)
+    except ComputeError as error:
+        return JsonResponse({"detail": str(error)}, status=error.status)
     return None

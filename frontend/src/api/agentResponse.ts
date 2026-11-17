@@ -53,9 +53,17 @@ export function assertConversation(
   }
 }
 
-export function assertConversationDeletionPreview(value: unknown): asserts value is AgentConversationDeletionPreview {
+export function assertConversationDeletionPreview(
+  value: unknown,
+): asserts value is AgentConversationDeletionPreview {
   const record = object(value, "deletionPreview");
-  for (const key of ["conversationId", "resourceCount", "outputCount", "retainedCount", "estimatedBytes"]) {
+  for (const key of [
+    "conversationId",
+    "resourceCount",
+    "outputCount",
+    "retainedCount",
+    "estimatedBytes",
+  ]) {
     field(record, key, "number", "deletionPreview");
     if (!Number.isSafeInteger(record[key]) || (record[key] as number) < 0)
       throw new ResponseFormatError(`deletionPreview.${key}: invalid count`);
@@ -63,15 +71,25 @@ export function assertConversationDeletionPreview(value: unknown): asserts value
   field(record, "confirmationToken", "string", "deletionPreview");
 }
 
-export function assertConversationDeleteResult(value: unknown): asserts value is AgentConversationDeleteResult {
+export function assertConversationDeleteResult(
+  value: unknown,
+): asserts value is AgentConversationDeleteResult {
   const record = object(value, "deletionResult");
   field(record, "detail", "string", "deletionResult");
   if (record.cleanup !== undefined) {
     const cleanup = object(record.cleanup, "deletionResult.cleanup");
-    for (const key of ["deletedResources", "deletedOutputs", "retainedResources", "retainedOutputs", "failedItems"]) {
+    for (const key of [
+      "deletedResources",
+      "deletedOutputs",
+      "retainedResources",
+      "retainedOutputs",
+      "failedItems",
+    ]) {
       field(cleanup, key, "number", "deletionResult.cleanup");
       if (!Number.isSafeInteger(cleanup[key]) || (cleanup[key] as number) < 0)
-        throw new ResponseFormatError(`deletionResult.cleanup.${key}: invalid count`);
+        throw new ResponseFormatError(
+          `deletionResult.cleanup.${key}: invalid count`,
+        );
     }
   }
 }
@@ -124,6 +142,12 @@ export function assertAgentRun(
       if (action.kind === "workspace") {
         if (!Number.isSafeInteger(action.sceneId) || Number(action.sceneId) < 1)
           throw new ResponseFormatError("Invalid workspace action");
+      } else if (action.kind === "export") {
+        if (
+          typeof action.jobId !== "string" ||
+          !/^[a-f0-9]{32}$/.test(action.jobId)
+        )
+          throw new ResponseFormatError("Invalid export action");
       } else if (
         action.kind !== "page" ||
         ![

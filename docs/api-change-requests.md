@@ -1,8 +1,21 @@
 # API Change Requests
 
-## API-20261117-002 - 通用工具执行合同与真实调用回执
+## API-20261117-003 - Agent个人工程、任务控制与异步导出
 
 - Status: BackendReady
+- Owner: codex/xintao。
+- Endpoints: 既有catalog/workspaces、catalog/export/async、raster/jobs、agent/workflows及business-flows控制；新增POST /api/catalog/export/jobs/{job_id}/cancel/。
+- Change type: 新增10项受控工具、导出取消及真实文件入口；保留已有HTTP字段。
+- OpenAPI change: AgentTool工程/导出/任务参数、ExportCancellation、AsyncJobResponse.cancelRequested、ExportJobResult.inputRefs/retainDownloads、AgentPlatformAction.export/jobId、BusinessFlowEvent.agent；ErrorResponse.code保留既有小写认证错误。
+- Mock examples: 182-agent-operations.json。
+- Frontend reason: 从真实工程和已就绪文件提供站内入口，区分平台代办与人工的业务流控制。
+- Backend implementation notes: 工程CAS及来源修订，导出复用重处理队列、真实执行者身份、按运行幂等和协作取消；任务控制epoch及来源审计不改变科学批准。
+- Verification: 真实矢量ZIP、幂等与源文件哈希、修改冲突、执行及下载撤权、取消、跨进程归属、自动续接及人工门禁；SDK、浏览器与效率门禁。
+- Result: 阶段3实现，专项通过后进行标准候选及正式验收。
+
+## API-20261117-002 - 通用工具执行合同与真实调用回执
+
+- Status: Verified
 - Owner: codex/xintao，契约、后端与SDK按顺序交接。
 - Endpoints: GET /api/agent/runs/{runId}/tool-calls/；既有工具执行内部入口。
 - Change type: 新增受授权调用审计；ErrorResponse新增可选机器字段，旧detail保持兼容。
@@ -11,7 +24,7 @@
 - Frontend reason: 可读取真实工具调用、实际任务引用和可操作的错误，不显示敏感参数正文。
 - Backend implementation notes: 新增独立AgentToolCall表；当前项目/本人/历史来源重新授权。执行前校验生成合同，动态算法信封仍由真实manifest核对；未知异常不返回路径或秘密。
 - Verification: 类型与布尔混用、边界、嵌套及体积、原查询op语义、权限变化、审计隔离、错误关联、真实模型协议修正和原算子输入引导。
-- Result: 阶段2实现，完成专项及候选验收后上线。
+- Result: 已通过标准full和正式HTTP验收，上线0.4.1 / d24c838；基线原件保护记录一致。
 
 ## API-20261117-001 - Agent能力发现及唯一工具合同
 
@@ -848,7 +861,8 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| API-20261117-002 | BackendReady | agent/runs/tool-calls | 新增审计及可选错误字段 | AgentToolCallList、ErrorResponse | 180、181 | 已实现 | 执行合同及隔离 | 新增表，不保存原始参数 |
+| API-20261117-003 | BackendReady | 工程/导出/科研任务控制 | 新增10项工具与取消 | AgentTool系列、ExportCancellation | 182 | 已实现 | 幂等、撤权、取消及续接 | 复用原业务与队列 |
+| API-20261117-002 | Verified | agent/runs/tool-calls | 新增审计及可选错误字段 | AgentToolCallList、ErrorResponse | 180、181 | 已实现 | 执行合同及隔离 | 新增表，不保存原始参数 |
 | API-20261117-001 | Verified | agent/capabilities | 新增只读能力发现 | AgentCapabilityCatalog及工具schema | 180 | 已实现 | 参数漂移及授权回归 | 目录不授予执行权 |
 | API-20261116-003 | BackendReady | business-flow start/decide | 400准入及恢复语义 | BusinessFlowStart | 145 | 已实现 | 回归与真实候选验收 | 确认固定参数，不重复消耗调用 |
 | API-20261116-002 | BackendReady | raster/render/async | additive请求字段 | RasterRenderAsyncRequest | 40 | 已实现 | 定点及正式工程验收 | 服务端保存样式恢复、ACL及缓存缺失 |

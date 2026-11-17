@@ -447,7 +447,7 @@ def resume_compute():
         AgentRun._base_manager.filter(status="waiting_compute")
         .filter(
             Q(execution_state__phase__isnull=True)
-            | ~Q(execution_state__phase="business_flow")
+            | ~Q(execution_state__phase__in=["business_flow", "export"])
         )
         .select_related("conversation")
     )

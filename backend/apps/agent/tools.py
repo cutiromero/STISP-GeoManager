@@ -224,6 +224,82 @@ TOOLS = {
             "联网检索公开网页；query或url，返回受限摘要和引用链接",
             ("query", "url", "maxResults"),
         ),
+        ToolSpec(
+            "list_map_workspaces",
+            "read_data",
+            "分页列出本人当前项目的个人工程摘要，不读取原始数据；query、offset、limit可选。",
+            ("query", "offset", "limit"),
+        ),
+        ToolSpec(
+            "get_map_workspace",
+            "read_data",
+            "读取本人受控个人工程的真实图层、updatedAt和sourceVersions；workspaceId必需，layerId可选读取单层样式。后续修改复制updatedAt，导出复制sourceVersions中的resourceId/versionKey。",
+            ("workspaceId", "layerId"),
+        ),
+        ToolSpec(
+            "update_map_workspace",
+            "map_display",
+            "按最后读取expectedUpdatedAt更新本人个人工程；可改name、description、visibility节点ID到布尔值、styles展示样式。只改工程引用与显示，不改资料原件、默认样式或共享范围。",
+            (
+                "workspaceId",
+                "expectedUpdatedAt",
+                "name",
+                "description",
+                "visibility",
+                "styles",
+            ),
+        ),
+        ToolSpec(
+            "export_map_workspace",
+            "export_data",
+            "异步导出本人1至5层工程，必须先get_map_workspace并复制expectedUpdatedAt和expectedSources；expectedSources复制sourceVersions的resourceId/versionKey。默认仅可见图层；栅格原坐标系，矢量按既有协议为WGS84。格式geojson或shapefile。受理不是完成；get_export_task查询。每轮最多3份导出；失败或过期明确retryOfJobId才重试。",
+            (
+                "workspaceId",
+                "expectedUpdatedAt",
+                "expectedSources",
+                "onlyVisible",
+                "reproject",
+                "epsg",
+                "format",
+                "retryOfJobId",
+            ),
+        ),
+        ToolSpec(
+            "get_export_task",
+            "export_data",
+            "按真实jobId查询本人已登记的平台工程导出状态；只有ready且artifactAvailable、downloadUrl实际存在才表示可下载。不返回文件路径或原始数据。",
+            ("jobId",),
+        ),
+        ToolSpec(
+            "cancel_export_task",
+            "task_control",
+            "请求停止本人当前项目的导出任务，jobId须为真实编号。当前I/O到保存点后结束，取消不删除已完成文件或原始资料。",
+            ("jobId",),
+        ),
+        ToolSpec(
+            "cancel_compute_task",
+            "task_control",
+            "停止本人当前项目的独立计算任务，taskId为真实UUID。科研任务调度的子计算须通过control_research_task停止父任务；不删除已有成果。",
+            ("taskId",),
+        ),
+        ToolSpec(
+            "list_research_tasks",
+            "read_data",
+            "分页查找本人当前项目科研任务摘要；query、offset、limit可选。不读取原资料或中间结果。",
+            ("query", "offset", "limit"),
+        ),
+        ToolSpec(
+            "get_research_task",
+            "read_data",
+            "读取本人科研任务真实状态和controlEpoch；workflowId为UUID，不返回原资料、中间计算或批准内容。",
+            ("workflowId",),
+        ),
+        ToolSpec(
+            "control_research_task",
+            "task_control",
+            "按get_research_task的controlEpoch执行pause/resume/cancel，参数workflowId、action、expectedControlEpoch。恢复沿用原计划与人工门禁，绝不批准科研结果；新用户决定后旧控制请求拒绝。",
+            ("workflowId", "action", "expectedControlEpoch"),
+        ),
     )
 }
 
@@ -1109,7 +1185,7 @@ def execute(run, name, args):
                 raise PermissionDenied("跨资源比较已关闭")
             raise PermissionDenied("当前账号、会话或策略未开放该工具")
         validate_arguments(name, args)
-        result, pairs = _execute_authorized(run, name, args, user, p)
+        result, pairs = _execute_authorized(run, name, args, user, p, call)
         AgentToolCall.objects.filter(pk=call.pk).update(
             status="succeeded",
             result_refs=result_refs(result),
@@ -1124,13 +1200,37 @@ def execute(run, name, args):
         raise
 
 
-def _execute_authorized(run, name, args, user, p):
+def _execute_authorized(run, name, args, user, p, call):
     from .selections import (
         KNOWLEDGE_TOOLS,
         algorithm_ids,
         knowledge_domains,
         require_knowledge,
     )
+
+    if name in {"list_map_workspaces", "get_map_workspace", "update_map_workspace"}:
+        from .workspace_tools import execute_workspace
+
+        return execute_workspace(run, user, p, name, args)
+    if name in {"export_map_workspace", "get_export_task"}:
+        from .export_tools import export_workspace, read_export
+
+        if name == "export_map_workspace":
+            return export_workspace(run, user, p, args, call)
+        result, bound = read_export(run, user, p, args["jobId"])
+        return result, [
+            (resource, {"workspaceId": result["workspaceId"]}) for resource in bound
+        ] + [(None, result)]
+    if name in {
+        "cancel_compute_task",
+        "cancel_export_task",
+        "list_research_tasks",
+        "get_research_task",
+        "control_research_task",
+    }:
+        from .task_control_tools import execute_tasks
+
+        return execute_tasks(run, user, p, name, args, call)
 
     if name in {
         "list_business_flows",

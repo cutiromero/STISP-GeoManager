@@ -21,6 +21,10 @@ def locked_workflow(workflow_id):
 
 
 def apply_control_state(workflow, current, *, acknowledge_pause=False):
+    if "platformControlEpoch" in current.policy_snapshot:
+        workflow.policy_snapshot["platformControlEpoch"] = current.policy_snapshot[
+            "platformControlEpoch"
+        ]
     workflow.cancel_requested = current.cancel_requested
     workflow.pause_requested = current.pause_requested
     workflow.paused_from = current.paused_from

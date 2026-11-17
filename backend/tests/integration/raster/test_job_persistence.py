@@ -178,10 +178,10 @@ class RasterExportArtifactLifecycleTests(TransactionTestCase):
     def test_download_file_is_deleted_and_record_cleared_when_stream_closes(self):
         from apps.catalog.views import export_job_download
 
-        artifact = self._new_artifact(b"zip-content")
         job = _create_job("export")
+        artifact = self._new_artifact(b"zip-content", job.id)
         _set_job_artifact(job.id, artifact)
-        _finish_job(job.id, {"filename": "export.zip"}, "ready")
+        _finish_job(job.id, {"filename": "export.zip", "inputRefs": []}, "ready")
         request = RequestFactory().get(f"/api/catalog/export/jobs/{job.id}/download/")
         request.user = SimpleNamespace(
             id=99,
@@ -191,6 +191,7 @@ class RasterExportArtifactLifecycleTests(TransactionTestCase):
 
         with (
             patch("apps.catalog.views.has_feature_perm", return_value=True),
+            patch("apps.catalog.export_access.has_feature_perm", return_value=True),
             patch("apps.catalog.views.log_operation"),
         ):
             response = export_job_download(request, job.id)
@@ -296,8 +297,8 @@ class RasterExportArtifactLifecycleTests(TransactionTestCase):
 
     def test_ttl_cleanup_removes_only_oldest_expired_artifact(self):
         now = timezone.now()
-        oldest_artifact = self._new_artifact(b"oldest")
-        next_artifact = self._new_artifact(b"next")
+        oldest_artifact = self._new_artifact(b"oldest", "expired-oldest")
+        next_artifact = self._new_artifact(b"next", "expired-next")
         RasterProcessingJob.objects.create(
             id="expired-oldest",
             kind="export",
@@ -331,8 +332,10 @@ class RasterExportArtifactLifecycleTests(TransactionTestCase):
             str(next_artifact),
         )
 
-    def _new_artifact(self, content: bytes) -> Path:
-        with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as output:
+    def _new_artifact(self, content: bytes, job_id: str) -> Path:
+        with tempfile.NamedTemporaryFile(
+            prefix=f"layers-export-{job_id}-", suffix=".zip", delete=False
+        ) as output:
             output.write(content)
             artifact = Path(output.name)
         self.addCleanup(artifact.unlink, missing_ok=True)

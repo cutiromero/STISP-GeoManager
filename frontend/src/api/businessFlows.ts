@@ -34,10 +34,15 @@ function assertDiagnostic(value: unknown) {
   if (value === undefined) return;
   const diagnostic = record(value, "diagnostic");
   if (
-    ["code", "location", "resumeAt", "analysis"].some((key) => typeof diagnostic[key] !== "string") ||
-    ["facts", "attempts", "references", "suggestions"].some((key) => !texts(diagnostic[key])) ||
+    ["code", "location", "resumeAt", "analysis"].some(
+      (key) => typeof diagnostic[key] !== "string",
+    ) ||
+    ["facts", "attempts", "references", "suggestions"].some(
+      (key) => !texts(diagnostic[key]),
+    ) ||
     !["completed", "unavailable"].includes(String(diagnostic.analysisStatus))
-  ) invalid("diagnostic");
+  )
+    invalid("diagnostic");
 }
 function assertSpec(value: unknown) {
   const spec = record(value, "definition");
@@ -162,7 +167,9 @@ export function assertBusinessFlowRun(value: unknown) {
       typeof event.status !== "string" ||
       typeof event.message !== "string" ||
       typeof event.createdAt !== "string" ||
-      !["executor", "reviewer", "human", "system"].includes(String(event.actor))
+      !["executor", "reviewer", "human", "system", "agent"].includes(
+        String(event.actor),
+      )
     )
       invalid("event");
   }
@@ -179,7 +186,8 @@ export function assertBusinessFlowRun(value: unknown) {
     )
       invalid("nodeState");
     record(node.outputs, "outputs");
-    if (node.recovery !== undefined) assertDiagnostic(record(node.recovery, "recovery").diagnostic);
+    if (node.recovery !== undefined)
+      assertDiagnostic(record(node.recovery, "recovery").diagnostic);
     for (const actor of ["executor", "reviewer"]) {
       const value = record(node[actor], actor);
       if (typeof value.status !== "string") invalid(actor);

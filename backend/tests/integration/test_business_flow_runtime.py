@@ -772,3 +772,42 @@ def test_shared_resource_cache_still_validates_each_roles_required_fields(
     with pytest.raises(ValidationError, match="输入仍需配置"):
         start(env, version, inputs=inputs)
     assert not calls
+
+
+def test_agent_controls_keep_pending_human_gate_and_record_agent_actor(
+    flows, monkeypatch
+):
+    from apps.agent.tools import execute
+    from tests.integration.test_agent import new_run
+
+    env = flows
+    workflow, _ = waiting_human(env, monkeypatch)
+    with project_scope(env["scope"]):
+        run = new_run(env)
+        for action in ["pause", "resume"]:
+            initial = execute(
+                run, "get_research_task", {"workflowId": str(workflow.pk)}
+            )[0]
+            result = execute(
+                run,
+                "control_research_task",
+                {
+                    "workflowId": str(workflow.pk),
+                    "action": action,
+                    "expectedControlEpoch": initial["controlEpoch"],
+                },
+            )[0]
+            assert result["controlEpoch"] == initial["controlEpoch"] + 1
+        workflow.refresh_from_db()
+        assert workflow.status == "waiting_approval"
+        assert state(workflow)["nodes"]["summarize"]["human"]["status"] == "pending"
+        events = [
+            item
+            for item in state(workflow)["events"]
+            if item["kind"] in {"pause", "resume"}
+        ]
+        assert len(events) == 2
+        assert all(
+            event["actor"] == "agent" and event["data"]["toolCallId"]
+            for event in events
+        )

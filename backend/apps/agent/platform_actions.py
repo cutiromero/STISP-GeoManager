@@ -21,8 +21,17 @@ def platform_actions(run, user, policy):
     seen = set()
     for evidence in run.evidence:
         value = evidence.get("result", {})
-        if evidence.get("tool") == "prepare_map_workspace" and policy.get(
-            "mapDisplayEnabled", True
+        if (
+            evidence.get("tool")
+            in {
+                "prepare_map_workspace",
+                "get_map_workspace",
+                "update_map_workspace",
+                "export_map_workspace",
+                "get_export_task",
+            }
+            and policy.get("mapDisplayEnabled", True)
+            and value.get("workspaceId") not in seen
         ):
             identity = value.get("workspaceId")
             if type(identity) is not int or identity in seen:
@@ -35,23 +44,16 @@ def platform_actions(run, user, policy):
                 project_tag_id=run.project_tag_id,
                 status="active",
             ).first()
-            if not scene or scene.snapshot.get("agentSource", {}).get("runId") != str(
-                run.id
-            ):
-                continue
-            references = scene.snapshot.get("agentSource", {}).get("resources", [])
-            if (
-                not isinstance(references, list)
-                or not references
-                or any(
-                    not isinstance(item, dict)
-                    or type(item.get("id")) is not int
-                    or item["id"] <= 0
-                    for item in references
-                )
+            if not scene or (
+                evidence.get("tool") == "prepare_map_workspace"
+                and scene.snapshot.get("agentSource", {}).get("runId") != str(run.id)
             ):
                 continue
             try:
+                from .workspace_tools import context
+
+                _, _, bound = context(run, user, policy, scene.pk)
+                references = [{"id": resource.pk} for resource in bound]
                 check_snapshot(scene.snapshot, user, run.project_tag_id)
                 for item in references:
                     resolve_discoverable_resource(
@@ -69,6 +71,29 @@ def platform_actions(run, user, policy):
                     "resourceIds": [item["id"] for item in references],
                 }
             )
+        if evidence.get("tool") in {
+            "export_map_workspace",
+            "get_export_task",
+        } and isinstance(value.get("jobId"), str):
+            identity = value["jobId"]
+            if identity not in seen:
+                from .export_tools import read_export
+
+                try:
+                    exported, bound = read_export(run, user, policy, identity)
+                except (PermissionDenied, ComputeError):
+                    continue
+                if exported["artifactAvailable"]:
+                    seen.add(identity)
+                    result.append(
+                        {
+                            "kind": "export",
+                            "jobId": identity,
+                            "projectId": run.project_tag_id,
+                            "title": "下载导出文件",
+                            "resourceIds": [resource.pk for resource in bound],
+                        }
+                    )
         elif evidence.get("tool") == "get_platform_link":
             page = value.get("page")
             if page in PAGES and page not in seen:

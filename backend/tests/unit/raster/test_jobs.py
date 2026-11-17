@@ -1,4 +1,5 @@
 import gc
+import tempfile
 import weakref
 from pathlib import Path
 from threading import Event
@@ -99,9 +100,27 @@ class RasterJobStateTests(SimpleTestCase):
         with self.assertRaisesRegex(RasterJobError, "导出文件不存在或已过期"):
             get_job_artifact_path(job.id)
 
-        _set_job_artifact(job.id, Path("/tmp/export.zip"))
+        artifact = Path(tempfile.gettempdir()) / f"layers-export-{job.id}-test.zip"
+        _set_job_artifact(job.id, artifact)
 
-        self.assertEqual(get_job_artifact_path(job.id), Path("/tmp/export.zip"))
+        self.assertEqual(get_job_artifact_path(job.id), artifact)
+
+    def test_artifact_cleanup_rejects_original_paths_and_symlinks(self):
+        job = _create_job("export")
+        with tempfile.TemporaryDirectory() as directory:
+            original = Path(directory) / "original.gpkg"
+            original.write_bytes(b"original-source")
+            self.assertFalse(jobs_service._delete_job_artifact(job.id, original))
+            link = Path(tempfile.gettempdir()) / f"layers-export-{job.id}-link.zip"
+            try:
+                link.symlink_to(original)
+                self.assertFalse(jobs_service._delete_job_artifact(job.id, link))
+                _set_job_artifact(job.id, link)
+                with self.assertRaisesMessage(RasterJobError, "来源不属于受控临时成果"):
+                    get_job_artifact_path(job.id)
+                self.assertEqual(original.read_bytes(), b"original-source")
+            finally:
+                link.unlink(missing_ok=True)
 
     def test_import_job_cleans_uploaded_file_when_import_fails(self):
         with (

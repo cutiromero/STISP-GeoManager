@@ -794,6 +794,25 @@ def run_task(run_id):
                     )
                     AgentRun.objects.filter(pk=run.id).update(execution_state=state)
                     if (
+                        name == "export_map_workspace"
+                        and result.get("jobId")
+                        and result.get("status") in {"queued", "running"}
+                    ):
+                        state.update(phase="export", exportJobIds=[result["jobId"]])
+                        status, detail = (
+                            "waiting_compute",
+                            "导出任务正在处理，完成后将自动续接并提供真实下载入口",
+                        )
+                        AgentRun.objects.filter(
+                            pk=run.pk, status="running", cancel_requested=False
+                        ).update(
+                            execution_state=state,
+                            status=status,
+                            detail=detail,
+                            updated_at=timezone.now(),
+                        )
+                        break
+                    if (
                         name == "execute_operator"
                         and result.get("taskId")
                         and result.get("status")
@@ -957,6 +976,7 @@ def serve(stop=None, once=False):
     from .compute_tools import resume_followups
     from .interactions import resume_compute
     from .runtime_heartbeat import pulse
+    from .export_followups import resume_exports
 
     stop = stop or threading.Event()
     futures = {}
@@ -968,6 +988,7 @@ def serve(stop=None, once=False):
                 recover()
                 resume_followups()
                 resume_compute()
+                resume_exports()
                 now = timezone.now()
                 pulse("worker")
                 for run_id, future in list(futures.items()):

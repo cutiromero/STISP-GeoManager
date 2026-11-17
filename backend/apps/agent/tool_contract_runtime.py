@@ -180,8 +180,11 @@ def validate_arguments(name, args):
 def failure(error, request_id=None):
     from apps.compute.packages import ComputeError
     from django.db import OperationalError
+    from apps.core.storage_locks import StorageLockTimeout
 
-    if isinstance(error, PermissionDenied):
+    if isinstance(error, StorageLockTimeout):
+        code, retryable = "SERVICE_BUSY", True
+    elif isinstance(error, PermissionDenied):
         code, retryable = "PERMISSION_DENIED", False
     elif isinstance(error, (ValidationError, ValueError, TypeError, KeyError)):
         code, retryable = "INVALID_TOOL_ARGUMENTS", False
@@ -232,6 +235,8 @@ def result_refs(result):
         "status",
         "outputId",
         "importId",
+        "sourceVersions",
+        "controlEpoch",
     }
     return (
         {key: value for key, value in result.items() if key in keys}

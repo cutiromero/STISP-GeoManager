@@ -1646,9 +1646,9 @@ export type AgentInteractionUpdate = {
  */
 export type AgentPlatformAction = {
     /**
-     * 已保存的个人地图，或允许的平台页面。
+     * 真实个人地图、允许页面或经授权核验存在的导出文件
      */
-    kind: 'workspace' | 'page';
+    kind: 'workspace' | 'page' | 'export';
     /**
      * 已保存工程名称或页面名称。
      */
@@ -1669,6 +1669,10 @@ export type AgentPlatformAction = {
      * 地图所引用并已重新核验的业务资料编号；页面入口为空数组。
      */
     resourceIds: Array<number>;
+    /**
+     * 真实导出任务的32位十六进制编号
+     */
+    jobId?: string;
 };
 
 /**
@@ -4969,7 +4973,7 @@ export type ErrorResponse = {
      */
     gaps?: Array<ComputeInputGap>;
     /**
-     * 稳定机器错误码，决定补参、停止、换版或有限重试
+     * 稳定机器错误码，决定补参、停止、换版或有限重试；保留既有认证错误的小写代码
      */
     code?: string;
     /**
@@ -9888,17 +9892,17 @@ export type AsyncJobResponse = {
      * 任务结束时间戳
      */
     finishedAt: number | null;
+    /**
+     * 导出已请求在保存点停止；不表示已终止当前I/O，也不删除已完成文件
+     */
+    cancelRequested?: boolean;
 };
 
 export type RasterJobInputReferences = {
     /**
      * 用于保护正在使用的数据；只保存标识，不保存几何或栅格内容
      */
-    inputRefs: Array<{
-        resourceId?: number;
-        layerId?: number;
-        datasetId?: number;
-    }>;
+    inputRefs: Array<JobInputReference>;
 };
 
 export type RasterDatasetScanResult = {
@@ -9921,6 +9925,14 @@ export type ExportJobResult = {
      * 导出文件下载路径
      */
     downloadUrl: string;
+    /**
+     * 完成后的来源凭据；下载时重新授权
+     */
+    inputRefs?: Array<JobInputReference>;
+    /**
+     * 受控Agent导出允许在有效期内重复下载，避免网络重试造成重复导出
+     */
+    retainDownloads?: boolean;
 };
 
 export type DirectoryTreeResponse = {
@@ -14087,9 +14099,9 @@ export type BusinessFlowEvent = {
      */
     nodeId: string;
     /**
-     * 事件来源角色
+     * 真实事件来源，agent表示平台代办，不构成人工批准
      */
-    actor: 'executor' | 'reviewer' | 'human' | 'system';
+    actor: 'executor' | 'reviewer' | 'human' | 'system' | 'agent';
     /**
      * 事件类型，例如started、review_rejected、revision_requested、human_approved
      */
@@ -14785,9 +14797,7 @@ export type AgentToolPrepareMapWorkspaceArguments = {
     /**
      * 仅用于个人地图工程的展示样式，不写入原始资料
      */
-    styles?: Array<{
-        [key: string]: unknown;
-    }>;
+    styles?: Array<AgentWorkspaceStyle>;
     /**
      * 本次创建对象的显示名称
      */
@@ -15264,6 +15274,293 @@ export type AgentToolAttributeFilter = {
      * 有界标量值，范围筛选须为数值
      */
     value: string | number | boolean | null;
+};
+
+/**
+ * 资料版本：versionKey是权威不透明标识；时间仅用于显示，不接受模型自行推断
+ */
+export type AgentSourceVersion = {
+    /**
+     * 当前授权资料编号
+     */
+    resourceId: number;
+    /**
+     * 真实资料修订
+     */
+    updatedAt?: string;
+    /**
+     * 服务端计算的源文件及依赖身份摘要
+     */
+    versionKey: string;
+    /**
+     * 原始来源是否可读
+     */
+    available?: boolean;
+};
+
+/**
+ * 只修改个人工程展示，原始数据和共享默认样式不变
+ */
+export type AgentWorkspaceStyle = {
+    /**
+     * 工程中的真实资料编号
+     */
+    resourceId: number;
+    /**
+     * 展示模式
+     */
+    mode?: 'default' | 'single' | 'unique' | 'reference';
+    /**
+     * 真实分类字段
+     */
+    field?: string;
+    /**
+     * 从1开始的波段
+     */
+    band?: number;
+    /**
+     * 显示不透明度百分比
+     */
+    opacity?: number;
+    /**
+     * 十六进制颜色
+     */
+    color?: string;
+    /**
+     * 完整真实类别及展示颜色，不可遗漏、重名或覆盖锁定标准色
+     */
+    classes?: Array<{
+        /**
+         * 真实类别值
+         */
+        value: string | number;
+        /**
+         * 显示标签
+         */
+        label?: string;
+        /**
+         * 十六进制颜色
+         */
+        color: string;
+    }>;
+};
+
+/**
+ * 分页列出本人当前项目的个人工程摘要，不读取原始数据；query、offset、limit可选。
+ */
+export type AgentToolListMapWorkspacesArguments = {
+    /**
+     * 本人当前项目名称关键词
+     */
+    query?: string;
+    /**
+     * 从0开始的分页位置
+     */
+    offset?: number;
+    /**
+     * 分页条数
+     */
+    limit?: number;
+};
+
+/**
+ * 读取本人受控个人工程的真实图层、updatedAt和sourceVersions；workspaceId必需，layerId可选读取单层样式。后续修改复制updatedAt，导出复制sourceVersions中的resourceId/versionKey。
+ */
+export type AgentToolGetMapWorkspaceArguments = {
+    /**
+     * 本人当前项目的真实个人工程编号
+     */
+    workspaceId: number;
+    /**
+     * 可选真实图层ID，用于按层读取完整展示样式
+     */
+    layerId?: string;
+};
+
+/**
+ * 按最后读取expectedUpdatedAt更新本人个人工程；可改name、description、visibility节点ID到布尔值、styles展示样式。只改工程引用与显示，不改资料原件、默认样式或共享范围。
+ */
+export type AgentToolUpdateMapWorkspaceArguments = {
+    /**
+     * 本人当前项目的真实个人工程编号
+     */
+    workspaceId: number;
+    /**
+     * 最后读取的对象修订，须原样携带；不覆盖较新修改
+     */
+    expectedUpdatedAt: string;
+    /**
+     * 新工程名
+     */
+    name?: string;
+    /**
+     * 工程说明
+     */
+    description?: string;
+    /**
+     * 工程中实际分组或图层ID到可见性的映射，不添加新资料
+     */
+    visibility?: {
+        [key: string]: boolean;
+    };
+    /**
+     * 当前工程资料的展示样式
+     */
+    styles?: Array<AgentWorkspaceStyle>;
+};
+
+/**
+ * 异步导出本人1至5层工程，必须先get_map_workspace并复制expectedUpdatedAt和expectedSources；expectedSources复制sourceVersions的resourceId/versionKey。默认仅可见图层、原坐标系，格式geojson或shapefile。受理不是完成；get_export_task查询。每轮最多3份导出；失败或过期明确retryOfJobId才重试。
+ */
+export type AgentToolExportMapWorkspaceArguments = {
+    /**
+     * 本人当前项目的真实个人工程编号
+     */
+    workspaceId: number;
+    /**
+     * 最后读取的对象修订，须原样携带；不覆盖较新修改
+     */
+    expectedUpdatedAt: string;
+    /**
+     * 复制get_map_workspace的sourceVersions，版本以resourceId/versionKey为准
+     */
+    expectedSources: Array<AgentSourceVersion>;
+    /**
+     * 默认true，仅导出工程中有效可见图层
+     */
+    onlyVisible?: boolean;
+    /**
+     * 默认false：栅格保留原生坐标，矢量按原协议WGS84；true时按epsg重投影
+     */
+    reproject?: boolean;
+    /**
+     * 重投影目标EPSG，仅reproject=true生效
+     */
+    epsg?: number;
+    /**
+     * 矢量文件格式；栅格保持GeoTIFF
+     */
+    format?: 'geojson' | 'shapefile';
+    /**
+     * 真实导出任务的32位十六进制编号
+     */
+    retryOfJobId?: string;
+};
+
+/**
+ * 按真实jobId查询本人已登记的平台工程导出状态；只有ready且artifactAvailable、downloadUrl实际存在才表示可下载。不返回文件路径或原始数据。
+ */
+export type AgentToolGetExportTaskArguments = {
+    /**
+     * 真实导出任务的32位十六进制编号
+     */
+    jobId: string;
+};
+
+/**
+ * 停止本人当前项目的独立计算任务，taskId为真实UUID。科研任务调度的子计算须通过control_research_task停止父任务；不删除已有成果。
+ */
+export type AgentToolCancelComputeTaskArguments = {
+    /**
+     * 本人当前项目独立计算任务UUID
+     */
+    taskId: string;
+};
+
+/**
+ * 分页查找本人当前项目科研任务摘要；query、offset、limit可选。不读取原资料或中间结果。
+ */
+export type AgentToolListResearchTasksArguments = {
+    /**
+     * 本人当前项目名称关键词
+     */
+    query?: string;
+    /**
+     * 从0开始的分页位置
+     */
+    offset?: number;
+    /**
+     * 分页条数
+     */
+    limit?: number;
+};
+
+/**
+ * 读取本人科研任务真实状态和controlEpoch；workflowId为UUID，不返回原资料、中间计算或批准内容。
+ */
+export type AgentToolGetResearchTaskArguments = {
+    /**
+     * 本人当前项目科研任务UUID
+     */
+    workflowId: string;
+};
+
+/**
+ * 按get_research_task的controlEpoch执行pause/resume/cancel，参数workflowId、action、expectedControlEpoch。恢复沿用原计划与人工门禁，绝不批准科研结果；新用户决定后旧控制请求拒绝。
+ */
+export type AgentToolControlResearchTaskArguments = {
+    /**
+     * 本人当前项目科研任务UUID
+     */
+    workflowId: string;
+    /**
+     * 生命周期操作，不含批准、跳过或返修决定
+     */
+    action: 'pause' | 'resume' | 'cancel';
+    /**
+     * 最后读取的controlEpoch，只随明确控制或人工决定变化，不随普通进度变化
+     */
+    expectedControlEpoch: number;
+};
+
+/**
+ * 仅停止本人当前项目导出，不读取源数据或删除已完成文件
+ */
+export type AgentToolCancelExportTaskArguments = {
+    /**
+     * 真实导出任务编号
+     */
+    jobId: string;
+};
+
+/**
+ * 导出取消请求及实际状态；当前I/O到保存点后停止
+ */
+export type ExportCancellation = {
+    /**
+     * 真实任务编号
+     */
+    jobId: string;
+    /**
+     * 真实当前状态
+     */
+    status: string;
+    /**
+     * 是否已接受取消请求
+     */
+    cancelRequested: boolean;
+    /**
+     * 处理说明
+     */
+    detail: string;
+};
+
+/**
+ * 导出来源标识；空对象表示客户端自带GeoJSON，不含服务端原始来源
+ */
+export type JobInputReference = {
+    /**
+     * 原资料编号
+     */
+    resourceId?: number;
+    /**
+     * 图层编号
+     */
+    layerId?: number;
+    /**
+     * 栅格数据集编号
+     */
+    datasetId?: number;
 };
 
 /**
@@ -20667,6 +20964,63 @@ export type ExportLayersAsyncResponses = {
 };
 
 export type ExportLayersAsyncResponse = ExportLayersAsyncResponses[keyof ExportLayersAsyncResponses];
+
+export type CancelExportData = {
+    /**
+     * 无其他控制参数
+     */
+    body?: {
+        [key: string]: unknown;
+    };
+    headers: {
+        /**
+         * 唯一当前项目
+         */
+        'X-Project-Id': number;
+    };
+    path: {
+        /**
+         * 本人真实导出任务编号
+         */
+        job_id: string;
+    };
+    query?: never;
+    url: '/api/catalog/export/jobs/{job_id}/cancel/';
+};
+
+export type CancelExportErrors = {
+    /**
+     * 参数无效
+     */
+    400: ErrorResponse;
+    /**
+     * 请先登录
+     */
+    401: ErrorResponse;
+    /**
+     * 账号或项目不可访问
+     */
+    403: ErrorResponse;
+    /**
+     * 任务不存在或不属于本人
+     */
+    404: ErrorResponse;
+};
+
+export type CancelExportError = CancelExportErrors[keyof CancelExportErrors];
+
+export type CancelExportResponses = {
+    /**
+     * 任务已结束或重复取消
+     */
+    200: ExportCancellation;
+    /**
+     * 已请求取消，I/O到保存点结束
+     */
+    202: ExportCancellation;
+};
+
+export type CancelExportResponse = CancelExportResponses[keyof CancelExportResponses];
 
 export type DownloadExportData = {
     body?: never;

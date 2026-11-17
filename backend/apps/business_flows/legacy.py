@@ -699,11 +699,19 @@ def retry_context(user, workflow, value):
     return current
 
 
-def legacy_control(user, workflow, action):
+def legacy_control(
+    user, workflow, action, *, actor_kind="human", expected_epoch=None, request_id=None
+):
     from apps.agent.workflow_slots import require_compute_slot
 
     with transaction.atomic():
         current = locked_workflow(workflow.pk)
+        if (
+            expected_epoch is not None
+            and current.policy_snapshot.get("businessFlowControlEpoch", 0)
+            != expected_epoch
+        ):
+            raise ComputeError("任务有更新的用户决定，请重新读取后操作", 409)
         if current.owner_id != user.pk:
             raise PermissionDenied("科研流程归属不一致")
         if (
@@ -740,6 +748,15 @@ def legacy_control(user, workflow, action):
         current.policy_snapshot["businessFlowControlEpoch"] = (
             current.policy_snapshot.get("businessFlowControlEpoch", 0) + 1
         )
+        event = emit(
+            current,
+            actor_kind,
+            current.current_step,
+            action,
+            current.detail,
+            data={"toolCallId": str(request_id)} if request_id else None,
+            save=False,
+        )
         current.save(
             update_fields=[
                 "status",
@@ -753,7 +770,7 @@ def legacy_control(user, workflow, action):
                 "updated_at",
             ]
         )
-        emit(current, "human", current.current_step, action, current.detail)
+        persist(current, event=event)
     if action == "cancel":
         from .engine import cancel_tasks
 

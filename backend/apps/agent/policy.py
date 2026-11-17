@@ -21,6 +21,8 @@ CAPABILITIES = {
     # that the adapter exists; execute() performs the runtime policy check.
     "execute_operator": True,
     "write_data": True,
+    "export_data": True,
+    "task_control": True,
     "publish_result": False,
     "system_info": True,
     "internet": True,

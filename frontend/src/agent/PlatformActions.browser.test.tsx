@@ -47,3 +47,25 @@ it("does not trust model URLs or cross-project actions", () => {
     ),
   ).toBeNull();
 });
+
+it("offers only project-bound downloads reconstructed from a real job id", () => {
+  const action: AgentPlatformAction = {
+    kind: "export",
+    jobId: "a".repeat(32),
+    projectId: 3,
+    title: "下载导出文件",
+    resourceIds: [],
+  };
+  render(
+    <App>
+      <PlatformActions actions={[action]} projectId={3} />
+    </App>,
+  );
+  const link = screen.getByRole("link", { name: /下载导出文件/ });
+  expect(link).toHaveAttribute(
+    "href",
+    `/api/catalog/export/jobs/${"a".repeat(32)}/download/?projectTagId=3`,
+  );
+  expect(platformActionUrl({ ...action, projectId: 4 }, 3)).toBeNull();
+  expect(platformActionUrl({ ...action, jobId: "../private" }, 3)).toBeNull();
+});

@@ -23,6 +23,12 @@ export function platformActionUrl(
     return null;
   const query = new URLSearchParams({ projectTagId: String(projectId) });
   if (
+    action.kind === "export" &&
+    typeof action.jobId === "string" &&
+    /^[a-f0-9]{32}$/.test(action.jobId)
+  )
+    return `/api/catalog/export/jobs/${action.jobId}/download/?${query}`;
+  if (
     action.kind === "workspace" &&
     Number.isSafeInteger(action.sceneId) &&
     Number(action.sceneId) > 0
@@ -59,7 +65,7 @@ export default function PlatformActions({
       <Space wrap>
         {ready.map(({ action, url }) => (
           <Button
-            key={`${action.kind}-${action.sceneId ?? action.page}`}
+            key={`${action.kind}-${action.sceneId ?? action.page ?? action.jobId}`}
             type={action.kind === "workspace" ? "primary" : "default"}
             icon={
               action.kind === "workspace" ? (

@@ -446,6 +446,9 @@ def datasets(request):
 @require_GET
 @api_login_required
 def job_status(request, job_id: str):
+    from apps.catalog.export_access import validate_download
+    from apps.compute.packages import ComputeError
+
     try:
         job = get_job(job_id)
         if job.kind == "source-preview":
@@ -461,7 +464,11 @@ def job_status(request, job_id: str):
             and not request.user.is_superuser
         ):
             return JsonResponse({"detail": "无权查看该任务"}, status=403)
+        if job.kind == "export":
+            validate_download(job, request.user)
         return JsonResponse(job.as_dict())
+    except ComputeError as error:
+        return JsonResponse({"detail": str(error)}, status=error.status)
     except RasterJobError as exc:
         return JsonResponse({"detail": str(exc)}, status=404)
 

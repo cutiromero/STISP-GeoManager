@@ -158,6 +158,9 @@ class RasterBand(ProjectScopedModel):
 
 
 class RasterProcessingJob(ProjectScopedModel):
+    cancel_requested = models.BooleanField(default=False, db_default=False)
+    executor_identity = models.JSONField(default=dict, db_default={}, blank=True)
+
     class Status(models.TextChoices):
         QUEUED = "queued", "等待处理"
         RUNNING = "running", "处理中"

@@ -18,6 +18,7 @@ from django.db import (
     ProgrammingError,
     close_old_connections,
     connection,
+    transaction,
 )
 from django.utils import timezone
 
@@ -25,6 +26,7 @@ from apps.raster.services.progress import (
     normalize_progress_text,
     parse_progress_percent,
 )
+from apps.core.storage import app_path
 
 
 @dataclass
@@ -42,6 +44,8 @@ class RasterJob:
     finished_at: float | None = None
     created_by_id: int | None = None
     project_tag_id: int = 1
+    executor_identity: dict = field(default_factory=dict)
+    cancel_requested: bool = False
 
     def append(self, message: str, percent: int | None = None) -> None:
         text = normalize_progress_text(message)
@@ -63,6 +67,7 @@ class RasterJob:
             "error": self.error,
             "startedAt": self.started_at,
             "finishedAt": self.finished_at,
+            "cancelRequested": self.cancel_requested,
         }
 
 
@@ -168,7 +173,7 @@ class _DeleteOnCloseFile:
         return getattr(self._file_object, name)
 
 
-def reconcile_interrupted_jobs() -> bool:
+def reconcile_interrupted_jobs(*, job_ids=None) -> bool:
     """Fail jobs that cannot survive a process restart.
 
     The successful flag is deliberately not set when the database schema is not
@@ -176,10 +181,10 @@ def reconcile_interrupted_jobs() -> bool:
     """
 
     global _RESTART_RECONCILED
-    if _RESTART_RECONCILED:
+    if job_ids is None and _RESTART_RECONCILED:
         return True
     with _RESTART_RECONCILE_LOCK:
-        if _RESTART_RECONCILED:
+        if job_ids is None and _RESTART_RECONCILED:
             return True
         from apps.raster.models import RasterProcessingJob
 
@@ -194,9 +199,19 @@ def reconcile_interrupted_jobs() -> bool:
                     RasterProcessingJob.Status.RUNNING,
                 )
             )
-            if current_process_job_ids:
+            if job_ids is not None:
+                interrupted = interrupted.filter(pk__in=job_ids)
+            elif current_process_job_ids:
                 interrupted = interrupted.exclude(pk__in=current_process_job_ids)
-            interrupted.update(
+            from .executor_identity import alive
+
+            dead = [
+                record.pk
+                for record in interrupted.only("pk", "executor_identity")
+                if not record.executor_identity
+                or alive(record.executor_identity) is False
+            ]
+            interrupted.filter(pk__in=dead).update(
                 status=RasterProcessingJob.Status.FAILED,
                 stage=RasterProcessingJob.Status.FAILED,
                 error=RESTART_INTERRUPTED_MESSAGE,
@@ -209,7 +224,8 @@ def reconcile_interrupted_jobs() -> bool:
             # SimpleTestCase and partially initialized test databases can reject
             # ORM access before tables are available. First real use will retry.
             return False
-        _RESTART_RECONCILED = True
+        if job_ids is None:
+            _RESTART_RECONCILED = True
         return True
 
 
@@ -272,6 +288,7 @@ def _create_job(
     if reconcile_restart:
         reconcile_interrupted_jobs()
     from apps.projects.context import selected_project_id
+    from .executor_identity import current_identity
 
     job = RasterJob(
         id=uuid.uuid4().hex,
@@ -279,6 +296,7 @@ def _create_job(
         created_by_id=created_by_id,
         project_tag_id=selected_project_id(),
         result={"inputRefs": input_refs} if input_refs is not None else None,
+        executor_identity=current_identity(),
     )
     with _LOCK:
         _prune_job_caches_locked()
@@ -315,6 +333,7 @@ def _append_job(job_id: str, message: str) -> None:
     from apps.projects.context import require_live_membership
 
     require_live_membership()
+    _check_export_cancelled(job_id)
     cleaned = normalize_progress_text(message)
     percent = parse_progress_percent(cleaned)
     with _LOCK:
@@ -331,9 +350,49 @@ def _finish_job(job_id: str, result: dict[str, Any], status: str) -> None:
     require_live_membership()
     with _LOCK:
         job = _JOBS[job_id]
+        if job.kind == "export":
+            from apps.raster.models import RasterProcessingJob
+
+            merged = {
+                **result,
+                **(
+                    {"inputRefs": job.result["inputRefs"]}
+                    if isinstance(job.result, dict) and "inputRefs" in job.result
+                    else {}
+                ),
+            }
+            now = time.time()
+            if not RasterProcessingJob.objects.filter(
+                pk=job_id, cancel_requested=False
+            ).update(
+                status=status,
+                stage=status,
+                progress_percent=100,
+                result=merged,
+                messages=list(job.messages),
+                finished_at=timezone.now(),
+                updated_at=timezone.now(),
+            ):
+                from .exceptions import RasterJobError
+
+                job.cancel_requested = True
+                raise RasterJobError("导出已取消，文件未发布")
+            job.status = status
+            job.stage = status
+            job.progress_percent = 100
+            job.result = merged
+            job.finished_at = now
+            _prune_job_caches_locked()
+            return
         job.status = status
         job.stage = status
         job.progress_percent = 100
+        if (
+            job.kind == "export"
+            and isinstance(job.result, dict)
+            and "inputRefs" in job.result
+        ):
+            result = {**result, "inputRefs": job.result["inputRefs"]}
         job.result = result
         job.finished_at = time.time()
         _persist_job(job, force=True)
@@ -367,6 +426,52 @@ def _fail_job_if_active(job_id: str, error: str) -> bool:
         return True
 
 
+def _check_export_cancelled(job_id):
+    with _LOCK:
+        job = _JOBS.get(job_id)
+        if job is None or job.kind != "export":
+            return
+    from apps.raster.models import RasterProcessingJob
+
+    if RasterProcessingJob.objects.filter(pk=job_id, cancel_requested=True).exists():
+        from .exceptions import RasterJobError
+
+        job.cancel_requested = True
+        raise RasterJobError("导出已取消，当前步骤到保存点后停止")
+
+
+def request_export_cancel(job_id, user_id):
+    from apps.raster.models import RasterProcessingJob
+    from apps.compute.packages import ComputeError
+    from django.contrib.auth import get_user_model
+    from apps.projects.access import can_access_project
+    from apps.projects.context import selected_project_id
+
+    actor = get_user_model().objects.filter(pk=user_id, is_active=True).first()
+    if actor is None or not can_access_project(actor, selected_project_id()):
+        raise ComputeError("当前账号或项目不可访问", 403)
+    query = RasterProcessingJob.objects.filter(
+        pk=job_id, kind="export", created_by_id=user_id
+    )
+    with transaction.atomic():
+        query.filter(status__in=["queued", "running"], cancel_requested=False).update(
+            cancel_requested=True, stage="cancelling", updated_at=timezone.now()
+        )
+        record = query.first()
+        if record is None:
+            raise ComputeError("导出任务不存在或不属于当前账号", 404)
+    return {
+        "jobId": record.pk,
+        "status": record.status,
+        "cancelRequested": record.cancel_requested,
+        "detail": "已请求停止，当前I/O到保存点后结束，不删除原始资料"
+        if record.cancel_requested and record.status in {"queued", "running"}
+        else "导出已取消"
+        if record.cancel_requested
+        else "任务已结束，既有文件保持原状态",
+    }
+
+
 def get_job(job_id: str) -> RasterJob:
     from apps.raster.services.exceptions import RasterJobError
     from apps.projects.context import current_scope
@@ -385,6 +490,25 @@ def get_job(job_id: str) -> RasterJob:
             return cached
     persisted = _load_persisted_job(job_id)
     if persisted:
+        from .executor_identity import alive
+
+        if (
+            persisted.status in {"queued", "running"}
+            and persisted.executor_identity
+            and alive(persisted.executor_identity) is False
+        ):
+            RasterProcessingJob.objects.filter(
+                pk=job_id, status__in=["queued", "running"]
+            ).update(
+                status="failed",
+                stage="failed",
+                error=RESTART_INTERRUPTED_MESSAGE,
+                finished_at=timezone.now(),
+                updated_at=timezone.now(),
+            )
+            persisted = _load_persisted_job(job_id)
+            if persisted is None:
+                raise RasterJobError("任务不存在或已清理")
         if not restart_reconciled and persisted.status in {"queued", "running"}:
             # Until restart reconciliation succeeds, an active database row
             # may belong to the previous process. Do not let it enter the
@@ -727,6 +851,10 @@ def start_export_job(
     clip_geometry: dict[str, Any] | None,
     vector_format: str,
     created_by_id: int | None = None,
+    defer_submission: bool = False,
+    source_guard: Callable[[], None] | None = None,
+    items_builder: Callable[[Callable[[], None]], list[dict]] | None = None,
+    retain_downloads: bool = False,
 ) -> RasterJob:
     from tempfile import NamedTemporaryFile
 
@@ -752,13 +880,33 @@ def start_export_job(
     def runner() -> None:
         artifact: Path | None = None
         try:
+            _check_export_cancelled(job.id)
+            if source_guard is not None:
+                source_guard()
+            if created_by_id is not None:
+                from apps.catalog.export_access import validate_items
+
+                validate_items(items, created_by_id)
             _set_job_running(job.id, "准备导出数据", 1)
+            working_items = (
+                items_builder(lambda: _check_export_cancelled(job.id))
+                if items_builder is not None
+                else items
+            )
+            _check_export_cancelled(job.id)
+            if created_by_id is not None:
+                validate_items(working_items, created_by_id)
+            output_directory = app_path("cache", "export-artifacts")
+            output_directory.mkdir(parents=True, exist_ok=True)
             with NamedTemporaryFile(
-                prefix=f"layers-export-{job.id}-", suffix=".zip", delete=False
+                prefix=f"layers-export-{job.id}-",
+                suffix=".zip",
+                delete=False,
+                dir=output_directory,
             ) as output:
                 artifact = Path(output.name)
             export_layers_zip_to_path(
-                items,
+                working_items,
                 epsg,
                 output_path=artifact,
                 reproject=reproject,
@@ -766,12 +914,18 @@ def start_export_job(
                 vector_format=vector_format,
                 progress=lambda text: _append_job(job.id, text),
             )
+            if source_guard is not None:
+                source_guard()
+            if created_by_id is not None:
+                validate_items(items, created_by_id)
+            _check_export_cancelled(job.id)
             _set_job_artifact(job.id, artifact)
             _finish_job(
                 job.id,
                 {
                     "filename": f"layers-export-{time.strftime('%Y%m%d%H%M%S')}.zip",
                     "downloadUrl": f"/api/catalog/export/jobs/{job.id}/download/",
+                    **({"retainDownloads": True} if retain_downloads else {}),
                 },
                 "ready",
             )
@@ -780,7 +934,10 @@ def start_export_job(
                 _delete_job_artifact(job.id, artifact)
             _fail_job(job.id, str(exc))
 
-    _submit_job(job, runner)
+    if defer_submission:
+        transaction.on_commit(lambda: _submit_job(job, runner))
+    else:
+        _submit_job(job, runner)
     return job
 
 
@@ -788,9 +945,13 @@ def get_job_artifact_path(job_id: str) -> Path:
     from apps.raster.services.exceptions import RasterJobError
 
     job = get_job(job_id)
+    if job.cancel_requested:
+        raise RasterJobError("导出已取消，不能下载")
     if not job.artifact_path:
         raise RasterJobError("导出文件不存在或已过期")
     artifact = Path(job.artifact_path)
+    if not _managed_export_artifact(job.id, artifact):
+        raise RasterJobError("导出文件来源不属于受控临时成果")
     if _job_artifact_is_expired(job):
         _delete_job_artifact(job.id, artifact)
         raise RasterJobError("导出文件不存在或已过期")
@@ -808,9 +969,10 @@ def open_job_artifact_for_download(job_id: str) -> _DeleteOnCloseFile:
         raise RasterJobError("导出文件不存在或已过期") from exc
     except OSError as exc:
         raise RasterJobError("导出文件暂时无法读取") from exc
+    retained = bool((get_job(job_id).result or {}).get("retainDownloads"))
     return _DeleteOnCloseFile(
         file_object,
-        lambda: _delete_job_artifact(job_id, artifact),
+        (lambda: None) if retained else lambda: _delete_job_artifact(job_id, artifact),
     )
 
 
@@ -852,12 +1014,30 @@ def _cleanup_one_expired_export_artifact(*, now=None) -> str | None:
 
 
 def _delete_job_artifact(job_id: str, expected_path: Path) -> bool:
+    if not _managed_export_artifact(job_id, expected_path):
+        return False
     try:
         expected_path.unlink(missing_ok=True)
     except OSError:
         return False
     _clear_job_artifact_record(job_id, expected_path)
     return True
+
+
+def _managed_export_artifact(job_id, path):
+    from tempfile import gettempdir
+
+    path = Path(path)
+    return bool(
+        not path.is_symlink()
+        and path.name.startswith(f"layers-export-{job_id}-")
+        and path.suffix == ".zip"
+        and path.parent.resolve()
+        in {
+            Path(gettempdir()).resolve(),
+            app_path("cache", "export-artifacts").resolve(),
+        }
+    )
 
 
 def _clear_job_artifact_record(job_id: str, expected_path: Path) -> None:
@@ -903,6 +1083,7 @@ def _persist_job(
                     "error": job.error,
                     "artifact_path": job.artifact_path,
                     "created_by_id": job.created_by_id,
+                    "executor_identity": job.executor_identity,
                     "finished_at": datetime.fromtimestamp(
                         job.finished_at, tz=timezone.get_current_timezone()
                     )
@@ -951,10 +1132,14 @@ def _load_persisted_job(job_id: str) -> RasterJob | None:
         finished_at=record.finished_at.timestamp() if record.finished_at else None,
         created_by_id=record.created_by_id,
         project_tag_id=record.project_tag_id,
+        executor_identity=record.executor_identity,
+        cancel_requested=record.cancel_requested,
     )
 
 
 def _persisted_job_is_newer(cached: RasterJob, persisted: RasterJob) -> bool:
+    if cached.cancel_requested != persisted.cancel_requested:
+        return True
     status_rank = {"queued": 0, "running": 1, "ready": 2, "failed": 2}
     cached_rank = status_rank.get(cached.status, 0)
     persisted_rank = status_rank.get(persisted.status, 0)

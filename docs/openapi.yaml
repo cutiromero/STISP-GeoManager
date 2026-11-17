@@ -5707,6 +5707,76 @@ paths:
         description: 与 X-Project-Id 等效，用于图片、瓦片和文件链接；同时提供时两者必须相同，否则返回 400。
         schema:
           type: string
+  /api/catalog/export/jobs/{job_id}/cancel/:
+    post:
+      tags:
+      - 数据导出
+      operationId: cancelExport
+      summary: 请求停止本人导出任务
+      description: 只接受当前用户、当前项目的导出任务。取消在I/O保存点完成，已完成文件不删除；该接口不重新读取原始资料，不接受actor、owner或额外参数。
+      security:
+      - sessionAuth: []
+      parameters:
+      - name: X-Project-Id
+        in: header
+        required: true
+        description: 唯一当前项目
+        schema:
+          type: integer
+          minimum: 1
+      - name: job_id
+        in: path
+        required: true
+        description: 本人真实导出任务编号
+        schema:
+          type: string
+          pattern: ^[a-f0-9]{32}$
+      requestBody:
+        required: false
+        description: 空JSON对象
+        content:
+          application/json:
+            schema:
+              type: object
+              description: 无其他控制参数
+              maxProperties: 0
+      responses:
+        '200':
+          description: 任务已结束或重复取消
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExportCancellation'
+        '202':
+          description: 已请求取消，I/O到保存点结束
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExportCancellation'
+        '400':
+          description: 参数无效
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: 请先登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: 账号或项目不可访问
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: 任务不存在或不属于本人
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/catalog/export/jobs/{job_id}/download/:
     parameters:
     - name: X-Project-Id
@@ -11567,41 +11637,7 @@ components:
             - type: array
               items: {type: string}
         text: {type: string, description: 补充信息，与此前证据一同恢复给模型}
-    AgentPlatformAction:
-      type: object
-      description: 服务端从真实工具操作记录重建的站内入口；不是模型自报网址，点击后仍由相应接口核验当前项目和权限。
-      additionalProperties: false
-      required: [kind, title, projectId, resourceIds]
-      properties:
-        kind:
-          type: string
-          enum: [workspace, page]
-          description: 已保存的个人地图，或允许的平台页面。
-        title:
-          type: string
-          maxLength: 160
-          description: 已保存工程名称或页面名称。
-        projectId:
-          type: integer
-          minimum: 1
-          description: 本轮所属的单个项目，不能跨项目。
-        sceneId:
-          type: integer
-          minimum: 1
-          description: workspace类型的真实工程编号；仅任务所有者的当前项目工程。
-        page:
-          type: string
-          enum: [map, resources, compute, knowledge, business_flows]
-          description: page类型允许的页面；business_flows打开当前项目业务流目录（/business-flows），只提供入口，不授予执行或批准权限。前端按枚举生成固定站内地址。
-        resourceIds:
-          type: array
-          maxItems: 5
-          uniqueItems: true
-          description: 地图所引用并已重新核验的业务资料编号；页面入口为空数组。
-          items:
-            type: integer
-            minimum: 1
-            description: 授权业务资源编号。
+    AgentPlatformAction: {"type": "object", "description": "服务端从真实工具操作记录重建的站内入口；不是模型自报网址，点击后仍由相应接口核验当前项目和权限。", "additionalProperties": false, "required": ["kind", "title", "projectId", "resourceIds"], "properties": {"kind": {"type": "string", "enum": ["workspace", "page", "export"], "description": "真实个人地图、允许页面或经授权核验存在的导出文件"}, "title": {"type": "string", "maxLength": 160, "description": "已保存工程名称或页面名称。"}, "projectId": {"type": "integer", "minimum": 1, "description": "本轮所属的单个项目，不能跨项目。"}, "sceneId": {"type": "integer", "minimum": 1, "description": "workspace类型的真实工程编号；仅任务所有者的当前项目工程。"}, "page": {"type": "string", "enum": ["map", "resources", "compute", "knowledge", "business_flows"], "description": "page类型允许的页面；business_flows打开当前项目业务流目录（/business-flows），只提供入口，不授予执行或批准权限。前端按枚举生成固定站内地址。"}, "resourceIds": {"type": "array", "maxItems": 5, "uniqueItems": true, "description": "地图所引用并已重新核验的业务资料编号；页面入口为空数组。", "items": {"type": "integer", "minimum": 1, "description": "授权业务资源编号。"}}, "jobId": {"type": "string", "description": "真实导出任务的32位十六进制编号", "pattern": "^[a-f0-9]{32}$"}}}
     AgentRun:
       type: object
       description: 持久运行记录；引用失权时返回403，不返回旧内容。轮询支持gzip；资源依据集合批量实时授权，仅单次检查复用来源查询计划，不跨轮询缓存访问结果。
@@ -14224,8 +14260,8 @@ components:
             $ref: '#/components/schemas/ComputeInputGap'
         code:
           type: string
-          description: 稳定机器错误码，决定补参、停止、换版或有限重试
-          pattern: ^[A-Z][A-Z0-9_]*$
+          description: 稳定机器错误码，决定补参、停止、换版或有限重试；保留既有认证错误的小写代码
+          pattern: ^[A-Za-z][A-Za-z0-9_]*$
         retryable:
           type: boolean
           description: 是否适合在原授权和参数下有限退避重试，不代替幂等检查
@@ -19774,94 +19810,10 @@ components:
       type: object
       additionalProperties: true
       description: 栅格符号化规则对象，具体结构由后端符号化规则引擎校验
-    AsyncJobResponse:
-      type: object
-      required:
-      - id
-      - kind
-      - status
-      - stage
-      - progressPercent
-      - messages
-      - result
-      - error
-      - startedAt
-      - finishedAt
-      properties:
-        id:
-          type: string
-          description: 异步任务 ID
-        kind:
-          type: string
-          enum:
-          - import
-          - scan
-          - render
-          - export
-          description: 任务类型
-        status:
-          type: string
-          enum:
-          - queued
-          - running
-          - ready
-          - failed
-          description: 任务状态
-        stage:
-          type: string
-          description: 当前处理阶段，例如 queued、validating、preprocessing、publishing、ready 或 failed
-        progressPercent:
-          type: integer
-          minimum: 0
-          maximum: 100
-          description: 任务进度百分比
-        messages:
-          type: array
-          description: 任务进度消息
-          items:
-            type: string
-        result:
-          oneOf:
-          - $ref: '#/components/schemas/RasterRenderResult'
-          - $ref: '#/components/schemas/RasterDataset'
-          - $ref: '#/components/schemas/RasterDatasetScanResult'
-          - $ref: '#/components/schemas/ExportJobResult'
-          - $ref: '#/components/schemas/RasterJobInputReferences'
-          - type: 'null'
-          description: 完成任务的结果；渲染和导出任务在排队或处理中保存精简输入引用，失败时可以保留引用，其他任务未完成时可为 null
-        error:
-          type: string
-          description: 失败原因
-        startedAt:
-          type: number
-          format: double
-          description: 任务创建时间戳
-        finishedAt:
-          type:
-          - number
-          - 'null'
-          format: double
-          description: 任务结束时间戳
-    RasterJobInputReferences:
-      type: object
-      required:
-      - inputRefs
-      properties:
-        inputRefs:
-          type: array
-          description: 用于保护正在使用的数据；只保存标识，不保存几何或栅格内容
-          items:
-            type: object
-            properties:
-              resourceId:
-                type: integer
-                minimum: 1
-              layerId:
-                type: integer
-                minimum: 1
-              datasetId:
-                type: integer
-                minimum: 1
+    AsyncJobResponse: {"type": "object", "required": ["id", "kind", "status", "stage", "progressPercent", "messages", "result", "error", "startedAt", "finishedAt"], "properties": {"id": {"type": "string", "description": "异步任务 ID"}, "kind": {"type": "string", "enum": ["import", "scan", "render", "export"], "description": "任务类型"}, "status": {"type": "string", "enum": ["queued", "running", "ready", "failed"], "description": "任务状态"}, "stage": {"type": "string", "description": "当前处理阶段，例如 queued、validating、preprocessing、publishing、ready 或 failed"}, "progressPercent": {"type": "integer", "minimum": 0, "maximum": 100, "description": "任务进度百分比"}, "messages": {"type": "array", "description": "任务进度消息", "items": {"type": "string"}}, "result": {"oneOf": [{"$ref": "#/components/schemas/RasterRenderResult"}, {"$ref": "#/components/schemas/RasterDataset"}, {"$ref": "#/components/schemas/RasterDatasetScanResult"}, {"$ref": "#/components/schemas/ExportJobResult"}, {"$ref": "#/components/schemas/RasterJobInputReferences"}, {"type": "null"}], "description": "完成任务的结果；渲染和导出任务在排队或处理中保存精简输入引用，失败时可以保留引用，其他任务未完成时可为 null"}, "error": {"type": "string", "description": "失败原因"}, "startedAt": {"type": "number", "format": "double", "description": "任务创建时间戳"}, "finishedAt": {"type": ["number", "null"], "format": "double", "description": "任务结束时间戳"}, "cancelRequested": {"type": "boolean", "description": "导出已请求在保存点停止；不表示已终止当前I/O，也不删除已完成文件"}}}
+
+    RasterJobInputReferences: {"type": "object", "required": ["inputRefs"], "properties": {"inputRefs": {"type": "array", "description": "用于保护正在使用的数据；只保存标识，不保存几何或栅格内容", "items": {"$ref": "#/components/schemas/JobInputReference"}}}, "additionalProperties": false}
+
     RasterDatasetScanResult:
       type: object
       required:
@@ -19876,18 +19828,8 @@ components:
         count:
           type: integer
           description: 数据集数量
-    ExportJobResult:
-      type: object
-      required:
-      - filename
-      - downloadUrl
-      properties:
-        filename:
-          type: string
-          description: 导出文件名
-        downloadUrl:
-          type: string
-          description: 导出文件下载路径
+    ExportJobResult: {"type": "object", "required": ["filename", "downloadUrl"], "properties": {"filename": {"type": "string", "description": "导出文件名"}, "downloadUrl": {"type": "string", "description": "导出文件下载路径"}, "inputRefs": {"type": "array", "description": "完成后的来源凭据；下载时重新授权", "items": {"$ref": "#/components/schemas/JobInputReference"}}, "retainDownloads": {"type": "boolean", "description": "受控Agent导出允许在有效期内重复下载，避免网络重试造成重复导出"}}}
+
     DirectoryTreeResponse:
       type: object
       required:
@@ -22553,7 +22495,7 @@ components:
         maxTextCharacters: {type: integer, minimum: 80, maximum: 1000, description: 每个长文本最多保留字符数}
       additionalProperties: false
     BusinessFlowNodeState: {"type": "object", "description": "当前节点真实执行、审核、返修和人工状态。", "properties": {"nodeId": {"type": "string", "description": "对应冻结规范中的节点编码"}, "status": {"type": "string", "description": "节点状态；waiting_context表示输入、模型、审核或平台的可恢复等待，不是科研批准；waiting_recovery表示算子补救或提问等待，工作流仍为waiting_approval"}, "attempt": {"type": "integer", "description": "本节点执行尝试序号", "minimum": 0}, "executor": {"$ref": "#/components/schemas/BusinessFlowActorState"}, "reviewer": {"$ref": "#/components/schemas/BusinessFlowActorState"}, "human": {"$ref": "#/components/schemas/BusinessFlowHumanState"}, "outputs": {"type": "object", "description": "仅包含本节点产出的结论或真实算子结果引用", "additionalProperties": true, "properties": {"taskId": {"type": "string", "format": "uuid", "description": "最近一次实际计算任务。"}, "taskIds": {"type": "array", "maxItems": 32, "uniqueItems": true, "items": {"type": "string", "format": "uuid"}, "description": "本节点已登记的实际计算任务，批量计算保留全部引用。"}}}, "contextManagement": {"$ref": "#/components/schemas/BusinessFlowContextManagement"}, "contextRecovery": {"$ref": "#/components/schemas/BusinessFlowContextRecovery"}, "recovery": {"$ref": "#/components/schemas/BusinessFlowNodeRecovery"}, "toolProgress": {"$ref": "#/components/schemas/BusinessFlowToolProgress"}}, "required": ["nodeId", "status", "attempt", "executor", "reviewer", "human", "outputs"], "additionalProperties": true}
-    BusinessFlowEvent: {"type": "object", "description": "执行者、审核者、用户和系统之间可追溯的状态事件。", "properties": {"id": {"type": "integer", "description": "当前执行内递增事件序号", "minimum": 0}, "nodeId": {"type": "string", "description": "相关节点；全局事件可为空"}, "actor": {"type": "string", "description": "事件来源角色", "enum": ["executor", "reviewer", "human", "system"]}, "kind": {"type": "string", "description": "事件类型，例如started、review_rejected、revision_requested、human_approved"}, "status": {"type": "string", "description": "发生后的真实状态"}, "message": {"type": "string", "description": "面向用户的事件说明"}, "createdAt": {"type": "string", "description": "事件时间", "format": "date-time"}}, "required": ["id", "nodeId", "actor", "kind", "status", "message", "createdAt"], "additionalProperties": true}
+    BusinessFlowEvent: {"type": "object", "description": "执行者、审核者、用户和系统之间可追溯的状态事件。", "properties": {"id": {"type": "integer", "description": "当前执行内递增事件序号", "minimum": 0}, "nodeId": {"type": "string", "description": "相关节点；全局事件可为空"}, "actor": {"type": "string", "description": "真实事件来源，agent表示平台代办，不构成人工批准", "enum": ["executor", "reviewer", "human", "system", "agent"]}, "kind": {"type": "string", "description": "事件类型，例如started、review_rejected、revision_requested、human_approved"}, "status": {"type": "string", "description": "发生后的真实状态"}, "message": {"type": "string", "description": "面向用户的事件说明"}, "createdAt": {"type": "string", "description": "事件时间", "format": "date-time"}}, "required": ["id", "nodeId", "actor", "kind", "status", "message", "createdAt"], "additionalProperties": true}
     BusinessFlowRun: {"type": "object", "description": "绑定不可变定义的真实执行；AI审核和人工批准分别记录，不跳过原有权限与科研检查。", "properties": {"id": {"type": "string", "description": "沿用AgentWorkflow的真实执行编号", "format": "uuid"}, "flowId": {"type": "integer", "description": "业务流登记编号", "minimum": 1}, "versionId": {"type": "integer", "description": "本次冻结的发布版本编号", "minimum": 1}, "projectId": {"type": "integer", "description": "所属单一项目", "minimum": 1}, "conversationId": {"anyOf": [{"type": "integer", "description": "父智能体会话编号", "minimum": 1}, {"type": "null"}], "description": "父智能体会话编号"}, "runId": {"anyOf": [{"type": "integer", "description": "父对话轮次编号；审核请求不冒充新用户轮次", "minimum": 1}, {"type": "null"}], "description": "父对话轮次编号；审核请求不冒充新用户轮次"}, "name": {"type": "string", "description": "业务流名称"}, "goal": {"type": "string", "description": "本次科研目标"}, "status": {"type": "string", "description": "执行状态，沿用工作流状态并可表达审核与返修"}, "currentNode": {"type": "string", "description": "当前节点编码；未开始时可为空"}, "revision": {"type": "integer", "description": "状态修订号；人工决定必须绑定当前修订", "minimum": 0}, "createdAt": {"type": "string", "description": "启动时间", "format": "date-time"}, "updatedAt": {"type": "string", "description": "最后状态更新时间", "format": "date-time"}, "definitionSnapshot": {"$ref": "#/components/schemas/BusinessFlowSpec"}, "nodes": {"type": "array", "description": "本次节点状态", "items": {"$ref": "#/components/schemas/BusinessFlowNodeState"}, "maxItems": 32}, "events": {"type": "array", "description": "有界可追溯过程事件", "items": {"$ref": "#/components/schemas/BusinessFlowEvent"}}, "inputPreparation": {"$ref": "#/components/schemas/BusinessFlowInputPlan"}, "mainAgent": {"$ref": "#/components/schemas/BusinessFlowExecutorSession"}, "resultOutputIds": {"type": "array", "items": {"type": "integer", "minimum": 1}, "description": "该次执行实际保留交付的计算输出ID；不包括已消费的中间成果。"}, "resultResourceIds": {"type": "array", "items": {"type": "integer", "minimum": 1}, "description": "该次执行已入库的成果资源ID。"}}, "required": ["id", "flowId", "versionId", "projectId", "conversationId", "runId", "name", "goal", "status", "currentNode", "revision", "createdAt", "updatedAt", "definitionSnapshot", "nodes", "events"], "additionalProperties": true}
     BusinessFlowRunSummary: {"type": "object", "description": "本人当前项目的轻量执行历史，不读取完整步骤或重新扫描资料。", "properties": {"id": {"type": "string", "description": "沿用AgentWorkflow的真实执行编号", "format": "uuid"}, "flowId": {"type": "integer", "description": "业务流登记编号", "minimum": 1}, "versionId": {"type": "integer", "description": "本次冻结的发布版本编号", "minimum": 1}, "projectId": {"type": "integer", "description": "所属单一项目", "minimum": 1}, "conversationId": {"anyOf": [{"type": "integer", "description": "父智能体会话编号", "minimum": 1}, {"type": "null"}], "description": "父智能体会话编号"}, "runId": {"anyOf": [{"type": "integer", "description": "父对话轮次编号；审核请求不冒充新用户轮次", "minimum": 1}, {"type": "null"}], "description": "父对话轮次编号；审核请求不冒充新用户轮次"}, "name": {"type": "string", "description": "业务流名称"}, "goal": {"type": "string", "description": "本次科研目标"}, "status": {"type": "string", "description": "执行状态，沿用工作流状态并可表达审核与返修"}, "currentNode": {"type": "string", "description": "当前节点编码；未开始时可为空"}, "revision": {"type": "integer", "description": "状态修订号；人工决定必须绑定当前修订", "minimum": 0}, "createdAt": {"type": "string", "description": "启动时间", "format": "date-time"}, "updatedAt": {"type": "string", "description": "最后状态更新时间", "format": "date-time"}}, "required": ["id", "flowId", "versionId", "projectId", "conversationId", "runId", "name", "goal", "status", "currentNode", "revision", "createdAt", "updatedAt"], "additionalProperties": true}
     BusinessFlowRunList: {"type": "object", "description": "本人当前项目最近30个业务流执行。", "properties": {"items": {"type": "array", "description": "轻量执行摘要，最多30项", "items": {"$ref": "#/components/schemas/BusinessFlowRunSummary"}}}, "required": ["items"], "additionalProperties": false}
@@ -22577,7 +22519,7 @@ components:
     AgentToolSummarizeResourceCatalogArguments: {"type": "object", "description": "全量统计当前授权项目的计算成果与上传/登记数据数量、类型及大小，不读取样本；query可为空，category可筛选", "properties": {"query": {"description": "当前授权范围内的检索关键词；空值是否允许取决于工具用途", "type": "string", "maxLength": 200}, "category": {"description": "资源来源分类", "type": "string", "maxLength": 120, "enum": ["all", "compute_results", "uploaded_data"]}}, "additionalProperties": false}
     AgentToolPresentResourceCatalogArguments: {"type": "object", "description": "直接向用户展示当前项目完整分组目录和总数，计算成果与上传/登记数据自动分类；query可为空，category可筛选。平台直接格式化真实名称，无需模型逐条复述；调用后本轮完成", "properties": {"query": {"description": "当前授权范围内的检索关键词；空值是否允许取决于工具用途", "type": "string", "maxLength": 200}, "category": {"description": "资源来源分类", "type": "string", "maxLength": 120, "enum": ["all", "compute_results", "uploaded_data"]}}, "additionalProperties": false}
     AgentToolGetMapDataProfileArguments: {"type": "object", "description": "读取可加载的真实地图概况与完整类别，resourceId；矢量field可选（默认name等实际字段），栅格band默认1。返回categoryField/categories/value/count/suggestedColor、colorLocked、referenceId和colorPolicy，与逻辑推理共用标准及项目约定色；colorLocked不得改色、原表同色保留。分类配色前必须读取。分类最多96项，栅格最多400万像元；不能把不完整类别说成全部。", "properties": {"resourceId": {"description": "已登记且当前有权访问的资料正整数编号", "type": "integer", "minimum": 1}, "field": {"description": "真实字段名称", "type": "string", "maxLength": 120, "minLength": 1}, "band": {"description": "从1开始的真实波段编号", "type": "integer", "minimum": 1}}, "additionalProperties": false, "required": ["resourceId"]}
-    AgentToolPrepareMapWorkspaceArguments: {"type": "object", "description": "生成真实个人地图工程，原始数据不变，不覆盖已有工程。resourceIds为当前授权资源整数数组，name可选。styles可省略沿用显示方案；优先用mode=reference,field=实际分类字段按共用规则配色，无需classes。命中色表不可改色、原表同色保留，仅未命中类别可建议新色；分类配色格式styles:[{\"resourceId\":12,\"mode\":\"unique\",\"field\":\"name\",\"classes\":[{\"value\":\"实际类别\",\"label\":\"显示名称\",\"color\":\"#e0c080\"}]}]，必须覆盖已读取的完整类别。矢量单色mode=single,color=#RRGGBB；分类栅格mode=unique,band=1使用真实整数类别颜色表。返回workspaceId才代表已准备，用户点击按钮加载地图。无需寻找配色计算算子。", "properties": {"resourceIds": {"description": "当前授权资料编号集合", "type": "array", "items": {"type": "integer", "minimum": 1, "description": "真实编号"}, "maxItems": 5, "uniqueItems": true, "minItems": 1}, "styles": {"description": "仅用于个人地图工程的展示样式，不写入原始资料", "type": "array", "items": {"type": "object", "description": "结构化展示配置", "additionalProperties": true}, "maxItems": 5}, "name": {"description": "本次创建对象的显示名称", "type": "string", "maxLength": 120}}, "additionalProperties": false, "required": ["resourceIds"]}
+    AgentToolPrepareMapWorkspaceArguments: {"type": "object", "description": "生成真实个人地图工程，原始数据不变，不覆盖已有工程。resourceIds为当前授权资源整数数组，name可选。styles可省略沿用显示方案；优先用mode=reference,field=实际分类字段按共用规则配色，无需classes。命中色表不可改色、原表同色保留，仅未命中类别可建议新色；分类配色格式styles:[{\"resourceId\":12,\"mode\":\"unique\",\"field\":\"name\",\"classes\":[{\"value\":\"实际类别\",\"label\":\"显示名称\",\"color\":\"#e0c080\"}]}]，必须覆盖已读取的完整类别。矢量单色mode=single,color=#RRGGBB；分类栅格mode=unique,band=1使用真实整数类别颜色表。返回workspaceId才代表已准备，用户点击按钮加载地图。无需寻找配色计算算子。", "properties": {"resourceIds": {"description": "当前授权资料编号集合", "type": "array", "items": {"type": "integer", "minimum": 1, "description": "真实编号"}, "maxItems": 5, "uniqueItems": true, "minItems": 1}, "styles": {"description": "仅用于个人地图工程的展示样式，不写入原始资料", "type": "array", "items": {"$ref": "#/components/schemas/AgentWorkspaceStyle"}, "maxItems": 5}, "name": {"description": "本次创建对象的显示名称", "type": "string", "maxLength": 120}}, "additionalProperties": false, "required": ["resourceIds"]}
     AgentToolGetPlatformLinkArguments: {"type": "object", "description": "生成站内可用页面按钮；page只能是map/resources/compute/knowledge/business_flows，不接受模型自报网址，自动携带当前项目。", "properties": {"page": {"description": "平台固定站内入口，不接受模型自报URL", "type": "string", "maxLength": 120, "minLength": 1, "enum": ["map", "resources", "compute", "knowledge", "business_flows"]}}, "additionalProperties": false, "required": ["page"]}
     AgentToolDescribeResourceArguments: {"type": "object", "description": "查看资源说明、字段、记录范围；resourceId", "properties": {"resourceId": {"description": "已登记且当前有权访问的资料正整数编号", "type": "integer", "minimum": 1}}, "additionalProperties": false, "required": ["resourceId"]}
     AgentToolReadRowsArguments: {"type": "object", "description": "读取最多30条样本；resourceId, fields字段数组, filters筛选数组", "properties": {"resourceId": {"description": "已登记且当前有权访问的资料正整数编号", "type": "integer", "minimum": 1}, "fields": {"description": "真实字段名列表，不接受SQL表达式", "type": "array", "items": {"type": "string", "maxLength": 200, "description": "真实名称或证据标识"}, "maxItems": 12, "uniqueItems": true}, "filters": {"description": "结构化属性条件，仍使用原查询语义", "type": "array", "items": {"$ref": "#/components/schemas/AgentToolAttributeFilter"}, "maxItems": 8}}, "additionalProperties": false, "required": ["resourceId"]}
@@ -22603,6 +22545,25 @@ components:
     AgentToolCallList: {"type": "object", "description": "本人当前项目的工具调用审计分页", "required": ["runId", "projectId", "total", "nextOffset", "items"], "properties": {"runId": {"type": "integer", "description": "真实Agent运行编号"}, "projectId": {"type": "integer", "description": "当前项目"}, "total": {"type": "integer", "minimum": 0, "description": "真实回执总数"}, "nextOffset": {"type": ["integer", "null"], "description": "下一页位置，null表示已到末页"}, "items": {"type": "array", "description": "当前页回执", "items": {"$ref": "#/components/schemas/AgentToolCall"}}}}
 
     AgentToolAttributeFilter: {"type": "object", "description": "Agent结构化属性条件，使用op；与页面AttributeFilter的operator字段分开", "required": ["field", "op", "value"], "properties": {"field": {"type": "string", "description": "真实字段名称", "maxLength": 200}, "op": {"type": "string", "description": "原Agent查询运算语义", "enum": ["eq", "ne", "gt", "gte", "lt", "lte", "contains"]}, "value": {"type": ["string", "number", "boolean", "null"], "description": "有界标量值，范围筛选须为数值", "maxLength": 500}}, "additionalProperties": false}
+
+    AgentSourceVersion: {"type": "object", "description": "资料版本：versionKey是权威不透明标识；时间仅用于显示，不接受模型自行推断", "properties": {"resourceId": {"type": "integer", "minimum": 1, "description": "当前授权资料编号"}, "updatedAt": {"type": "string", "description": "真实资料修订", "format": "date-time"}, "versionKey": {"type": "string", "description": "服务端计算的源文件及依赖身份摘要", "pattern": "^[a-f0-9]{64}$"}, "available": {"type": "boolean", "description": "原始来源是否可读"}}, "required": ["resourceId", "versionKey"], "additionalProperties": false}
+    AgentWorkspaceStyle: {"type": "object", "description": "只修改个人工程展示，原始数据和共享默认样式不变", "properties": {"resourceId": {"type": "integer", "minimum": 1, "description": "工程中的真实资料编号"}, "mode": {"type": "string", "description": "展示模式", "enum": ["default", "single", "unique", "reference"]}, "field": {"type": "string", "description": "真实分类字段", "maxLength": 200}, "band": {"type": "integer", "minimum": 1, "description": "从1开始的波段"}, "opacity": {"type": "number", "minimum": 0, "maximum": 100, "description": "显示不透明度百分比"}, "color": {"type": "string", "description": "十六进制颜色", "pattern": "^#[a-fA-F0-9]{6}(?:[a-fA-F0-9]{2})?$"}, "classes": {"type": "array", "description": "完整真实类别及展示颜色，不可遗漏、重名或覆盖锁定标准色", "items": {"type": "object", "description": "单一类别", "properties": {"value": {"type": ["string", "integer"], "description": "真实类别值"}, "label": {"type": "string", "description": "显示标签", "minLength": 1, "maxLength": 80}, "color": {"type": "string", "description": "十六进制颜色", "pattern": "^#[a-fA-F0-9]{6}(?:[a-fA-F0-9]{2})?$"}}, "required": ["value", "color"], "additionalProperties": false}, "minItems": 1, "maxItems": 96}}, "required": ["resourceId"], "additionalProperties": false}
+    AgentToolListMapWorkspacesArguments: {"type": "object", "description": "分页列出本人当前项目的个人工程摘要，不读取原始数据；query、offset、limit可选。", "properties": {"query": {"type": "string", "description": "本人当前项目名称关键词", "maxLength": 120}, "offset": {"type": "integer", "minimum": 0, "description": "从0开始的分页位置"}, "limit": {"type": "integer", "minimum": 1, "description": "分页条数", "maximum": 20}}, "required": [], "additionalProperties": false}
+    AgentToolGetMapWorkspaceArguments: {"type": "object", "description": "读取本人受控个人工程的真实图层、updatedAt和sourceVersions；workspaceId必需，layerId可选读取单层样式。后续修改复制updatedAt，导出复制sourceVersions中的resourceId/versionKey。", "properties": {"workspaceId": {"type": "integer", "minimum": 1, "description": "本人当前项目的真实个人工程编号"}, "layerId": {"type": "string", "description": "可选真实图层ID，用于按层读取完整展示样式", "maxLength": 200}}, "required": ["workspaceId"], "additionalProperties": false}
+    AgentToolUpdateMapWorkspaceArguments: {"type": "object", "description": "按最后读取expectedUpdatedAt更新本人个人工程；可改name、description、visibility节点ID到布尔值、styles展示样式。只改工程引用与显示，不改资料原件、默认样式或共享范围。", "properties": {"workspaceId": {"type": "integer", "minimum": 1, "description": "本人当前项目的真实个人工程编号"}, "expectedUpdatedAt": {"type": "string", "description": "最后读取的对象修订，须原样携带；不覆盖较新修改", "format": "date-time"}, "name": {"type": "string", "description": "新工程名", "minLength": 1, "maxLength": 120}, "description": {"type": "string", "description": "工程说明", "maxLength": 2000}, "visibility": {"type": "object", "description": "工程中实际分组或图层ID到可见性的映射，不添加新资料", "additionalProperties": {"type": "boolean", "description": "可见性"}, "maxProperties": 20}, "styles": {"type": "array", "description": "当前工程资料的展示样式", "items": {"$ref": "#/components/schemas/AgentWorkspaceStyle"}, "maxItems": 5}}, "required": ["workspaceId", "expectedUpdatedAt"], "additionalProperties": false}
+    AgentToolExportMapWorkspaceArguments: {"type": "object", "description": "异步导出本人1至5层工程，必须先get_map_workspace并复制expectedUpdatedAt和expectedSources；expectedSources复制sourceVersions的resourceId/versionKey。默认仅可见图层、原坐标系，格式geojson或shapefile。受理不是完成；get_export_task查询。每轮最多3份导出；失败或过期明确retryOfJobId才重试。", "properties": {"workspaceId": {"type": "integer", "minimum": 1, "description": "本人当前项目的真实个人工程编号"}, "expectedUpdatedAt": {"type": "string", "description": "最后读取的对象修订，须原样携带；不覆盖较新修改", "format": "date-time"}, "expectedSources": {"type": "array", "description": "复制get_map_workspace的sourceVersions，版本以resourceId/versionKey为准", "items": {"$ref": "#/components/schemas/AgentSourceVersion"}, "minItems": 1, "maxItems": 5}, "onlyVisible": {"type": "boolean", "description": "默认true，仅导出工程中有效可见图层"}, "reproject": {"type": "boolean", "description": "默认false：栅格保留原生坐标，矢量按原协议WGS84；true时按epsg重投影"}, "epsg": {"type": "integer", "minimum": 1024, "description": "重投影目标EPSG，仅reproject=true生效", "maximum": 999999}, "format": {"type": "string", "description": "矢量文件格式；栅格保持GeoTIFF", "enum": ["geojson", "shapefile"]}, "retryOfJobId": {"type": "string", "description": "真实导出任务的32位十六进制编号", "pattern": "^[a-f0-9]{32}$"}}, "required": ["workspaceId", "expectedUpdatedAt", "expectedSources"], "additionalProperties": false}
+
+    AgentToolGetExportTaskArguments: {"type": "object", "description": "按真实jobId查询本人已登记的平台工程导出状态；只有ready且artifactAvailable、downloadUrl实际存在才表示可下载。不返回文件路径或原始数据。", "properties": {"jobId": {"type": "string", "description": "真实导出任务的32位十六进制编号", "pattern": "^[a-f0-9]{32}$"}}, "required": ["jobId"], "additionalProperties": false}
+    AgentToolCancelComputeTaskArguments: {"type": "object", "description": "停止本人当前项目的独立计算任务，taskId为真实UUID。科研任务调度的子计算须通过control_research_task停止父任务；不删除已有成果。", "properties": {"taskId": {"type": "string", "description": "本人当前项目独立计算任务UUID", "format": "uuid"}}, "required": ["taskId"], "additionalProperties": false}
+    AgentToolListResearchTasksArguments: {"type": "object", "description": "分页查找本人当前项目科研任务摘要；query、offset、limit可选。不读取原资料或中间结果。", "properties": {"query": {"type": "string", "description": "本人当前项目名称关键词", "maxLength": 120}, "offset": {"type": "integer", "minimum": 0, "description": "从0开始的分页位置"}, "limit": {"type": "integer", "minimum": 1, "description": "分页条数", "maximum": 20}}, "required": [], "additionalProperties": false}
+    AgentToolGetResearchTaskArguments: {"type": "object", "description": "读取本人科研任务真实状态和controlEpoch；workflowId为UUID，不返回原资料、中间计算或批准内容。", "properties": {"workflowId": {"type": "string", "description": "本人当前项目科研任务UUID", "format": "uuid"}}, "required": ["workflowId"], "additionalProperties": false}
+    AgentToolControlResearchTaskArguments: {"type": "object", "description": "按get_research_task的controlEpoch执行pause/resume/cancel，参数workflowId、action、expectedControlEpoch。恢复沿用原计划与人工门禁，绝不批准科研结果；新用户决定后旧控制请求拒绝。", "properties": {"workflowId": {"type": "string", "description": "本人当前项目科研任务UUID", "format": "uuid"}, "action": {"type": "string", "description": "生命周期操作，不含批准、跳过或返修决定", "enum": ["pause", "resume", "cancel"]}, "expectedControlEpoch": {"type": "integer", "minimum": 0, "description": "最后读取的controlEpoch，只随明确控制或人工决定变化，不随普通进度变化"}}, "required": ["workflowId", "action", "expectedControlEpoch"], "additionalProperties": false}
+
+    AgentToolCancelExportTaskArguments: {"type": "object", "description": "仅停止本人当前项目导出，不读取源数据或删除已完成文件", "properties": {"jobId": {"type": "string", "pattern": "^[a-f0-9]{32}$", "description": "真实导出任务编号"}}, "required": ["jobId"], "additionalProperties": false}
+
+    ExportCancellation: {"type": "object", "description": "导出取消请求及实际状态；当前I/O到保存点后停止", "properties": {"jobId": {"type": "string", "description": "真实任务编号"}, "status": {"type": "string", "description": "真实当前状态"}, "cancelRequested": {"type": "boolean", "description": "是否已接受取消请求"}, "detail": {"type": "string", "description": "处理说明"}}, "required": ["jobId", "status", "cancelRequested", "detail"], "additionalProperties": false}
+
+    JobInputReference: {"type": "object", "description": "导出来源标识；空对象表示客户端自带GeoJSON，不含服务端原始来源", "properties": {"resourceId": {"type": "integer", "minimum": 1, "description": "原资料编号"}, "layerId": {"type": "integer", "minimum": 1, "description": "图层编号"}, "datasetId": {"type": "integer", "minimum": 1, "description": "栅格数据集编号"}}, "additionalProperties": false}
 
 x-agent-tools:
   list_business_flows:
@@ -23028,5 +22989,184 @@ x-agent-tools:
     completion: 以真实返回对象、任务状态及质量/入库状态核对；受理不等于完成
     limitations: 仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件
     implementation: internal_service
+    requiredPermissions: []
+    anyPermissions: []
+  list_map_workspaces:
+    version: 1.0.0
+    inputSchema:
+      $ref: '#/components/schemas/AgentToolListMapWorkspacesArguments'
+    operationIds:
+    - listCatalogWorkspaces
+    effect: read
+    risk: low
+    approval: none
+    idempotency: 导出和控制按运行、真实对象、版本及规范参数生成稳定标识；相同请求返回真实回执，修改使用CAS，原结果不覆盖
+    retry: 权限、参数、质量及版本冲突不盲目重试；临时忙有限退避；导出失败/过期须明确retryOfJobId
+    completion: 以真实对象修订和任务状态判断；导出须ready、artifactAvailable及实际下载入口均有效
+    limitations: 本人及唯一当前项目；工程1至5层，原件只读、样式仅本工程；每运行最多3份导出；取消不删除已有成果，恢复不批准科研结果
+    implementation: shared_service
+    requiredPermissions:
+    - catalog.view_workspacescene
+    anyPermissions: []
+  get_map_workspace:
+    version: 1.0.0
+    inputSchema:
+      $ref: '#/components/schemas/AgentToolGetMapWorkspaceArguments'
+    operationIds:
+    - getCatalogWorkspace
+    effect: read
+    risk: low
+    approval: none
+    idempotency: 导出和控制按运行、真实对象、版本及规范参数生成稳定标识；相同请求返回真实回执，修改使用CAS，原结果不覆盖
+    retry: 权限、参数、质量及版本冲突不盲目重试；临时忙有限退避；导出失败/过期须明确retryOfJobId
+    completion: 以真实对象修订和任务状态判断；导出须ready、artifactAvailable及实际下载入口均有效
+    limitations: 本人及唯一当前项目；工程1至5层，原件只读、样式仅本工程；每运行最多3份导出；取消不删除已有成果，恢复不批准科研结果
+    implementation: shared_service
+    requiredPermissions:
+    - catalog.view_workspacescene
+    anyPermissions: []
+  update_map_workspace:
+    version: 1.0.0
+    inputSchema:
+      $ref: '#/components/schemas/AgentToolUpdateMapWorkspaceArguments'
+    operationIds:
+    - updateCatalogWorkspace
+    effect: draft
+    risk: medium
+    approval: none
+    idempotency: 导出和控制按运行、真实对象、版本及规范参数生成稳定标识；相同请求返回真实回执，修改使用CAS，原结果不覆盖
+    retry: 权限、参数、质量及版本冲突不盲目重试；临时忙有限退避；导出失败/过期须明确retryOfJobId
+    completion: 以真实对象修订和任务状态判断；导出须ready、artifactAvailable及实际下载入口均有效
+    limitations: 本人及唯一当前项目；工程1至5层，原件只读、样式仅本工程；每运行最多3份导出；取消不删除已有成果，恢复不批准科研结果
+    implementation: shared_service
+    requiredPermissions:
+    - catalog.view_workspacescene
+    - catalog.change_workspacescene
+    anyPermissions: []
+  export_map_workspace:
+    version: 1.0.0
+    inputSchema:
+      $ref: '#/components/schemas/AgentToolExportMapWorkspaceArguments'
+    operationIds:
+    - exportLayersAsync
+    effect: export
+    risk: medium
+    approval: authorized_scope
+    idempotency: 导出和控制按运行、真实对象、版本及规范参数生成稳定标识；相同请求返回真实回执，修改使用CAS，原结果不覆盖
+    retry: 权限、参数、质量及版本冲突不盲目重试；临时忙有限退避；导出失败/过期须明确retryOfJobId
+    completion: 以真实对象修订和任务状态判断；导出须ready、artifactAvailable及实际下载入口均有效
+    limitations: 本人及唯一当前项目；工程1至5层，原件只读、样式仅本工程；每运行最多3份导出；取消不删除已有成果，恢复不批准科研结果；每份矢量最多5000要素，GeoJSON准备总量10MiB，原始栅格及依赖总量512MiB；读取和编码在现有重任务队列中执行。
+    implementation: shared_service
+    requiredPermissions:
+    - catalog.view_workspacescene
+    - catalog.export_dataresource
+    anyPermissions: []
+  get_export_task:
+    version: 1.0.0
+    inputSchema:
+      $ref: '#/components/schemas/AgentToolGetExportTaskArguments'
+    operationIds:
+    - getJobStatus
+    - downloadExport
+    effect: read
+    risk: low
+    approval: none
+    idempotency: 导出和控制按运行、真实对象、版本及规范参数生成稳定标识；相同请求返回真实回执，修改使用CAS，原结果不覆盖
+    retry: 权限、参数、质量及版本冲突不盲目重试；临时忙有限退避；导出失败/过期须明确retryOfJobId
+    completion: 以真实对象修订和任务状态判断；导出须ready、artifactAvailable及实际下载入口均有效
+    limitations: 本人及唯一当前项目；工程1至5层，原件只读、样式仅本工程；每运行最多3份导出；取消不删除已有成果，恢复不批准科研结果
+    implementation: shared_service
+    requiredPermissions:
+    - catalog.view_workspacescene
+    - catalog.export_dataresource
+    anyPermissions: []
+  cancel_compute_task:
+    version: 1.0.0
+    inputSchema:
+      $ref: '#/components/schemas/AgentToolCancelComputeTaskArguments'
+    operationIds:
+    - actComputeTask
+    effect: control
+    risk: medium
+    approval: authorized_scope
+    idempotency: 导出和控制按运行、真实对象、版本及规范参数生成稳定标识；相同请求返回真实回执，修改使用CAS，原结果不覆盖
+    retry: 权限、参数、质量及版本冲突不盲目重试；临时忙有限退避；导出失败/过期须明确retryOfJobId
+    completion: 以真实对象修订和任务状态判断；导出须ready、artifactAvailable及实际下载入口均有效
+    limitations: 本人及唯一当前项目；工程1至5层，原件只读、样式仅本工程；每运行最多3份导出；取消不删除已有成果，恢复不批准科研结果
+    implementation: shared_service
+    requiredPermissions:
+    - compute.cancel_own_task
+    anyPermissions:
+    - compute.view_own_task
+    - compute.manage_tasks
+  list_research_tasks:
+    version: 1.0.0
+    inputSchema:
+      $ref: '#/components/schemas/AgentToolListResearchTasksArguments'
+    operationIds:
+    - listAgentWorkflows
+    - listBusinessFlowRuns
+    effect: read
+    risk: low
+    approval: none
+    idempotency: 导出和控制按运行、真实对象、版本及规范参数生成稳定标识；相同请求返回真实回执，修改使用CAS，原结果不覆盖
+    retry: 权限、参数、质量及版本冲突不盲目重试；临时忙有限退避；导出失败/过期须明确retryOfJobId
+    completion: 以真实对象修订和任务状态判断；导出须ready、artifactAvailable及实际下载入口均有效
+    limitations: 本人及唯一当前项目；工程1至5层，原件只读、样式仅本工程；每运行最多3份导出；取消不删除已有成果，恢复不批准科研结果
+    implementation: shared_service
+    requiredPermissions: []
+    anyPermissions: []
+  get_research_task:
+    version: 1.0.0
+    inputSchema:
+      $ref: '#/components/schemas/AgentToolGetResearchTaskArguments'
+    operationIds:
+    - getAgentWorkflow
+    - getBusinessFlowRun
+    effect: read
+    risk: low
+    approval: none
+    idempotency: 导出和控制按运行、真实对象、版本及规范参数生成稳定标识；相同请求返回真实回执，修改使用CAS，原结果不覆盖
+    retry: 权限、参数、质量及版本冲突不盲目重试；临时忙有限退避；导出失败/过期须明确retryOfJobId
+    completion: 以真实对象修订和任务状态判断；导出须ready、artifactAvailable及实际下载入口均有效
+    limitations: 本人及唯一当前项目；工程1至5层，原件只读、样式仅本工程；每运行最多3份导出；取消不删除已有成果，恢复不批准科研结果
+    implementation: shared_service
+    requiredPermissions: []
+    anyPermissions: []
+  control_research_task:
+    version: 1.0.0
+    inputSchema:
+      $ref: '#/components/schemas/AgentToolControlResearchTaskArguments'
+    operationIds:
+    - pauseAgentWorkflow
+    - resumeAgentWorkflow
+    - cancelAgentWorkflow
+    - pauseBusinessFlow
+    - resumeBusinessFlow
+    - cancelBusinessFlow
+    effect: control
+    risk: medium
+    approval: authorized_scope
+    idempotency: 导出和控制按运行、真实对象、版本及规范参数生成稳定标识；相同请求返回真实回执，修改使用CAS，原结果不覆盖
+    retry: 权限、参数、质量及版本冲突不盲目重试；临时忙有限退避；导出失败/过期须明确retryOfJobId
+    completion: 以真实对象修订和任务状态判断；导出须ready、artifactAvailable及实际下载入口均有效
+    limitations: 本人及唯一当前项目；工程1至5层，原件只读、样式仅本工程；每运行最多3份导出；取消不删除已有成果，恢复不批准科研结果
+    implementation: shared_service
+    requiredPermissions: []
+    anyPermissions: []
+  cancel_export_task:
+    version: 1.0.0
+    inputSchema:
+      $ref: '#/components/schemas/AgentToolCancelExportTaskArguments'
+    operationIds:
+    - cancelExport
+    effect: control
+    risk: medium
+    approval: authorized_scope
+    idempotency: 同一任务重复取消不会创建新任务；已完成的文件保持原状态
+    retry: 权限或不存在不盲目重试；取消按真实保存点完成
+    completion: cancelRequested是受理状态，真实终态以status为准
+    limitations: 本人当前项目，取消不需要重新获得源资料读取权限，不删除原件或已完成文件
+    implementation: shared_service
     requiredPermissions: []
     anyPermissions: []

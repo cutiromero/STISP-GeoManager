@@ -106,6 +106,79 @@
       "risk": "low",
       "version": "1.0.1"
     },
+    "cancel_compute_task": {
+      "anyPermissions": [
+        "compute.view_own_task",
+        "compute.manage_tasks"
+      ],
+      "approval": "authorized_scope",
+      "capability": "task_control",
+      "completion": "以真实对象修订和任务状态判断；导出须ready、artifactAvailable及实际下载入口均有效",
+      "description": "停止本人当前项目的独立计算任务，taskId为真实UUID。科研任务调度的子计算须通过control_research_task停止父任务；不删除已有成果。",
+      "effect": "control",
+      "idempotency": "导出和控制按运行、真实对象、版本及规范参数生成稳定标识；相同请求返回真实回执，修改使用CAS，原结果不覆盖",
+      "implementation": "shared_service",
+      "inputSchema": {
+        "additionalProperties": false,
+        "description": "停止本人当前项目的独立计算任务，taskId为真实UUID。科研任务调度的子计算须通过control_research_task停止父任务；不删除已有成果。",
+        "properties": {
+          "taskId": {
+            "description": "本人当前项目独立计算任务UUID",
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "taskId"
+        ],
+        "type": "object"
+      },
+      "limitations": "本人及唯一当前项目；工程1至5层，原件只读、样式仅本工程；每运行最多3份导出；取消不删除已有成果，恢复不批准科研结果",
+      "name": "cancel_compute_task",
+      "operationIds": [
+        "actComputeTask"
+      ],
+      "requiredPermissions": [
+        "compute.cancel_own_task"
+      ],
+      "retry": "权限、参数、质量及版本冲突不盲目重试；临时忙有限退避；导出失败/过期须明确retryOfJobId",
+      "risk": "medium",
+      "version": "1.0.0"
+    },
+    "cancel_export_task": {
+      "anyPermissions": [],
+      "approval": "authorized_scope",
+      "capability": "task_control",
+      "completion": "cancelRequested是受理状态，真实终态以status为准",
+      "description": "请求停止本人当前项目的导出任务，jobId须为真实编号。当前I/O到保存点后结束，取消不删除已完成文件或原始资料。",
+      "effect": "control",
+      "idempotency": "同一任务重复取消不会创建新任务；已完成的文件保持原状态",
+      "implementation": "shared_service",
+      "inputSchema": {
+        "additionalProperties": false,
+        "description": "仅停止本人当前项目导出，不读取源数据或删除已完成文件",
+        "properties": {
+          "jobId": {
+            "description": "真实导出任务编号",
+            "pattern": "^[a-f0-9]{32}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "jobId"
+        ],
+        "type": "object"
+      },
+      "limitations": "本人当前项目，取消不需要重新获得源资料读取权限，不删除原件或已完成文件",
+      "name": "cancel_export_task",
+      "operationIds": [
+        "cancelExport"
+      ],
+      "requiredPermissions": [],
+      "retry": "权限或不存在不盲目重试；取消按真实保存点完成",
+      "risk": "medium",
+      "version": "1.0.0"
+    },
     "check_knowledge_constraints": {
       "anyPermissions": [],
       "approval": "none",
@@ -190,6 +263,61 @@
       "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
       "risk": "low",
       "version": "1.0.1"
+    },
+    "control_research_task": {
+      "anyPermissions": [],
+      "approval": "authorized_scope",
+      "capability": "task_control",
+      "completion": "以真实对象修订和任务状态判断；导出须ready、artifactAvailable及实际下载入口均有效",
+      "description": "按get_research_task的controlEpoch执行pause/resume/cancel，参数workflowId、action、expectedControlEpoch。恢复沿用原计划与人工门禁，绝不批准科研结果；新用户决定后旧控制请求拒绝。",
+      "effect": "control",
+      "idempotency": "导出和控制按运行、真实对象、版本及规范参数生成稳定标识；相同请求返回真实回执，修改使用CAS，原结果不覆盖",
+      "implementation": "shared_service",
+      "inputSchema": {
+        "additionalProperties": false,
+        "description": "按get_research_task的controlEpoch执行pause/resume/cancel，参数workflowId、action、expectedControlEpoch。恢复沿用原计划与人工门禁，绝不批准科研结果；新用户决定后旧控制请求拒绝。",
+        "properties": {
+          "action": {
+            "description": "生命周期操作，不含批准、跳过或返修决定",
+            "enum": [
+              "pause",
+              "resume",
+              "cancel"
+            ],
+            "type": "string"
+          },
+          "expectedControlEpoch": {
+            "description": "最后读取的controlEpoch，只随明确控制或人工决定变化，不随普通进度变化",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "workflowId": {
+            "description": "本人当前项目科研任务UUID",
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workflowId",
+          "action",
+          "expectedControlEpoch"
+        ],
+        "type": "object"
+      },
+      "limitations": "本人及唯一当前项目；工程1至5层，原件只读、样式仅本工程；每运行最多3份导出；取消不删除已有成果，恢复不批准科研结果",
+      "name": "control_research_task",
+      "operationIds": [
+        "pauseAgentWorkflow",
+        "resumeAgentWorkflow",
+        "cancelAgentWorkflow",
+        "pauseBusinessFlow",
+        "resumeBusinessFlow",
+        "cancelBusinessFlow"
+      ],
+      "requiredPermissions": [],
+      "retry": "权限、参数、质量及版本冲突不盲目重试；临时忙有限退避；导出失败/过期须明确retryOfJobId",
+      "risk": "medium",
+      "version": "1.0.0"
     },
     "describe_resource": {
       "anyPermissions": [],
@@ -294,6 +422,113 @@
       "risk": "medium",
       "version": "1.0.1"
     },
+    "export_map_workspace": {
+      "anyPermissions": [],
+      "approval": "authorized_scope",
+      "capability": "export_data",
+      "completion": "以真实对象修订和任务状态判断；导出须ready、artifactAvailable及实际下载入口均有效",
+      "description": "异步导出本人1至5层工程，必须先get_map_workspace并复制expectedUpdatedAt和expectedSources；expectedSources复制sourceVersions的resourceId/versionKey。默认仅可见图层；栅格原坐标系，矢量按既有协议为WGS84。格式geojson或shapefile。受理不是完成；get_export_task查询。每轮最多3份导出；失败或过期明确retryOfJobId才重试。",
+      "effect": "export",
+      "idempotency": "导出和控制按运行、真实对象、版本及规范参数生成稳定标识；相同请求返回真实回执，修改使用CAS，原结果不覆盖",
+      "implementation": "shared_service",
+      "inputSchema": {
+        "additionalProperties": false,
+        "description": "异步导出本人1至5层工程，必须先get_map_workspace并复制expectedUpdatedAt和expectedSources；expectedSources复制sourceVersions的resourceId/versionKey。默认仅可见图层、原坐标系，格式geojson或shapefile。受理不是完成；get_export_task查询。每轮最多3份导出；失败或过期明确retryOfJobId才重试。",
+        "properties": {
+          "epsg": {
+            "description": "重投影目标EPSG，仅reproject=true生效",
+            "maximum": 999999,
+            "minimum": 1024,
+            "type": "integer"
+          },
+          "expectedSources": {
+            "description": "复制get_map_workspace的sourceVersions，版本以resourceId/versionKey为准",
+            "items": {
+              "additionalProperties": false,
+              "description": "资料版本：versionKey是权威不透明标识；时间仅用于显示，不接受模型自行推断",
+              "properties": {
+                "available": {
+                  "description": "原始来源是否可读",
+                  "type": "boolean"
+                },
+                "resourceId": {
+                  "description": "当前授权资料编号",
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "updatedAt": {
+                  "description": "真实资料修订",
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "versionKey": {
+                  "description": "服务端计算的源文件及依赖身份摘要",
+                  "pattern": "^[a-f0-9]{64}$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "resourceId",
+                "versionKey"
+              ],
+              "type": "object"
+            },
+            "maxItems": 5,
+            "minItems": 1,
+            "type": "array"
+          },
+          "expectedUpdatedAt": {
+            "description": "最后读取的对象修订，须原样携带；不覆盖较新修改",
+            "format": "date-time",
+            "type": "string"
+          },
+          "format": {
+            "description": "矢量文件格式；栅格保持GeoTIFF",
+            "enum": [
+              "geojson",
+              "shapefile"
+            ],
+            "type": "string"
+          },
+          "onlyVisible": {
+            "description": "默认true，仅导出工程中有效可见图层",
+            "type": "boolean"
+          },
+          "reproject": {
+            "description": "默认false：栅格保留原生坐标，矢量按原协议WGS84；true时按epsg重投影",
+            "type": "boolean"
+          },
+          "retryOfJobId": {
+            "description": "真实导出任务的32位十六进制编号",
+            "pattern": "^[a-f0-9]{32}$",
+            "type": "string"
+          },
+          "workspaceId": {
+            "description": "本人当前项目的真实个人工程编号",
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "workspaceId",
+          "expectedUpdatedAt",
+          "expectedSources"
+        ],
+        "type": "object"
+      },
+      "limitations": "本人及唯一当前项目；工程1至5层，原件只读、样式仅本工程；每运行最多3份导出；取消不删除已有成果，恢复不批准科研结果；每份矢量最多5000要素，GeoJSON准备总量10MiB，原始栅格及依赖总量512MiB；读取和编码在现有重任务队列中执行。",
+      "name": "export_map_workspace",
+      "operationIds": [
+        "exportLayersAsync"
+      ],
+      "requiredPermissions": [
+        "catalog.view_workspacescene",
+        "catalog.export_dataresource"
+      ],
+      "retry": "权限、参数、质量及版本冲突不盲目重试；临时忙有限退避；导出失败/过期须明确retryOfJobId",
+      "risk": "medium",
+      "version": "1.0.0"
+    },
     "get_compute_task": {
       "anyPermissions": [
         "compute.view_own_task",
@@ -332,6 +567,44 @@
       "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
       "risk": "low",
       "version": "1.0.1"
+    },
+    "get_export_task": {
+      "anyPermissions": [],
+      "approval": "none",
+      "capability": "export_data",
+      "completion": "以真实对象修订和任务状态判断；导出须ready、artifactAvailable及实际下载入口均有效",
+      "description": "按真实jobId查询本人已登记的平台工程导出状态；只有ready且artifactAvailable、downloadUrl实际存在才表示可下载。不返回文件路径或原始数据。",
+      "effect": "read",
+      "idempotency": "导出和控制按运行、真实对象、版本及规范参数生成稳定标识；相同请求返回真实回执，修改使用CAS，原结果不覆盖",
+      "implementation": "shared_service",
+      "inputSchema": {
+        "additionalProperties": false,
+        "description": "按真实jobId查询本人已登记的平台工程导出状态；只有ready且artifactAvailable、downloadUrl实际存在才表示可下载。不返回文件路径或原始数据。",
+        "properties": {
+          "jobId": {
+            "description": "真实导出任务的32位十六进制编号",
+            "pattern": "^[a-f0-9]{32}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "jobId"
+        ],
+        "type": "object"
+      },
+      "limitations": "本人及唯一当前项目；工程1至5层，原件只读、样式仅本工程；每运行最多3份导出；取消不删除已有成果，恢复不批准科研结果",
+      "name": "get_export_task",
+      "operationIds": [
+        "getJobStatus",
+        "downloadExport"
+      ],
+      "requiredPermissions": [
+        "catalog.view_workspacescene",
+        "catalog.export_dataresource"
+      ],
+      "retry": "权限、参数、质量及版本冲突不盲目重试；临时忙有限退避；导出失败/过期须明确retryOfJobId",
+      "risk": "low",
+      "version": "1.0.0"
     },
     "get_map_data_profile": {
       "anyPermissions": [],
@@ -379,6 +652,47 @@
       "risk": "low",
       "version": "1.0.1"
     },
+    "get_map_workspace": {
+      "anyPermissions": [],
+      "approval": "none",
+      "capability": "read_data",
+      "completion": "以真实对象修订和任务状态判断；导出须ready、artifactAvailable及实际下载入口均有效",
+      "description": "读取本人受控个人工程的真实图层、updatedAt和sourceVersions；workspaceId必需，layerId可选读取单层样式。后续修改复制updatedAt，导出复制sourceVersions中的resourceId/versionKey。",
+      "effect": "read",
+      "idempotency": "导出和控制按运行、真实对象、版本及规范参数生成稳定标识；相同请求返回真实回执，修改使用CAS，原结果不覆盖",
+      "implementation": "shared_service",
+      "inputSchema": {
+        "additionalProperties": false,
+        "description": "读取本人受控个人工程的真实图层、updatedAt和sourceVersions；workspaceId必需，layerId可选读取单层样式。后续修改复制updatedAt，导出复制sourceVersions中的resourceId/versionKey。",
+        "properties": {
+          "layerId": {
+            "description": "可选真实图层ID，用于按层读取完整展示样式",
+            "maxLength": 200,
+            "type": "string"
+          },
+          "workspaceId": {
+            "description": "本人当前项目的真实个人工程编号",
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "limitations": "本人及唯一当前项目；工程1至5层，原件只读、样式仅本工程；每运行最多3份导出；取消不删除已有成果，恢复不批准科研结果",
+      "name": "get_map_workspace",
+      "operationIds": [
+        "getCatalogWorkspace"
+      ],
+      "requiredPermissions": [
+        "catalog.view_workspacescene"
+      ],
+      "retry": "权限、参数、质量及版本冲突不盲目重试；临时忙有限退避；导出失败/过期须明确retryOfJobId",
+      "risk": "low",
+      "version": "1.0.0"
+    },
     "get_platform_link": {
       "anyPermissions": [],
       "approval": "none",
@@ -418,6 +732,41 @@
       "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
       "risk": "low",
       "version": "1.0.1"
+    },
+    "get_research_task": {
+      "anyPermissions": [],
+      "approval": "none",
+      "capability": "read_data",
+      "completion": "以真实对象修订和任务状态判断；导出须ready、artifactAvailable及实际下载入口均有效",
+      "description": "读取本人科研任务真实状态和controlEpoch；workflowId为UUID，不返回原资料、中间计算或批准内容。",
+      "effect": "read",
+      "idempotency": "导出和控制按运行、真实对象、版本及规范参数生成稳定标识；相同请求返回真实回执，修改使用CAS，原结果不覆盖",
+      "implementation": "shared_service",
+      "inputSchema": {
+        "additionalProperties": false,
+        "description": "读取本人科研任务真实状态和controlEpoch；workflowId为UUID，不返回原资料、中间计算或批准内容。",
+        "properties": {
+          "workflowId": {
+            "description": "本人当前项目科研任务UUID",
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workflowId"
+        ],
+        "type": "object"
+      },
+      "limitations": "本人及唯一当前项目；工程1至5层，原件只读、样式仅本工程；每运行最多3份导出；取消不删除已有成果，恢复不批准科研结果",
+      "name": "get_research_task",
+      "operationIds": [
+        "getAgentWorkflow",
+        "getBusinessFlowRun"
+      ],
+      "requiredPermissions": [],
+      "retry": "权限、参数、质量及版本冲突不盲目重试；临时忙有限退避；导出失败/过期须明确retryOfJobId",
+      "risk": "low",
+      "version": "1.0.0"
     },
     "get_system_info": {
       "anyPermissions": [],
@@ -639,6 +988,95 @@
       "risk": "low",
       "version": "1.0.1"
     },
+    "list_map_workspaces": {
+      "anyPermissions": [],
+      "approval": "none",
+      "capability": "read_data",
+      "completion": "以真实对象修订和任务状态判断；导出须ready、artifactAvailable及实际下载入口均有效",
+      "description": "分页列出本人当前项目的个人工程摘要，不读取原始数据；query、offset、limit可选。",
+      "effect": "read",
+      "idempotency": "导出和控制按运行、真实对象、版本及规范参数生成稳定标识；相同请求返回真实回执，修改使用CAS，原结果不覆盖",
+      "implementation": "shared_service",
+      "inputSchema": {
+        "additionalProperties": false,
+        "description": "分页列出本人当前项目的个人工程摘要，不读取原始数据；query、offset、limit可选。",
+        "properties": {
+          "limit": {
+            "description": "分页条数",
+            "maximum": 20,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "offset": {
+            "description": "从0开始的分页位置",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "query": {
+            "description": "本人当前项目名称关键词",
+            "maxLength": 120,
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "limitations": "本人及唯一当前项目；工程1至5层，原件只读、样式仅本工程；每运行最多3份导出；取消不删除已有成果，恢复不批准科研结果",
+      "name": "list_map_workspaces",
+      "operationIds": [
+        "listCatalogWorkspaces"
+      ],
+      "requiredPermissions": [
+        "catalog.view_workspacescene"
+      ],
+      "retry": "权限、参数、质量及版本冲突不盲目重试；临时忙有限退避；导出失败/过期须明确retryOfJobId",
+      "risk": "low",
+      "version": "1.0.0"
+    },
+    "list_research_tasks": {
+      "anyPermissions": [],
+      "approval": "none",
+      "capability": "read_data",
+      "completion": "以真实对象修订和任务状态判断；导出须ready、artifactAvailable及实际下载入口均有效",
+      "description": "分页查找本人当前项目科研任务摘要；query、offset、limit可选。不读取原资料或中间结果。",
+      "effect": "read",
+      "idempotency": "导出和控制按运行、真实对象、版本及规范参数生成稳定标识；相同请求返回真实回执，修改使用CAS，原结果不覆盖",
+      "implementation": "shared_service",
+      "inputSchema": {
+        "additionalProperties": false,
+        "description": "分页查找本人当前项目科研任务摘要；query、offset、limit可选。不读取原资料或中间结果。",
+        "properties": {
+          "limit": {
+            "description": "分页条数",
+            "maximum": 20,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "offset": {
+            "description": "从0开始的分页位置",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "query": {
+            "description": "本人当前项目名称关键词",
+            "maxLength": 120,
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "limitations": "本人及唯一当前项目；工程1至5层，原件只读、样式仅本工程；每运行最多3份导出；取消不删除已有成果，恢复不批准科研结果",
+      "name": "list_research_tasks",
+      "operationIds": [
+        "listAgentWorkflows",
+        "listBusinessFlowRuns"
+      ],
+      "requiredPermissions": [],
+      "retry": "权限、参数、质量及版本冲突不盲目重试；临时忙有限退避；导出失败/过期须明确retryOfJobId",
+      "risk": "low",
+      "version": "1.0.0"
+    },
     "prepare_business_flow_inputs": {
       "anyPermissions": [],
       "approval": "none",
@@ -745,8 +1183,84 @@
           "styles": {
             "description": "仅用于个人地图工程的展示样式，不写入原始资料",
             "items": {
-              "additionalProperties": true,
-              "description": "结构化展示配置",
+              "additionalProperties": false,
+              "description": "只修改个人工程展示，原始数据和共享默认样式不变",
+              "properties": {
+                "band": {
+                  "description": "从1开始的波段",
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "classes": {
+                  "description": "完整真实类别及展示颜色，不可遗漏、重名或覆盖锁定标准色",
+                  "items": {
+                    "additionalProperties": false,
+                    "description": "单一类别",
+                    "properties": {
+                      "color": {
+                        "description": "十六进制颜色",
+                        "pattern": "^#[a-fA-F0-9]{6}(?:[a-fA-F0-9]{2})?$",
+                        "type": "string"
+                      },
+                      "label": {
+                        "description": "显示标签",
+                        "maxLength": 80,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "value": {
+                        "description": "真实类别值",
+                        "type": [
+                          "string",
+                          "integer"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "value",
+                      "color"
+                    ],
+                    "type": "object"
+                  },
+                  "maxItems": 96,
+                  "minItems": 1,
+                  "type": "array"
+                },
+                "color": {
+                  "description": "十六进制颜色",
+                  "pattern": "^#[a-fA-F0-9]{6}(?:[a-fA-F0-9]{2})?$",
+                  "type": "string"
+                },
+                "field": {
+                  "description": "真实分类字段",
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                "mode": {
+                  "description": "展示模式",
+                  "enum": [
+                    "default",
+                    "single",
+                    "unique",
+                    "reference"
+                  ],
+                  "type": "string"
+                },
+                "opacity": {
+                  "description": "显示不透明度百分比",
+                  "maximum": 100,
+                  "minimum": 0,
+                  "type": "number"
+                },
+                "resourceId": {
+                  "description": "工程中的真实资料编号",
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "resourceId"
+              ],
               "type": "object"
             },
             "maxItems": 5,
@@ -1383,6 +1897,155 @@
       "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
       "risk": "low",
       "version": "1.0.1"
+    },
+    "update_map_workspace": {
+      "anyPermissions": [],
+      "approval": "none",
+      "capability": "map_display",
+      "completion": "以真实对象修订和任务状态判断；导出须ready、artifactAvailable及实际下载入口均有效",
+      "description": "按最后读取expectedUpdatedAt更新本人个人工程；可改name、description、visibility节点ID到布尔值、styles展示样式。只改工程引用与显示，不改资料原件、默认样式或共享范围。",
+      "effect": "draft",
+      "idempotency": "导出和控制按运行、真实对象、版本及规范参数生成稳定标识；相同请求返回真实回执，修改使用CAS，原结果不覆盖",
+      "implementation": "shared_service",
+      "inputSchema": {
+        "additionalProperties": false,
+        "description": "按最后读取expectedUpdatedAt更新本人个人工程；可改name、description、visibility节点ID到布尔值、styles展示样式。只改工程引用与显示，不改资料原件、默认样式或共享范围。",
+        "properties": {
+          "description": {
+            "description": "工程说明",
+            "maxLength": 2000,
+            "type": "string"
+          },
+          "expectedUpdatedAt": {
+            "description": "最后读取的对象修订，须原样携带；不覆盖较新修改",
+            "format": "date-time",
+            "type": "string"
+          },
+          "name": {
+            "description": "新工程名",
+            "maxLength": 120,
+            "minLength": 1,
+            "type": "string"
+          },
+          "styles": {
+            "description": "当前工程资料的展示样式",
+            "items": {
+              "additionalProperties": false,
+              "description": "只修改个人工程展示，原始数据和共享默认样式不变",
+              "properties": {
+                "band": {
+                  "description": "从1开始的波段",
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "classes": {
+                  "description": "完整真实类别及展示颜色，不可遗漏、重名或覆盖锁定标准色",
+                  "items": {
+                    "additionalProperties": false,
+                    "description": "单一类别",
+                    "properties": {
+                      "color": {
+                        "description": "十六进制颜色",
+                        "pattern": "^#[a-fA-F0-9]{6}(?:[a-fA-F0-9]{2})?$",
+                        "type": "string"
+                      },
+                      "label": {
+                        "description": "显示标签",
+                        "maxLength": 80,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "value": {
+                        "description": "真实类别值",
+                        "type": [
+                          "string",
+                          "integer"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "value",
+                      "color"
+                    ],
+                    "type": "object"
+                  },
+                  "maxItems": 96,
+                  "minItems": 1,
+                  "type": "array"
+                },
+                "color": {
+                  "description": "十六进制颜色",
+                  "pattern": "^#[a-fA-F0-9]{6}(?:[a-fA-F0-9]{2})?$",
+                  "type": "string"
+                },
+                "field": {
+                  "description": "真实分类字段",
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                "mode": {
+                  "description": "展示模式",
+                  "enum": [
+                    "default",
+                    "single",
+                    "unique",
+                    "reference"
+                  ],
+                  "type": "string"
+                },
+                "opacity": {
+                  "description": "显示不透明度百分比",
+                  "maximum": 100,
+                  "minimum": 0,
+                  "type": "number"
+                },
+                "resourceId": {
+                  "description": "工程中的真实资料编号",
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "resourceId"
+              ],
+              "type": "object"
+            },
+            "maxItems": 5,
+            "type": "array"
+          },
+          "visibility": {
+            "additionalProperties": {
+              "description": "可见性",
+              "type": "boolean"
+            },
+            "description": "工程中实际分组或图层ID到可见性的映射，不添加新资料",
+            "maxProperties": 20,
+            "type": "object"
+          },
+          "workspaceId": {
+            "description": "本人当前项目的真实个人工程编号",
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "workspaceId",
+          "expectedUpdatedAt"
+        ],
+        "type": "object"
+      },
+      "limitations": "本人及唯一当前项目；工程1至5层，原件只读、样式仅本工程；每运行最多3份导出；取消不删除已有成果，恢复不批准科研结果",
+      "name": "update_map_workspace",
+      "operationIds": [
+        "updateCatalogWorkspace"
+      ],
+      "requiredPermissions": [
+        "catalog.view_workspacescene",
+        "catalog.change_workspacescene"
+      ],
+      "retry": "权限、参数、质量及版本冲突不盲目重试；临时忙有限退避；导出失败/过期须明确retryOfJobId",
+      "risk": "medium",
+      "version": "1.0.0"
     }
   }
 }

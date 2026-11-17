@@ -21,6 +21,16 @@ const names: Record<string, string> = {
   get_platform_link: "准备平台入口",
   present_resource_catalog: "整理资源清单",
   summarize_resource_catalog: "统计项目资源",
+  list_map_workspaces: "查找个人工程",
+  get_map_workspace: "核对工程与资料版本",
+  update_map_workspace: "更新个人工程",
+  export_map_workspace: "提交工程数据导出",
+  get_export_task: "读取导出状态",
+  cancel_export_task: "停止文件导出",
+  cancel_compute_task: "停止独立计算任务",
+  list_research_tasks: "查找本人科研任务",
+  get_research_task: "读取科研任务状态",
+  control_research_task: "处理科研任务暂停与停止",
 };
 
 export default function RunProcess({

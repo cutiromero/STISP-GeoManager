@@ -166,6 +166,11 @@ urlpatterns = [
     ),
     path("catalog/export/", views.export_loaded_layers, name="catalog-export"),
     path(
+        "catalog/export/jobs/<str:job_id>/cancel/",
+        views.export_job_cancel,
+        name="catalog-export-cancel",
+    ),
+    path(
         "catalog/export/async/",
         views.export_loaded_layers_async,
         name="catalog-export-async",

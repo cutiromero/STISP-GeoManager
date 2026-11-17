@@ -29,6 +29,7 @@ from .state import (
     digest,
     emit,
     initial_state,
+    persist,
     state,
     TERMINAL,
 )
@@ -954,7 +955,11 @@ def decide_flow(user, workflow, value):
         return current
 
 
-def control_flow(user, workflow, action):
+def control_flow(
+    user, workflow, action, *, actor_kind="human", expected_epoch=None, request_id=None
+):
+    if actor_kind not in {"human", "agent"}:
+        raise ValidationError("控制来源角色无效")
     if action == "cancel":
         if (
             workflow.owner_id != user.pk
@@ -969,9 +974,22 @@ def control_flow(user, workflow, action):
     if workflow.workflow_type != "business_flow":
         from .legacy import legacy_control
 
-        return legacy_control(user, workflow, action)
+        return legacy_control(
+            user,
+            workflow,
+            action,
+            actor_kind=actor_kind,
+            expected_epoch=expected_epoch,
+            request_id=request_id,
+        )
     with transaction.atomic():
         current = locked_workflow(workflow.pk)
+        if (
+            expected_epoch is not None
+            and current.policy_snapshot.get("businessFlowControlEpoch", 0)
+            != expected_epoch
+        ):
+            raise ComputeError("任务有更新的用户决定，请重新读取后操作", 409)
         if (
             current.status in TERMINAL
             or action == "pause"
@@ -1007,6 +1025,15 @@ def control_flow(user, workflow, action):
         current.policy_snapshot["businessFlowControlEpoch"] = (
             current.policy_snapshot.get("businessFlowControlEpoch", 0) + 1
         )
+        event = emit(
+            current,
+            actor_kind,
+            current.current_step,
+            action,
+            current.detail,
+            data={"toolCallId": str(request_id)} if request_id else None,
+            save=False,
+        )
         current.save(
             update_fields=[
                 "status",
@@ -1020,7 +1047,7 @@ def control_flow(user, workflow, action):
                 "updated_at",
             ]
         )
-        emit(current, "human", current.current_step, action, current.detail)
+        persist(current, event=event)
     if action == "cancel":
         from .engine import cancel_tasks
 
