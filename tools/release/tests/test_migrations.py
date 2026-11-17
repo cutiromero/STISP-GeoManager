@@ -194,3 +194,10 @@ def test_migration_outside_known_app_layout_is_rejected():
         "backend/unknown/migrations/0002.py", source(NEW_TABLE)
     )
     assert not report["allowed"]
+
+
+def test_governed_operation_migration_is_additive_and_statically_classifiable():
+    path = "backend/apps/agent/migrations/0024_governed_operation_previews.py"
+    report, _ = migrations.classify_file(path, (ROOT / path).read_text())
+    assert report["allowed"], report
+    assert report["operations"][0]["operation"] == "migrations.CreateModel"

@@ -10,7 +10,7 @@ class Migration(migrations.Migration):
     dependencies = [
         ("agent", "0023_tool_call_receipts"),
         ("projects", "0004_project_deleted_at"),
-        migrations.swappable_dependency(settings.AUTH_USER_MODEL),
+        # agent.0001 already depends on the configured user model.
     ]
 
     operations = [
