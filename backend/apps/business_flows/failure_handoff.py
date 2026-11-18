@@ -5,6 +5,7 @@ import json
 import logging
 
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.db import OperationalError
 
 from apps.agent.provider import ModelError
 from apps.agent.workflow_controls import WorkflowPaused
@@ -306,6 +307,15 @@ def handoff_exception(workflow, error):
 
     node = active_node(workflow)
     item = state(workflow)["nodes"][node["id"]]
+    if isinstance(error, OperationalError):
+        logger.error(
+            "Business flow database failure workflow=%s node=%s phase=%s sqlite_code=%s",
+            workflow.pk,
+            node["id"],
+            workflow.plan.get("phase"),
+            getattr(error.__cause__, "sqlite_errorname", None),
+            exc_info=error,
+        )
     expected = isinstance(
         error, (ComputeError, ValidationError, ModelError, PermissionDenied)
     )

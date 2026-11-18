@@ -7,7 +7,7 @@ import uuid
 import geopandas as gpd
 import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
-from shapely.geometry import LineString, box
+from shapely.geometry import LineString, Polygon, box
 
 from apps.agent.demo_workflow import confirm_demo, prepare_demo
 from apps.agent.generic_inputs import (
@@ -15,6 +15,7 @@ from apps.agent.generic_inputs import (
     faults_copy,
     lithology_copy,
     units_override,
+    working_epsg,
 )
 from apps.agent.geology_generic import heuristic_targets, utm_epsg, validate_mapping
 from apps.agent.models import AgentWorkflow, WorkflowUpload
@@ -239,6 +240,39 @@ def test_working_copies_keep_canonical_fields_and_fill_absent_inputs():
     assert clipped.geometry.iloc[0].length < 32
     empty, _ = faults_copy(None, coverage)
     assert empty.empty and list(empty.columns) == ["line_id", "geometry"]
+
+
+def test_adjacent_utm_source_preserves_shared_lithology_edges():
+    x, y = 850_000, 4_250_000
+    frame = gpd.GeoDataFrame(
+        {"name": ["unit-a", "unit-b"]},
+        geometry=[
+            box(x - 6000, y, x, y + 6000),
+            Polygon(
+                [
+                    (x, y),
+                    (x + 6000, y),
+                    (x + 6000, y + 6000),
+                    (x, y + 6000),
+                    (x, y + 3000),
+                    (x, y),
+                ]
+            ),
+        ],
+        crs=32646,
+    )
+    assert utm_epsg(frame.to_crs(4326).total_bounds) == 32647
+    reprojected = frame.to_crs(32647)
+    assert reprojected.geometry.iloc[0].boundary.intersection(
+        reprojected.geometry.iloc[1].boundary
+    ).length == 0
+    copied = lithology_copy(frame, {"name": "name"}, working_epsg(frame))
+    left, right = copied.geometry
+    assert copied.crs.to_epsg() == 32646
+    assert left.boundary.intersection(right.boundary).length == 6000
+    assert left.intersection(right).area == 0
+    assert working_epsg(frame.to_crs(4326)) == 32647
+    assert working_epsg(frame.to_crs(3857)) == 32647
 
 
 def test_unit_table_overrides_and_zone_projection():

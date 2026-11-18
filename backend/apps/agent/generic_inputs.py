@@ -40,6 +40,22 @@ def _identifiers(frame, prefix):
     return [f"{prefix}{index:05d}" for index in range(1, len(frame) + 1)]
 
 
+def working_epsg(lithology):
+    selected = utm_epsg(lithology.to_crs(4326).total_bounds)
+    source = lithology.crs.to_epsg() if lithology.crs else None
+    # Keep an existing local WGS84 UTM grid, including at a zone boundary.
+    # Transforming adjacent polygons separately can separate shared edges
+    # whose contours have different vertex densities.
+    if (
+        source is not None
+        and source // 100 == selected // 100
+        and 1 <= source % 100 <= 60
+        and abs(source - selected) <= 1
+    ):
+        return source
+    return selected
+
+
 def lithology_copy(frame, mapping, epsg):
     import geopandas as gpd
     import pandas as pd
@@ -272,8 +288,7 @@ def build_inputs(workflow, user, policy) -> None:
     }
     original = _read(source["lithology"])
     check_cancelled(workflow)
-    bounds = original.to_crs(4326).total_bounds
-    epsg = utm_epsg(bounds)
+    epsg = working_epsg(original)
     lithology = lithology_copy(original, mapping["lithology"], epsg)
     check_cancelled(workflow)
     coverage = coverage_copy(
