@@ -52,7 +52,7 @@ def output(settings, tmp_path):
         task_id=uuid.uuid4(),
         label="NDVI计算结果",
         key="ndvi",
-        task=SimpleNamespace(project_tag_id=1, status="succeeded"),
+        task=SimpleNamespace(project_tag_id=1, status="succeeded", parameters={}),
         kind="raster",
         expired=False,
         path="compute/result.tif",
@@ -446,4 +446,32 @@ def test_prospect_confidence_uses_continuous_blue_yellow_red_and_preserves_sourc
     assert metadata["colorRamp"][-1]["color"] == "#d73027ff"
     assert len(set(map(tuple, pixels.reshape(-1, 4)))) > 50
     assert pixels[..., 3].min() == 0
+    assert path.read_bytes() == original
+
+
+def test_prospect_fade_preserves_scores_nodata_and_original_warm_colors(output):
+    replace_raster(output, width=101, height=20)
+    path = source_path(output)
+    with rasterio.open(path, "r+") as dst:
+        values = np.broadcast_to(
+            np.linspace(0, 1, 101, dtype="float32"), (20, 101)
+        ).copy()
+        values[:, 85:91] = -9999
+        dst.write(values, 1)
+    output.key = "prospect_support"
+    original = path.read_bytes()
+    output.checksum = hashlib.sha256(original).hexdigest()
+    plain, _ = map_preview.ensure_map_preview(output)
+    output.task.parameters = {"support_display": "fade_low"}
+    faded, metadata = map_preview.ensure_map_preview(output)
+    plain = np.asarray(Image.open(io.BytesIO(plain)))
+    faded = np.asarray(Image.open(io.BytesIO(faded)))
+    assert metadata["colorRamp"][0]["color"].endswith("00")
+    assert metadata["colorRamp"][2]["label"] == "渐显"
+    assert faded[faded.shape[0] // 2, 3, 3] == 0
+    assert np.count_nonzero((faded[..., 3] > 0) & (faded[..., 3] < 255)) > 20
+    warm = (plain[..., 0] > 215) & (plain[..., 3] == 255)
+    assert warm.any()
+    np.testing.assert_array_equal(faded[warm], plain[warm])
+    assert not faded[..., 3][plain[..., 3] == 0].any()
     assert path.read_bytes() == original

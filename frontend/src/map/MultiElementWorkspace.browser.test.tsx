@@ -1287,7 +1287,7 @@ it("2.0仅显示修正后远景目标单图、连续色带与实际依据", asyn
   )!;
   expect(map.querySelector("section")!.offsetWidth).toBe(map.offsetWidth);
   expect(map.querySelector('[data-layer="story-focus"] path')).toBeNull();
-  expect(screen.getByText(/渐变表示圈区内的综合证据支持度/)).toBeVisible();
+  expect(screen.getByText(/渐变表示综合证据支持度/)).toBeVisible();
   expect(screen.queryByText("这些处理怎样改变调查建议")).toBeNull();
   expect(
     request.mock.calls.some(([url]) =>

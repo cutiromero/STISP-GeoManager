@@ -1241,7 +1241,7 @@ export default function MultiElementWorkspace({
               {viewMode === "outcome" && (
                 <p className="multi-tour-map-note">
                   {currentProspectsOnly
-                    ? "渐变表示圈区内的综合证据支持度；点击远景区轮廓可查看构造、蚀变和岩性依据。"
+                    ? "渐变表示综合证据支持度，轮廓标出入选远景区。点击轮廓可查看构造、蚀变和岩性依据。"
                     : "只突出实际改变的核查区；相同的核查区保持淡化。左右拖动、缩放保持同一视角。"}
                 </p>
               )}

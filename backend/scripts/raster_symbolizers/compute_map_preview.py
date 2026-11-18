@@ -24,6 +24,9 @@ from rasterio.warp import calculate_default_transform, transform, transform_boun
 MAX_SIDE = 1024
 MAX_MAP_LATITUDE = 85.051129
 BLUE_PALETTE = np.array([[219, 237, 247], [79, 149, 205], [17, 64, 124]])
+PROSPECT_PALETTE = np.array([[33, 102, 172], [255, 255, 128], [215, 48, 39]])
+PROSPECT_STYLES = {"prospect-confidence", "prospect-confidence-faded"}
+PROSPECT_FADE = (0.12, 0.34)
 
 
 class PreviewError(ValueError):
@@ -69,7 +72,7 @@ def geographic_bounds(src) -> tuple[float, float, float, float]:
     return bounds
 
 
-def colorize(data, fixed_range=None, palette=BLUE_PALETTE) -> np.ndarray:
+def colorize(data, fixed_range=None, palette=BLUE_PALETTE, *, fade=None) -> np.ndarray:
     masked = np.ma.masked_invalid(data.astype(np.float32))
     valid = ~np.ma.getmaskarray(masked)
     image = np.zeros((*masked.shape, 4), dtype=np.uint8)
@@ -91,7 +94,13 @@ def colorize(data, fixed_range=None, palette=BLUE_PALETTE) -> np.ndarray:
             [0, 0.5, 1],
             palette[:, channel],
         ).astype(np.uint8)
-    image[..., 3] = np.where(valid, 255, 0).astype(np.uint8)
+    if fade is None:
+        alpha = 255
+    else:
+        low, high = fade
+        t = np.clip((scaled - low) / (high - low), 0, 1)
+        alpha = np.rint(255 * t * t * (3 - 2 * t))
+    image[..., 3] = np.where(valid, alpha, 0).astype(np.uint8)
     return image
 
 
@@ -109,18 +118,19 @@ def render(payload: dict) -> dict:
     if (
         type(band) is not int
         or not 1 <= band <= 1024
+        or not isinstance(palette, str)
         or palette
         not in {
             "blue",
             "alteration",
             "alteration-changes",
-            "prospect-confidence",
+            *PROSPECT_STYLES,
         }
     ):
         raise PreviewError("地图预览渲染规则无效")
     fixed_range = rules.get("range")
     if fixed_range not in (
-        ([0, 1],) if palette == "prospect-confidence" else (None, [-1, 1])
+        ([0, 1],) if palette in PROSPECT_STYLES else (None, [-1, 1])
     ):
         raise PreviewError("地图预览渲染范围无效")
     table = rules.get("colorTable")
@@ -163,7 +173,7 @@ def render(payload: dict) -> dict:
                 height=height,
                 add_alpha=ColorInterp.alpha not in src.colorinterp,
                 resampling=Resampling.bilinear
-                if palette in {"blue", "prospect-confidence"}
+                if palette in {"blue", *PROSPECT_STYLES}
                 else Resampling.nearest,
                 warp_mem_limit=64,
                 warp_extras={"NUM_THREADS": "1"},
@@ -183,13 +193,12 @@ def render(payload: dict) -> dict:
                     ]
                     rgba[values.filled(0) == item["value"]] = color
                 rgba[np.ma.getmaskarray(values)] = 0
-            elif palette in {"blue", "prospect-confidence"}:
+            elif palette in {"blue", *PROSPECT_STYLES}:
                 colors = (
-                    np.array([[33, 102, 172], [255, 255, 128], [215, 48, 39]])
-                    if palette == "prospect-confidence"
-                    else BLUE_PALETTE
+                    PROSPECT_PALETTE if palette in PROSPECT_STYLES else BLUE_PALETTE
                 )
-                rgba = colorize(values, fixed_range, colors)
+                fade = PROSPECT_FADE if palette == "prospect-confidence-faded" else None
+                rgba = colorize(values, fixed_range, colors, fade=fade)
             else:
                 colors = np.array(
                     [[0, 0, 0, 0], [38, 166, 154, 210]]

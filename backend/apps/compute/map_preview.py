@@ -80,12 +80,23 @@ def _rules(output, band=1) -> dict:
                 ]
         return rules
     if output.key == "prospect_support":
+        fade = output.task.parameters.get("support_display") == "fade_low"
+        low = (
+            [
+                {"value": 0, "label": "低值透明", "color": "#2166ac00"},
+                {"value": 0.12, "label": "", "color": "#568ba100"},
+                {"value": 0.23, "label": "渐显", "color": "#87ac9780"},
+                {"value": 0.34, "label": "", "color": "#b7ce8eff"},
+            ]
+            if fade
+            else [{"value": 0, "label": "低", "color": "#2166acff"}]
+        )
         return {
             "band": 1,
-            "palette": "prospect-confidence",
+            "palette": "prospect-confidence-faded" if fade else "prospect-confidence",
             "range": [0, 1],
             "colorRamp": [
-                {"value": 0, "label": "低", "color": "#2166acff"},
+                *low,
                 {"value": 0.5, "label": "中", "color": "#ffff80ff"},
                 {"value": 1, "label": "高", "color": "#d73027ff"},
             ],
