@@ -8,6 +8,7 @@ import {
 import { App } from "antd";
 import { MemoryRouter } from "react-router-dom";
 import { expect, it, vi } from "vitest";
+import { page } from "vitest/browser";
 import { requestJson } from "../api/client";
 import type { OfficialMonitoringProduct } from "../api/generated/types.gen";
 import OfficialMonitoringDashboard from "./OfficialMonitoringDashboard";
@@ -94,4 +95,35 @@ it("轮播切换真实区域指标和已登记图层，不查询来源或执行�
   expect(vi.mocked(requestJson).mock.calls.map(([path]) => path)).toEqual([
     "/api/ecology/monitoring/official/?scene=landcover",
   ]);
+});
+
+it("完整显示全球火烧面积和单位，不裁掉有效数字", async () => {
+  await page.viewport(1400, 900);
+  const metric = item(42, "全球火烧面积", 4025291.382);
+  metric.metrics[0]!.unit = "ha";
+  vi.mocked(requestJson).mockResolvedValue({
+    scene: "wildfire",
+    items: [metric],
+  });
+  render(
+    <App>
+      <MemoryRouter>
+        <OfficialMonitoringDashboard
+          scene="wildfire"
+          navigation={null}
+          config={{
+            title: "监测",
+            source: "remote_sensing_products",
+            initialView: { center: [0, 0], zoom: 1, regionZoom: 9 },
+          }}
+        />
+      </MemoryRouter>
+    </App>,
+  );
+  const number = await screen.findByText("4,025,291.382", { exact: true });
+  await waitFor(() => expect(number).toBeVisible());
+  const width = number.getBoundingClientRect().width;
+  const card = number.closest(".official-hero-stat")!;
+  expect(width).toBeLessThanOrEqual(card.getBoundingClientRect().width);
+  expect(within(card as HTMLElement).getByText("ha")).toBeVisible();
 });

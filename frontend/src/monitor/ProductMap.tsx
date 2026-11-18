@@ -154,6 +154,7 @@ export default function ProductMap({
     }
     const identity = target ? `${target.id}:${target.updatedAt}` : "";
     if (activeResource.current !== identity) {
+      if (readOnly) resetMapError();
       if (!target || !swap.current?.hasActive()) {
         swap.current?.clear();
         for (const id of layerIds) if (map.getLayer(id)) map.removeLayer(id);

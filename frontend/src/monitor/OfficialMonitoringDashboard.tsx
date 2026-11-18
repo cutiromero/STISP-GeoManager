@@ -96,6 +96,15 @@ export default function OfficialMonitoringDashboard({
     product?.metrics.filter((metric) => metric.value != null) ?? [];
   const primary =
     measured.find((metric) => metric.key === primaryKey) ?? measured[0];
+  const primaryValue =
+    primary?.value == null
+      ? "—"
+      : new Intl.NumberFormat("zh-CN", {
+          maximumFractionDigits: 3,
+          ...(Math.abs(primary.value) >= 1e12
+            ? { notation: "scientific" as const }
+            : {}),
+        }).format(primary.value);
   const secondary = measured
     .filter((metric) => metric.key !== primary?.key)
     .slice(0, 3);
@@ -195,12 +204,14 @@ export default function OfficialMonitoringDashboard({
                 <div className="official-hero-stat">
                   <span>{primary?.label ?? "区域观测值"}</span>
                   <div>
-                    <strong>
-                      {primary?.value == null
-                        ? "—"
-                        : new Intl.NumberFormat("zh-CN", {
-                            maximumFractionDigits: 3,
-                          }).format(primary.value)}
+                    <strong
+                      style={
+                        {
+                          "--metric-length": String(primaryValue.length),
+                        } as CSSProperties
+                      }
+                    >
+                      {primaryValue}
                     </strong>
                     <small>{primary?.unit}</small>
                   </div>

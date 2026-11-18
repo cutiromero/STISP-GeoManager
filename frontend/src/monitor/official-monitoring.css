@@ -174,7 +174,7 @@
 }
 .official-hero-stat {
   position: relative;
-  overflow: hidden;
+  container-type: inline-size;
   margin-top: clamp(12px, 2.6vh, 44px);
   padding: 15px 0 12px;
   border-top: 1px solid rgba(var(--showcase-rgb), 0.26);
@@ -189,7 +189,12 @@
 }
 .official-hero-stat strong {
   font-variant-numeric: tabular-nums;
-  font-size: clamp(36px, 5.1vw, 102px);
+  font-size: clamp(
+    24px,
+    min(5.1vw, calc(155cqw / var(--metric-length, 5))),
+    102px
+  );
+  white-space: nowrap;
   font-weight: 760;
   letter-spacing: -0.045em;
   line-height: 1.2;
@@ -325,6 +330,10 @@
     min-height: clamp(300px, 54vw, 490px);
   }
   .official-hero-stat strong {
-    font-size: clamp(44px, 9vw, 82px);
+    font-size: clamp(
+      24px,
+      min(9vw, calc(155cqw / var(--metric-length, 5))),
+      82px
+    );
   }
 }
