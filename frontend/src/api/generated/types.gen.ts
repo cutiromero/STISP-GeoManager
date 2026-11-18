@@ -13608,9 +13608,9 @@ export type BusinessFlowSpec = {
     inputPreparation?: BusinessFlowInputPreparationPolicy;
     skill?: BusinessFlowSkill;
     /**
-     * main_agent运行任务级主循环；fixed仅按确定输入运行冻结算子并入库，不调用模型；省略保留旧节点方式。
+     * main_agent由一个任务级主循环选择合法目标、组织输入适配并调用工具继续；省略保留旧节点方式。
      */
-    executionMode?: 'nodes' | 'main_agent' | 'fixed';
+    executionMode?: 'nodes' | 'main_agent';
 };
 
 /**
@@ -14463,9 +14463,9 @@ export type BusinessFlowStart = {
      */
     goal: string;
     /**
-     * Agent流程必填执行模型别名；固定执行不发送此字段
+     * 执行模型别名
      */
-    model?: string;
+    model: string;
     /**
      * 独立审核请求使用的模型别名；可与执行模型相同但上下文和职责独立
      */

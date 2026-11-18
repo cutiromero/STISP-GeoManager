@@ -108,9 +108,9 @@ def register_import(record_id):
     facts = output.metadata.get("knowledgeFacts", {}).get("spartina")
     if not isinstance(facts, dict):
         raise ValidationError("模型成果缺少真实统计依据")
-    source_ids = list(
-        task.input_records.exclude(resource=None).values_list("resource_id", flat=True)
-    )
+    from .product_sources import source_resource_ids
+
+    source_ids = source_resource_ids(task)
     extraction = {
         key: facts[key]
         for key in (

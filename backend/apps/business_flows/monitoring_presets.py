@@ -1,8 +1,9 @@
-"""One-shot definitions for the three fixed scientific monitoring operators."""
+"""One-submission monitoring workflows with the shared task-level Agent."""
 
 from copy import deepcopy
 
 from . import landcover, spartina, wildfire
+from .execution_session import default_skill
 
 PRESETS = {
     landcover.CODE: (landcover.definition, "landcover-unet-infer"),
@@ -25,6 +26,13 @@ INPUT_GUIDES = {
 }
 
 
+INTERPRET = {
+    landcover.CODE: "核对本次绑定的image与已登记UNet版本；按原始影像全域、classes=all处理。只有预检通过才启动。同一任务不重复计算，实际分类及面积统计通过后交付。",
+    spartina.CODE: "核对同年3、8、12月对应端口与共同网格。预检三期共同有效全域，不要求再画框。实际分类、概率与面积统计通过后交付。",
+    wildfire.CODE: "使用已确认的product、time_index和history及实际cube。未设置四界就按数据全域；不猜测索引，不改变量与时段。核对实际面积或FRP的单位，交付原值、分级、统计和序列表，不称预警。",
+}
+
+
 def definition(code, version_id):
     build, _ = PRESETS[code]
     source = build(version_id)
@@ -35,25 +43,40 @@ def definition(code, version_id):
         next(node for node in source["nodes"] if node["id"] == "interpret")
     )
     operator.update(
-        title="执行解译并准备成果",
-        description="直接执行已发布算子，核验实际图表，按本次任务入库。",
+        title="组织解译与成果核验",
+        description="主 Agent 核对资料、调用适配工具、预检并运行已发布科学算子，检查实际图表。",
+        instruction=INTERPRET[code],
         dependsOn=[],
         inputBindings={row["key"]: {"role": row["key"]} for row in inputs},
     )
     contract = operator["contract"]
+    contract.update(
+        goal=INTERPRET[code],
+        tools=list(dict.fromkeys([*contract["tools"], "prepare_input"])),
+        importOutputs=[item["name"] for item in contract["requiredOutputs"]],
+    )
     contract.pop("sourceCoverage", None)
-    contract["importOutputs"] = [item["name"] for item in contract["requiredOutputs"]]
     finish = deepcopy(next(node for node in source["nodes"] if node["id"] == "finish"))
     finish.update(
-        title="查看任务成果",
+        title="核验交付与说明",
         dependsOn=[operator["id"]],
-        description="图表已按任务归档。可在数据中心检查成果，再明确登记为正式展示成果；未登记不会上大屏。",
+        description="核对实际成果、范围和观测单位，整理图表、实际方法与局限。",
+        instruction="依据本次已核验的算子输出说明成果、统计口径及局限，提示用户在数据中心明确登记主地图。不要冒充用户登记，不要求再次选择研究区。",
+    )
+    skill = default_skill("research_flow")
+    skill.update(
+        title="遥感监测解译组织",
+        nodeInstructions={
+            "interpret": "先查已绑定算子，沿用确认的资料和参数做真实预检。可将可修复差距交给已发布适配能力或受控prepare_input，修复后重新预检。保留原件、核心算法和已确认的时间范围。只有无法可靠判断科学含义时才提问，不循环重复同一方案。",
+            "finish": "通过实际图表、日期、单位与输入来源交付。任务入库不等于正式发布，不调用大屏或替用户登记。",
+        },
     )
     return {
         "schemaVersion": 1,
         "adapter": "research_flow",
-        "executionMode": "fixed",
-        "inputPreparation": {"allowScripts": False},
+        "executionMode": "main_agent",
+        "inputPreparation": {"allowScripts": True, "reviewScripts": True},
+        "skill": skill,
         "inputRequirements": inputs,
         "nodes": [operator, finish],
         "outputRequirements": source["outputRequirements"][:2],

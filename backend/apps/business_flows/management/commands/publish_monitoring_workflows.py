@@ -6,14 +6,14 @@ from django.db import transaction
 
 from apps.business_flows.catalog import publish_version, validate_bindings
 from apps.business_flows.definitions import normalize_definition
-from apps.business_flows.fixed_monitoring import GOALS, PRESETS, definition
+from apps.business_flows.monitoring_presets import GOALS, PRESETS, definition
 from apps.business_flows.models import BusinessFlowDefinition
 from apps.compute.models import AlgorithmVersion
 from apps.projects.context import ProjectScope, is_superadmin, project_scope
 
 
 class Command(BaseCommand):
-    help = "核对或发布已有遥感监测流程的新固定执行版本，不改旧版本、不触发计算。"
+    help = "核对或发布已有遥感监测流程的新版主Agent定义，不改旧版本、不触发计算。"
 
     def add_arguments(self, parser):
         parser.add_argument("--actor", required=True)
@@ -36,11 +36,6 @@ class Command(BaseCommand):
                 current = flow.current_version
                 if current is None or current.status != "published":
                     raise CommandError(f"流程 {flow.pk} 没有可核对的已发布版本")
-                if current.definition.get("executionMode") == "fixed":
-                    self.stdout.write(
-                        f"{flow.pk} {flow.code} v{current.version} 已固定执行"
-                    )
-                    continue
                 operator = next(
                     (
                         row
@@ -61,6 +56,11 @@ class Command(BaseCommand):
                 ):
                     spec = normalize_definition(definition(flow.code, ident))
                     validate_bindings(spec, flow.project_tag_id)
+                    if current.definition == spec:
+                        self.stdout.write(
+                            f"{flow.pk} {flow.code} v{current.version} 已是相同主Agent定义"
+                        )
+                        continue
                     version = None
                     if apply:
                         _, version = publish_version(

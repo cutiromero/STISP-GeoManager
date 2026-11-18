@@ -47,6 +47,7 @@ def catalogue_groups(user, page, group_id=None):
         .annotate(
             parent=Subquery(links.values("workflow_id")[:1], output_field=UUIDField()),
             parent_name=Subquery(links.values("workflow__goal")[:1]),
+            parent_status=Subquery(links.values("workflow__status")[:1]),
             parent_created=Subquery(links.values("workflow__created_at")[:1]),
         )
         .annotate(
@@ -117,6 +118,7 @@ def catalogue_groups(user, page, group_id=None):
             and task.owner_id == user.pk
             and row.requested_by_id == user.pk
             and trusted
+            and task.parent_status in {None, "succeeded"}
             and not output.expired
             and (task.version.algorithm.identifier, output.key) in PUBLISHABLE
         )

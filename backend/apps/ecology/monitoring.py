@@ -352,11 +352,9 @@ def validate_model_import(resource, item):
         require_automatic_quality(record.output)
     except ComputeError as error:
         invalid(str(error))
-    actual_inputs = set(
-        record.output.task.input_records.exclude(resource_id=None).values_list(
-            "resource_id", flat=True
-        )
-    )
+    from .product_sources import source_resource_ids
+
+    actual_inputs = set(source_resource_ids(record.output.task))
     if not actual_inputs <= set(item["sourceResourceIds"]):
         invalid("模型产品必须保留计算任务的全部来源资源")
     check = record.output.metadata.get("qualityCheck") or {}

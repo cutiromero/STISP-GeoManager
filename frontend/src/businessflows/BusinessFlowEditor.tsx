@@ -392,14 +392,6 @@ export default function BusinessFlowEditor({
           />
         </Form.Item>
       </Form>
-      {spec.executionMode === "fixed" && (
-        <Alert
-          type="info"
-          showIcon
-          title="固定算子流程"
-          description="任务按已发布算子和资料绑定执行，不调用 Agent。这里的节点说明用于描述处理与交付要求。"
-        />
-      )}
       <details className="flow-input-policy" style={{ marginBottom: 16 }}>
         <summary>{ui("资料衔接策略", "Input preparation policy")}</summary>
         <div
@@ -409,7 +401,6 @@ export default function BusinessFlowEditor({
             <Switch
               size="small"
               checked={spec.inputPreparation?.allowScripts !== false}
-              disabled={spec.executionMode === "fixed"}
               onChange={(allowScripts) =>
                 setSpec((old) => ({
                   ...old,

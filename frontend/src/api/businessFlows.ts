@@ -50,7 +50,7 @@ function assertSpec(value: unknown) {
     spec.schemaVersion !== 1 ||
     !["geology_generic", "research_flow"].includes(String(spec.adapter)) ||
     (spec.executionMode !== undefined &&
-      !["nodes", "main_agent", "fixed"].includes(String(spec.executionMode))) ||
+      !["nodes", "main_agent"].includes(String(spec.executionMode))) ||
     !Array.isArray(spec.nodes) ||
     spec.nodes.length === 0 ||
     spec.nodes.length > 32 ||

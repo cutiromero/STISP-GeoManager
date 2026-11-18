@@ -53822,11 +53822,10 @@
           },
           "executionMode": {
             "type": "string",
-            "description": "main_agent运行任务级主循环；fixed仅按确定输入运行冻结算子并入库，不调用模型；省略保留旧节点方式。",
+            "description": "main_agent由一个任务级主循环选择合法目标、组织输入适配并调用工具继续；省略保留旧节点方式。",
             "enum": [
               "nodes",
-              "main_agent",
-              "fixed"
+              "main_agent"
             ]
           }
         },
@@ -55226,7 +55225,7 @@
           },
           "model": {
             "type": "string",
-            "description": "Agent流程必填执行模型别名；固定执行不发送此字段",
+            "description": "执行模型别名",
             "maxLength": 80
           },
           "reviewerModel": {
@@ -55289,6 +55288,7 @@
         },
         "required": [
           "goal",
+          "model",
           "inputs",
           "parameters",
           "idempotencyKey"

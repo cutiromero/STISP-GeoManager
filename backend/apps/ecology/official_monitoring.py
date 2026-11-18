@@ -64,6 +64,20 @@ def register_output(user, output_id):
     ):
         raise ComputeError("找不到本人已入库且可用的正式登记成果", 404)
     task_access(record.output.task, user)
+    from apps.agent.models import AgentWorkflowStep
+
+    if (
+        AgentWorkflowStep.objects.filter(
+            compute_task_id=record.output.task_id,
+            workflow__project_tag_id=project_id,
+            workflow__owner_id=user.pk,
+            workflow__workflow_type="business_flow",
+        )
+        .exclude(workflow__status="succeeded")
+        .exists()
+    ):
+        raise ComputeError("主 Agent 尚未完成本次业务流的成果核验", 409)
+
     scene = PUBLISHABLE.get(
         (record.output.task.version.algorithm.identifier, record.output.key)
     )
@@ -72,11 +86,9 @@ def register_output(user, output_id):
     ):
         raise ComputeError("只有本项目监测流程的主地图成果可以登记")
     require_automatic_quality(record.output)
-    sources = set(
-        record.output.task.input_records.exclude(resource_id=None).values_list(
-            "resource_id", flat=True
-        )
-    )
+    from .product_sources import source_resource_ids
+
+    sources = set(source_resource_ids(record.output.task))
     if not sources or set(
         visible_resources(user, sources | {record.resource_id}).values_list(
             "pk", flat=True

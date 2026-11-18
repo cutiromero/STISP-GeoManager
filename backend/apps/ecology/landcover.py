@@ -109,9 +109,9 @@ def register_import(record_id):
     data = output.metadata.get("knowledgeFacts", {}).get("landcover")
     if not isinstance(data, dict):
         raise ValidationError("地表覆盖成果没有实际统计依据")
-    source_ids = list(
-        task.input_records.exclude(resource=None).values_list("resource_id", flat=True)
-    )
+    from .product_sources import source_resource_ids
+
+    source_ids = source_resource_ids(task)
     classification = {
         "mode": data["mode"],
         "categories": data["statistics"],

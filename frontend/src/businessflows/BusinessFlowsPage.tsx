@@ -50,7 +50,8 @@ import BusinessFlowEditor from "./BusinessFlowEditor";
 import BusinessFlowLaunch, {
   type BusinessFlowLaunchIntent,
 } from "./BusinessFlowLaunch";
-import FixedFlowRunPanel from "./FixedFlowRunPanel";
+import MonitoringFlowRunPanel from "./MonitoringFlowRunPanel";
+import { monitoringFlowProfile } from "./monitoringFlowProfile";
 import "./business-flows.css";
 
 const dataTypes: Record<string, string> = {
@@ -110,10 +111,11 @@ export default function BusinessFlowsPage() {
   const [editor, setEditor] = useState<"create" | "version" | "copy" | null>(
     null,
   );
-  const [fixedLaunch, setFixedLaunch] = useState<BusinessFlowLaunchIntent>();
+  const [monitoringLaunch, setMonitoringLaunch] =
+    useState<BusinessFlowLaunchIntent>();
   const [recentRun, setRecentRun] = useState<BusinessFlowRun>();
   useEffect(() => {
-    setFixedLaunch(undefined);
+    setMonitoringLaunch(undefined);
     setRecentRun(undefined);
     setEditor(null);
   }, [scope]);
@@ -357,8 +359,8 @@ export default function BusinessFlowsPage() {
       title: detail.flow.name,
       goal: goal.trim() || detail.flow.description || detail.flow.name,
     };
-    if (version.definition.executionMode === "fixed") {
-      setFixedLaunch(intent);
+    if (monitoringFlowProfile(version.definition, detail.flow.code)) {
+      setMonitoringLaunch(intent);
       return;
     }
     navigate(`/agent/workbench?projectTagId=${project?.current ?? "1"}`, {
@@ -877,36 +879,38 @@ export default function BusinessFlowsPage() {
       >
         <div style={{ height: "100%", display: "flex" }}>{catalog}</div>
       </Drawer>
-      {fixedLaunch && detail?.flow.id === fixedLaunch.definitionId && (
-        <Modal
-          open
-          title="准备监测任务"
-          width={980}
-          footer={null}
-          closable={false}
-          mask={{ closable: false }}
-          keyboard={false}
-        >
-          <BusinessFlowLaunch
-            key={`${scope}:${fixedLaunch.versionId}`}
-            launch={fixedLaunch}
-            model=""
-            canImport={user?.permissions.canUploadData}
-            onCancel={() => setFixedLaunch(undefined)}
-            onStarted={(run) => {
-              setRecentRun(run);
-              setFixedLaunch(undefined);
-              setSearchParams((previous) => {
-                const next = new URLSearchParams(previous);
-                next.set("run", run.id);
-                return next;
-              });
-            }}
-          />
-        </Modal>
-      )}
+      {monitoringLaunch &&
+        detail?.flow.id === monitoringLaunch.definitionId && (
+          <Modal
+            open
+            title="准备监测任务"
+            width={980}
+            footer={null}
+            closable={false}
+            mask={{ closable: false }}
+            keyboard={false}
+          >
+            <BusinessFlowLaunch
+              key={`${scope}:${monitoringLaunch.versionId}`}
+              launch={monitoringLaunch}
+              model=""
+              directMonitoring
+              canImport={user?.permissions.canUploadData}
+              onCancel={() => setMonitoringLaunch(undefined)}
+              onStarted={(run) => {
+                setRecentRun(run);
+                setMonitoringLaunch(undefined);
+                setSearchParams((previous) => {
+                  const next = new URLSearchParams(previous);
+                  next.set("run", run.id);
+                  return next;
+                });
+              }}
+            />
+          </Modal>
+        )}
       {searchParams.get("run") && (
-        <FixedFlowRunPanel
+        <MonitoringFlowRunPanel
           key={`${scope}:${searchParams.get("run")}`}
           id={searchParams.get("run")!}
           initial={

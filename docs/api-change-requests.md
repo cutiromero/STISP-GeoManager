@@ -1,16 +1,16 @@
 # API Change Requests
 
-## API-20261118-001 - 固定监测执行、任务成果组织与正式登记
+## API-20261118-001 - 主 Agent 监测执行、任务成果组织与正式登记
 
 - Status: BackendReady
 - Owner: codex/xintao。
 - Endpoints: GET /api/ecology/monitoring/official/；POST /api/ecology/monitoring/registration/；GET /api/compute/result-groups/；既有资源列表、业务流发布和启动。
 - Change type: 新增明确登记与只读展示；兼容旧业务流定义。
-- OpenAPI change: 正式监测产品、任务成果分组、业务流fixed执行方式，可原子更新流程名称和说明。
+- OpenAPI change: 正式监测产品、任务成果分组、主 Agent 业务流使用原执行协议，可原子更新流程名称和说明。
 - Mock examples: 184-official-monitoring.json。
 - Frontend reason: 大屏不发起算子或渲染任务；从业务流启动，在数据中心检查及登记。
 - Backend implementation notes: 复用冻结任务、既有质量门禁和入库队列；展示逐条重验地图与来源权限；统一登记不修改原始数据。
-- Verification: 数据边界、最新版本、真实任务分组、固定节点调用与入库、浏览器无计算请求。
+- Verification: 数据边界、最新版本、真实任务分组、主 Agent 预检、算子调用与入库、浏览器无计算请求。
 - Result: 发布与运行验收依据独立回执。
 
 ## API-20261117-004 - 受控操作预览、真实用户决定与操作面板
@@ -887,7 +887,7 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| API-20261118-001 | BackendReady | 固定监测执行与成果正式登记 |
+| API-20261118-001 | BackendReady | 主 Agent 监测执行与成果正式登记 |
 | API-20261117-004 | Verified | agent/operations | 新增真实确认与操作面板 | AgentOperation系列 | 183 | 已实现 | 并发、版本、权限及CSRF | 不注册模型确认能力 |
 | API-20261117-003 | Verified | 工程/导出/科研任务控制 | 新增10项工具与取消 | AgentTool系列、ExportCancellation | 182 | 已实现 | 幂等、撤权、取消及续接 | 复用原业务与队列 |
 | API-20261117-002 | Verified | agent/runs/tool-calls | 新增审计及可选错误字段 | AgentToolCallList、ErrorResponse | 180、181 | 已实现 | 执行合同及隔离 | 新增表，不保存原始参数 |

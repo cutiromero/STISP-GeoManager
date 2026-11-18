@@ -6,11 +6,11 @@ import pytest
 from django.contrib.auth.models import Permission
 from django.test import Client
 
-from apps.agent.models import AgentPolicy, AgentWorkflowStep
-from apps.agent.policy import default_policy
+from apps.agent.models import AgentWorkflow, AgentWorkflowStep
 from apps.business_flows import catalog, engine
-from apps.business_flows.fixed_monitoring import PRESETS, definition
+from apps.business_flows.monitoring_presets import PRESETS, definition
 from apps.business_flows.definitions import normalize_definition
+from apps.business_flows.execution_session import session
 from apps.catalog.models import DataResource
 from apps.compute.models import ComputeImport, ComputeTask
 from apps.compute.worker import run_task, process_import, task_scope
@@ -19,6 +19,8 @@ from apps.projects.context import ProjectScope, project_scope
 from apps.raster.models import RasterDataset
 from tests.integration.test_compute import setup_compute  # noqa: F401
 from tests.integration.test_landcover_monitoring import imported  # noqa: F401
+from tests.integration.test_business_flow_operator_runtime import operators  # noqa: F401
+from tests.integration.test_business_flow_node_tools import action, install, submit_args
 
 # ruff: noqa: F811
 
@@ -26,10 +28,12 @@ pytestmark = pytest.mark.django_db
 
 
 @pytest.mark.parametrize("code", PRESETS)
-def test_fixed_presets_use_frozen_inputs_and_outputs(code):
+def test_presets_keep_main_agent_and_safe_adaptation(code):
     spec = normalize_definition(definition(code, 1))
-    assert spec["executionMode"] == "fixed"
-    assert not spec["inputPreparation"]["allowScripts"]
+    assert spec["executionMode"] == "main_agent"
+    assert spec["inputPreparation"]["allowScripts"]
+    assert spec["inputPreparation"]["reviewScripts"]
+    assert "prepare_input" in spec["nodes"][0]["contract"]["tools"]
     assert [node["kind"] for node in spec["nodes"]] == ["operator", "result"]
     op = spec["nodes"][0]
     assert op["inputBindings"].keys() == {
@@ -40,22 +44,8 @@ def test_fixed_presets_use_frozen_inputs_and_outputs(code):
     )
 
 
-def test_fixed_flow_runs_real_queue_and_groups_task_without_model(
-    setup_compute, monkeypatch
-):  # noqa: F811
-    env = setup_compute
-    env["owner"].user_permissions.add(
-        *Permission.objects.filter(
-            codename__in=[
-                "use_local_model",
-                "use_data_agent",
-                "query_data",
-            ]
-        )
-    )
-    AgentPolicy.objects.update_or_create(
-        pk=1, defaults={"value": {**default_policy(), "operatorEnabled": True}}
-    )
+def test_one_main_agent_runs_real_queue_and_groups_task(operators, monkeypatch):
+    env = operators
     spec = definition("huanjiang-landcover", env["version"].pk)
     operator = spec["nodes"][0]
     operator.update(
@@ -72,12 +62,14 @@ def test_fixed_flow_runs_real_queue_and_groups_task_without_model(
     scope = ProjectScope((env["project"].pk,), env["project"].pk, env["owner"].pk)
     with project_scope(scope):
         flow, version = catalog.register_flow(
-            env["admin"], {"code": "fixed-test", "name": "固定统计", "definition": spec}
+            env["admin"],
+            {"code": "monitoring-agent-test", "name": "监测统计", "definition": spec},
         )
     headers = {"X-Project-Id": str(env["project"].pk)}
     payload = {
         "versionId": version.pk,
-        "goal": "固定统计任务",
+        "goal": "监测统计任务",
+        "model": "mock",
         "inputs": env["body"]["inputs"],
         "parameters": {},
         "idempotencyKey": uuid4().hex,
@@ -102,27 +94,78 @@ def test_fixed_flow_runs_real_queue_and_groups_task_without_model(
         )
         heartbeat(True)
 
+    def finish_interpret(packet):
+        output = next(
+            row["id"] for row in packet["evidence"] if row["id"].startswith("output-")
+        )
+        return action(
+            "finish_node",
+            summary="已核对实际统计",
+            outputs=[
+                {"name": output_key, "semanticType": "table", "evidenceId": output}
+            ],
+            evidenceIds=[output],
+            limitations=[],
+        )
+
+    def finish_delivery(packet):
+        evidence = packet["evidence"][0]["id"]
+        return action(
+            "finish_node",
+            summary="已交付任务成果与统计",
+            outputs=[
+                {"name": "analysis", "semanticType": "analysis", "evidenceId": evidence}
+            ],
+            evidenceIds=[evidence],
+            limitations=[],
+        )
+
+    calls = install(
+        monkeypatch,
+        [
+            action("start_node", nodeId="interpret"),
+            action("operator_catalog", versionId=env["version"].pk),
+            action("preflight_operator", **submit_args(env)),
+            action("run_operator", **submit_args(env)),
+            finish_interpret,
+            action("start_node", nodeId="finish"),
+            finish_delivery,
+            action("finish_workflow", summary="已核对和整理本次统计"),
+        ],
+    )
     monkeypatch.setattr("apps.compute.worker.execute", fake_container)
-    engine.advance(workflow_id)
+    workflow = AgentWorkflow._base_manager.get(pk=workflow_id)
+    assert session(workflow).get("id") and workflow.model == "mock"
+    for _ in range(4):
+        engine.advance(workflow_id)
     task = ComputeTask._base_manager.get(owner=env["owner"])
     assert AgentWorkflowStep.objects.filter(
         workflow_id=workflow_id, compute_task_id=task.pk
     ).exists()
     with task_scope(task):
         run_task(task)
-    engine.advance(workflow_id)
+    for _ in range(8):
+        if ComputeImport.objects.filter(output__task_id=task.pk).exists():
+            break
+        engine.advance(workflow_id)
     record = ComputeImport.objects.get(output__task_id=task.pk)
     with task_scope(task):
         process_import(record)
     record.refresh_from_db()
     assert record.status == "ready", record.error
-    for _ in range(3):
+    for _ in range(10):
         engine.advance(workflow_id)
+        workflow.refresh_from_db()
+        if workflow.status == "succeeded":
+            break
+    assert len(calls) >= 7
+    assert ComputeTask._base_manager.filter(owner=env["owner"]).count() == 1
     detail = env["client"].get(
         f"/api/business-flows/runs/{workflow_id}/", headers=headers
     )
     assert detail.status_code == 200, detail.content
     assert detail.json()["status"] == "succeeded", detail.json()
+    assert detail.json()["mainAgent"]["id"] == session(workflow)["id"]
     assert detail.json()["resultResourceIds"] == [record.resource_id]
     assert not RemoteSensingProduct._base_manager.exists()
     catalogue = env["client"].get(
@@ -207,3 +250,73 @@ def test_formal_registration_requires_owner_and_uses_existing_registry(
             owner_only=True, maintainer_id=env["outsider"].pk
         )
     assert env["client"].get(read_url, headers=http).json()["items"] == []
+
+
+def test_publication_retains_actual_original_acl_after_agent_adaptation(imported):
+    from django.core.exceptions import PermissionDenied
+    from apps.compute.models import ComputeInput, ComputeOutput
+    from apps.ecology.product_sources import source_resource_ids
+
+    env, task, source, _ = imported
+    with project_scope(env["scope"]):
+        workflow = AgentWorkflow.objects.create(
+            owner=env["owner"],
+            workflow_type="business_flow",
+            status="succeeded",
+            goal="有安全适配的解译",
+            model="mock",
+            idempotency_key=uuid4().hex,
+        )
+        derived = DataResource.objects.create(
+            name="本任务工作副本",
+            code="adapted-qa",
+            data_type="raster",
+            storage_path="read-only-derived.tif",
+            coordinate_system="EPSG:3857",
+            maintainer=env["owner"],
+            owner_only=True,
+            source=f"workflow-working:{workflow.pk}:input-adapter:image",
+        )
+        adapter = ComputeTask.objects.create(
+            owner=env["owner"],
+            version=task.version,
+            status="succeeded",
+            idempotency_key=uuid4().hex,
+            request_hash="a" * 64,
+        )
+        ComputeInput.objects.create(task=adapter, key="source", resource=source)
+        output = ComputeOutput.objects.create(
+            task=adapter,
+            key="prepared",
+            kind="raster",
+            file_name="prepared.tif",
+            path="prepared.tif",
+            size_bytes=10,
+            checksum="c" * 64,
+        )
+        ComputeImport.objects.create(
+            output=output,
+            resource=derived,
+            status="ready",
+            requested_by=env["owner"],
+            request_source=f"workflow:{workflow.pk}",
+        )
+        ComputeInput.objects.filter(task=task).update(resource=derived)
+        AgentWorkflowStep.objects.create(
+            workflow=workflow,
+            sequence=1,
+            compute_task_id=task.pk,
+            kind="submit_operator",
+        )
+        edge = AgentWorkflowStep.objects.create(
+            workflow=workflow,
+            sequence=2,
+            compute_task_id=adapter.pk,
+            kind="input_adapted",
+            output_refs={"resourceIds": [derived.pk], "outputIds": [output.pk]},
+        )
+        assert source_resource_ids(task) == [source.pk]
+        edge.output_refs = {"resourceIds": [derived.pk], "outputIds": [output.pk + 1]}
+        edge.save(update_fields=["output_refs"])
+        with pytest.raises(PermissionDenied, match="缺少可确认"):
+            source_resource_ids(task)

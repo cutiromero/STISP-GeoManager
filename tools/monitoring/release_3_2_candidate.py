@@ -15,7 +15,7 @@ from types import SimpleNamespace
 # CONFIGURATION
 ACTOR = "gongxt"
 MAINTAINER = "admin"
-WAIT_SECONDS = 760
+WAIT_SECONDS = 1470
 MAX_FILE_BYTES = 100_000_000
 MAX_CUBE_BYTES = 280_000_000
 WILDFIRE_TIME_INDEX = 873
@@ -65,6 +65,7 @@ def main():
     from rasterio.windows import Window
     from apps.agent.models import AgentWorkflow, AgentWorkflowStep
     from apps.business_flows.models import BusinessFlowDefinition
+    from apps.business_flows.execution_session import session as workflow_session
     from apps.catalog.models import DataResource
     from apps.catalog.monitoring_metadata import update_metadata
     from apps.compute.cube_inputs import source_dependencies
@@ -82,7 +83,7 @@ def main():
     original_research = Path(storage["research_data_root"]).resolve()
     original_app = Path(storage["app_data"]).resolve()
     actor = get_user_model().objects.get(username=ACTOR, is_active=True)
-    call_command("publish_fixed_monitoring", actor=MAINTAINER, apply=True)
+    call_command("publish_monitoring_workflows", actor=MAINTAINER, apply=True)
     flows = {
         flow.code: flow
         for flow in BusinessFlowDefinition._base_manager.filter(
@@ -98,7 +99,7 @@ def main():
         assert can_access_project(actor, flow.project_tag_id)
         scope = ProjectScope((flow.project_tag_id,), flow.project_tag_id, actor.pk)
         version = flow.current_version
-        assert version.definition.get("executionMode") == "fixed"
+        assert version.definition.get("executionMode") == "main_agent"
         node = version.definition["nodes"][0]
         algorithm = AlgorithmVersion.objects.get(pk=node["algorithmVersionId"])
         # A previously validated immutable package is the only compute code staged.
@@ -308,7 +309,12 @@ def main():
             step = AgentWorkflowStep.objects.get(
                 workflow=workflow, kind="submit_operator"
             )
-            assert not workflow.model and len(workflow.result_resource_ids) >= 2
+            assert (
+                workflow.model
+                and workflow_session(workflow).get("id")
+                and len(workflow.result_resource_ids) >= 2
+            )
+            assert not workflow_session(workflow)["loop"].get("activeNodeId")
             assert (
                 ComputeImport.objects.filter(
                     output__task_id=step.compute_task_id, status="ready"

@@ -48,6 +48,7 @@ import WildfireLaunchOptions, {
 } from "./WildfireLaunchOptions";
 import "./business-flows.css";
 import "./business-flow-launch.css";
+import { monitoringFlowProfile } from "./monitoringFlowProfile";
 
 // Candidate reads are bounded metadata. Search is remote and shared by all roles.
 const CANDIDATE_SEARCH_DELAY_MS = RESOURCE_SEARCH_DELAY_MS;
@@ -58,7 +59,7 @@ const GenericWorkflowUploads = lazy(
 export type BusinessFlowLaunchIntent = MonitoringWorkflowLaunch;
 export default function BusinessFlowLaunch({
   launch,
-  model,
+  model: suppliedModel,
   conversationId,
   onStarted,
   onCancel,
@@ -71,6 +72,7 @@ export default function BusinessFlowLaunch({
   presentation = "default",
   fixedInputs = false,
   canImport = false,
+  directMonitoring = false,
 }: {
   launch: BusinessFlowLaunchIntent;
   model: string;
@@ -86,9 +88,22 @@ export default function BusinessFlowLaunch({
   presentation?: "default" | "task";
   fixedInputs?: boolean;
   canImport?: boolean;
+  directMonitoring?: boolean;
 }) {
   const ui = useComputeText();
   const { bootstrap } = useAgentBootstrapState();
+  const [chosenModel, setChosenModel] = useState<string>();
+  const onlineModels =
+    bootstrap?.models?.filter(
+      (option) => option.allowAgent && option.status === "online",
+    ) ?? [];
+  const defaultModel =
+    onlineModels.find(
+      (option) => option.alias === bootstrap?.defaultAgentModel,
+    ) ?? onlineModels[0];
+  const model = directMonitoring
+    ? (chosenModel ?? defaultModel?.alias ?? "")
+    : suppliedModel;
   const [version, setVersion] = useState<BusinessFlowVersion>();
   const [flowCode, setFlowCode] = useState("");
   const [wildfireSelection, setWildfireSelection] =
@@ -251,22 +266,11 @@ export default function BusinessFlowLaunch({
     return () => controller.abort();
   }, [launch.definitionId, launch.versionId, attempt]);
   const isLegacy = version?.definition.adapter === "geology_generic";
-  const fixed = version?.definition.executionMode === "fixed";
   const suppliedNodes = parameters?.nodeParameters as
     | Record<string, Record<string, unknown>>
     | undefined;
   const needsWildfireSelection =
-    (flowCode === "wildfire-history-observation" ||
-      (fixed &&
-        version?.definition.inputRequirements.some(
-          (entry) => entry.key === "cube",
-        ) &&
-        version.definition.nodes.some(
-          (node) =>
-            node.id === "interpret" &&
-            node.contract?.importOutputs?.includes("observation") &&
-            node.contract.importOutputs.includes("series"),
-        ))) &&
+    monitoringFlowProfile(version?.definition, flowCode) === "wildfire" &&
     !Number.isInteger(suppliedNodes?.interpret?.time_index);
   const wildfireReady =
     !needsWildfireSelection ||
@@ -488,10 +492,7 @@ export default function BusinessFlowLaunch({
       setError("请先选择有效的野火观测产品与时期。");
       return;
     }
-    if (
-      !bootstrap?.canAgent ||
-      (!fixed && (!model || !bootstrap.workerOnline))
-    ) {
+    if (!model || !bootstrap?.canAgent || !bootstrap.workerOnline) {
       setError("智能体执行服务尚未就绪，请连接成功后再开始。");
       return;
     }
@@ -506,9 +507,10 @@ export default function BusinessFlowLaunch({
         needsWildfireSelection && wildfireSelection
           ? `${goal.trim()}\n本次确认的观测选择：${wildfireSelection.summary}`
           : goal.trim(),
-      ...(fixed ? { agentEnabled: false } : { model, reviewerModel }),
-      ...(!fixed && thinkingAvailable ? { reasoningEffort: effort } : {}),
-      ...(!fixed && bootstrap.budgets?.enabled
+      model,
+      reviewerModel,
+      ...(thinkingAvailable ? { reasoningEffort: effort } : {}),
+      ...(bootstrap.budgets?.enabled
         ? {
             budgetProfile,
             ...(outputTokens !== undefined
@@ -541,7 +543,7 @@ export default function BusinessFlowLaunch({
             { versionId: item.versionId, parameters: item.parameters ?? {} },
           ]),
       ),
-      ...(!fixed && conversationId !== undefined ? { conversationId } : {}),
+      ...(conversationId !== undefined ? { conversationId } : {}),
     };
     const fingerprint = canonicalReadKey([launch.definitionId, body]);
     if (retry.current?.fingerprint !== fingerprint)
@@ -573,7 +575,8 @@ export default function BusinessFlowLaunch({
   const canStart = Boolean(
     version &&
     bootstrap?.canAgent &&
-    (fixed || (model && bootstrap.workerOnline)) &&
+    model &&
+    bootstrap.workerOnline &&
     !busy &&
     !uploading &&
     inputReady &&
@@ -631,12 +634,12 @@ export default function BusinessFlowLaunch({
             <div className="flow-launch-grid">
               <div className="flow-launch-form">
                 {error && <Alert type="error" showIcon title={error} />}
-                {fixed && (
+                {directMonitoring && (
                   <Alert
                     type="info"
                     showIcon
-                    title="一次配置，直接解译"
-                    description="绑定原始资料，按冻结版本计算全范围，不需要再次框选或选择 AI 模型。任务完成后可在数据中心登记主地图。"
+                    title="一次配置，由主 Agent 组织解译"
+                    description="绑定原始资料后直接运行。主 Agent 预检、按实际差距调用适配能力、执行已发布科学算子并核验成果。默认使用资料有效范围，不要求重复框选。"
                   />
                 )}
                 <label
@@ -653,7 +656,7 @@ export default function BusinessFlowLaunch({
                     autoSize={{ minRows: 2, maxRows: 5 }}
                   />
                 </label>
-                {!fixed && (
+                {
                   <SettingsTag className="business-flow-launch-settings">
                     {presentation === "task" && (
                       <summary>{ui("高级设置", "Advanced settings")}</summary>
@@ -662,12 +665,25 @@ export default function BusinessFlowLaunch({
                       <span>
                         <RobotOutlined />
                         {ui("任务执行", "Executor")}
-                        <strong>
-                          {modelOptions.find((option) => option.value === model)
-                            ?.label ||
-                            model ||
-                            ui("尚未选择模型", "No model selected")}
-                        </strong>
+                        {directMonitoring ? (
+                          <Select
+                            aria-label="主 Agent 执行模型"
+                            style={{ minWidth: 170 }}
+                            value={model || undefined}
+                            options={modelOptions}
+                            onChange={setChosenModel}
+                            disabled={busy}
+                            placeholder="选择可用模型"
+                          />
+                        ) : (
+                          <strong>
+                            {modelOptions.find(
+                              (option) => option.value === model,
+                            )?.label ||
+                              model ||
+                              ui("尚未选择模型", "No model selected")}
+                          </strong>
+                        )}
                       </span>
                       {needsReview && (
                         <label>
@@ -731,7 +747,7 @@ export default function BusinessFlowLaunch({
                       </div>
                     )}
                   </SettingsTag>
-                )}
+                }
                 {isLegacy ? (
                   <Suspense fallback={<Spin />}>
                     <GenericWorkflowUploads
@@ -920,12 +936,12 @@ export default function BusinessFlowLaunch({
                     onChange={setWildfireSelection}
                   />
                 )}
-                {fixed && (
+                {directMonitoring && (
                   <p className="business-flow-launch-note">
                     新资料请先入库，再在这里绑定；野火 Zarr 由资料管理员登记。
                     {canImport && (
                       <a
-                        href={`/admin/data/import?projectTagId=${getActiveProject()}`}
+                        href={`/resources/data/import?projectTagId=${getActiveProject()}`}
                         target="_blank"
                         rel="noreferrer"
                       >
@@ -950,7 +966,7 @@ export default function BusinessFlowLaunch({
                     {missing.map((input) => input.label).join("、")}
                   </p>
                 )}
-                {!fixed && !bootstrap?.workerOnline && (
+                {!bootstrap?.workerOnline && (
                   <Alert
                     type="info"
                     showIcon
@@ -1028,7 +1044,7 @@ export default function BusinessFlowLaunch({
               disabled={busy}
               onClick={() => callbacks.current.onCancel()}
             >
-              {fixed
+              {directMonitoring
                 ? ui("返回业务流", "Back to flows")
                 : ui("返回对话", "Back to conversation")}
             </Button>

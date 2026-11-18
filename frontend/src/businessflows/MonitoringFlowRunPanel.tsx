@@ -20,7 +20,7 @@ const active = new Set(["queued", "running", "waiting_compute"]);
 const pollMs = 2400;
 const validId = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 
-export default function FixedFlowRunPanel({
+export default function MonitoringFlowRunPanel({
   id,
   initial,
   onClose,
@@ -201,14 +201,13 @@ export default function FixedFlowRunPanel({
               查看任务成果
             </Button>
           )}
-          {flow.conversationId &&
-            flow.definitionSnapshot.executionMode !== "fixed" && (
-              <Link
-                to={`/agent/workbench?conversationId=${flow.conversationId}&projectTagId=${flow.projectId}`}
-              >
-                查看完整处理记录
-              </Link>
-            )}
+          {flow.conversationId && (
+            <Link
+              to={`/agent/workbench?conversationId=${flow.conversationId}&projectTagId=${flow.projectId}`}
+            >
+              进入智能体查看过程或处理待确认事项
+            </Link>
+          )}
         </Space>
       )}
     </Drawer>

@@ -57,6 +57,7 @@ def main():
     from apps.compute.services import submit, request_output_import
     from apps.core.storage import raster_source_path, table_data_path
     from apps.ecology.monitoring import monitoring_snapshot
+    from apps.ecology.official_monitoring import register_output
     from apps.ecology.wildfire import observation_catalog
 
     assert Path(settings.DATABASES["default"]["NAME"]).resolve().is_relative_to(root)
@@ -206,6 +207,10 @@ def main():
         time.sleep(1)
     assert all(record.status == "ready" for record in records)
     with project_scope(scope):
+        register_output(
+            actor,
+            next(row.output_id for row in records if row.output.key == "observation"),
+        )
         snapshot = monitoring_snapshot(actor, "wildfire")
         product = next(
             item

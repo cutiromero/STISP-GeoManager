@@ -345,10 +345,9 @@ def validate_import_intent(record):
                 )
                 contract_output = record.output.key in node.get("contract", {}).get(
                     "importOutputs", []
-                ) and str(record.output.task_id) in {
-                    item.get("toolLoop", {}).get("taskId"),
-                    item.get("computeTaskId"),
-                }
+                ) and item.get("toolLoop", {}).get("taskId") == str(
+                    record.output.task_id
+                )
                 contract_import = (
                     contract_output
                     and workflow.status in {"queued", "running", "waiting_compute"}
@@ -368,19 +367,7 @@ def validate_import_intent(record):
                 compute_task_id=record.output.task_id
             ).exists():
                 raise PermissionDenied("入库结果不属于此工作流")
-            if (
-                workflow.workflow_type == "business_flow"
-                and workflow.parameters.get("_businessFlow", {})
-                .get("definitionSnapshot", {})
-                .get("executionMode")
-                == "fixed"
-            ):
-                from apps.business_flows.runtime import authorize
-
-                user = fresh_user(workflow.owner_id)
-                p = authorize(user, workflow)
-            else:
-                user, p = _authorize(workflow)
+            user, p = _authorize(workflow)
         else:
             raise PermissionDenied("无法识别自动入库来源")
         if not p.get("operatorEnabled", False):

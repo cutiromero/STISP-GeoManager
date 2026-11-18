@@ -214,7 +214,6 @@ def register_import(record_id):
     if "wildfire" not in configured_scenes(project):
         return
     from .models import RemoteSensingProduct
-    from .monitoring import register_product
 
     previous = RemoteSensingProduct.objects.filter(
         product_code="wildfire-observation-"
@@ -244,9 +243,9 @@ def register_import(record_id):
             "legend",
         )
     }
-    sources = list(
-        task.input_records.exclude(resource=None).values_list("resource_id", flat=True)
-    )
+    from .product_sources import source_resource_ids
+
+    sources = source_resource_ids(task)
     current = facts["current"]
     quantity = "火烧面积" if facts["unit"] == "ha" else "平均火辐射功率密度"
     value = {

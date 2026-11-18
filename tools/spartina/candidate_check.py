@@ -46,6 +46,7 @@ def main():
     from apps.compute.ml_runtime import binding
     from apps.core.browser_sessions import prepare_browser_session
     from apps.ecology.monitoring import monitoring_snapshot
+    from apps.ecology.official_monitoring import register_output
     from apps.projects.context import project_scope, ProjectScope
     from apps.projects.models import Project
     from apps.raster.services.importer import import_raster_file
@@ -188,6 +189,12 @@ def main():
         time.sleep(1)
     assert all(record.status == "ready" for record in records)
     with project_scope(scope):
+        register_output(
+            actor,
+            next(
+                row.output_id for row in records if row.output.key == "classification"
+            ),
+        )
         snapshot = monitoring_snapshot(actor, "spartina")
         product = next(
             item
