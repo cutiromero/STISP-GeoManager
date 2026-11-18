@@ -50,10 +50,11 @@ class RemedyRejected(ComputeError):
 class InputReferenceError(ComputeError):
     """The action did not reach the scientific operator."""
 
-    def __init__(self):
+    def __init__(self, message=None, *, code="INPUT_REFERENCE_INVALID"):
         super().__init__(
-            "输出输入绑定只能引用当前节点直接依赖的真实成果。原始资料值直接用整数资源ID；若预检已通过，按runAction提交usePreflight=true，不要重抄引用。",
-            failure={"code": "INPUT_REFERENCE_INVALID", "remedy": "correct_inputs"},
+            message
+            or "输出输入绑定只能引用当前节点直接依赖的真实成果。原始资料值直接用整数资源ID；若预检已通过，按runAction提交usePreflight=true，不要重抄引用。",
+            failure={"code": code, "remedy": "correct_inputs"},
         )
 
 
@@ -303,6 +304,37 @@ def visible_inputs(workflow, node, loop):
     return values
 
 
+def known_role_bindings(workflow, node):
+    """Resolve an explicit one-resource role binding, without guessing collections."""
+    if node["kind"] != "operator" or not node.get("inputBindings"):
+        return {}
+    from .execution_session import session
+    from .input_adapters import logical_role
+
+    if not session(workflow):
+        return {}
+    requirements = {
+        row["key"]: row
+        for row in binding(workflow)["definitionSnapshot"]["inputRequirements"]
+    }
+    prepared = workflow.plan.get("preparedNodeInputs", {}).get(node["id"], {})
+    result = {}
+    for port, source in node["inputBindings"].items():
+        if "role" not in source:
+            continue
+        if port in prepared:
+            result[port] = prepared[port]
+            continue
+        identities = {
+            identity
+            for role, identity in workflow.plan.get("inputs", {}).items()
+            if logical_role(role, requirements) == source["role"]
+        }
+        if len(identities) == 1:
+            result[port] = identities.pop()
+    return result
+
+
 def version_for(workflow, user, node, loop, identity, policy):
     from apps.compute.models import AlgorithmVersion
     from apps.compute.services import allowed_algorithms, agent_algorithm_allowed
@@ -310,7 +342,25 @@ def version_for(workflow, user, node, loop, identity, policy):
 
     if not policy.get("operatorEnabled"):
         raise PermissionDenied("当前策略未允许算子工具")
-    if type(identity) is not int or identity not in loop["catalogIds"]:
+    from .execution_session import session
+
+    configured = (
+        node.get("algorithmVersionId")
+        if session(workflow) and node["kind"] == "operator"
+        else None
+    )
+    if identity is None and configured is not None:
+        identity = configured
+    # The authorized frozen version in this node is already an explicit
+    # catalogue reference. Still resolve its current availability below.
+    if type(identity) is not int or (
+        identity not in loop["catalogIds"] and identity != configured
+    ):
+        if configured is not None:
+            raise InputReferenceError(
+                f"本节点绑定的已登记算子版本为 {configured}；沿用配置时可省略versionId，无须猜测版本。",
+                code="OPERATOR_REFERENCE_INVALID",
+            )
         raise ComputeError("只能使用本节点已查询目录中的算子版本")
     version = (
         AlgorithmVersion.objects.select_related("algorithm")
@@ -377,7 +427,14 @@ def submission(workflow, user, policy, node, loop, arguments, *, source_state=No
     )
     if not all(isinstance(value, dict) for value in (inputs, parameters, mappings)):
         raise ComputeError("输入、参数与字段映射必须为对象")
-    inputs = resolve_output_bindings(workflow, user, policy, node, loop, inputs)
+    inputs = resolve_output_bindings(
+        workflow,
+        user,
+        policy,
+        node,
+        loop,
+        {**known_role_bindings(workflow, node), **inputs},
+    )
     if len(encoded(arguments)) > MAX_TOOL_BYTES:
         raise ComputeError("工具参数超过8192字节")
     flat, _, input_specs = expand_bindings(version.manifest, inputs)

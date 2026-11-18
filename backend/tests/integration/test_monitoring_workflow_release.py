@@ -20,7 +20,7 @@ from apps.raster.models import RasterDataset
 from tests.integration.test_compute import setup_compute  # noqa: F401
 from tests.integration.test_landcover_monitoring import imported  # noqa: F401
 from tests.integration.test_business_flow_operator_runtime import operators  # noqa: F401
-from tests.integration.test_business_flow_node_tools import action, install, submit_args
+from tests.integration.test_business_flow_node_tools import action, install
 
 # ruff: noqa: F811
 
@@ -124,8 +124,7 @@ def test_one_main_agent_runs_real_queue_and_groups_task(operators, monkeypatch):
         monkeypatch,
         [
             action("start_node", nodeId="interpret"),
-            action("operator_catalog", versionId=env["version"].pk),
-            action("preflight_operator", **submit_args(env)),
+            action("preflight_operator"),
             action("run_operator", usePreflight=True),
             finish_interpret,
             action("start_node", nodeId="finish"),
@@ -158,7 +157,7 @@ def test_one_main_agent_runs_real_queue_and_groups_task(operators, monkeypatch):
         workflow.refresh_from_db()
         if workflow.status == "succeeded":
             break
-    assert len(calls) >= 7
+    assert len(calls) == 7
     assert ComputeTask._base_manager.filter(owner=env["owner"]).count() == 1
     detail = env["client"].get(
         f"/api/business-flows/runs/{workflow_id}/", headers=headers

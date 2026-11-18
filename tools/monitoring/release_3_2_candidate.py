@@ -316,7 +316,14 @@ def main():
                 "interrupted",
                 "waiting_approval",
             }:
-                raise RuntimeError(f"{code_name}: {workflow.status} {workflow.detail}")
+                events = workflow.plan.get("businessFlow", {}).get("events", [])[-10:]
+                minimal = [
+                    [row.get("kind"), str(row.get("message", ""))[:230]]
+                    for row in events
+                ]
+                raise RuntimeError(
+                    f"{code_name}: {workflow.status} {workflow.detail} {minimal}"
+                )
             if workflow.status != "succeeded":
                 continue
             step = AgentWorkflowStep.objects.get(
