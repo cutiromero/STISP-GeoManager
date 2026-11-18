@@ -60,6 +60,8 @@ def main():
     from django.contrib.auth import get_user_model
     from django.core.management import call_command
     from django.test import Client
+    from django.db import transaction
+    from django.db.models import F
     from osgeo import gdal
     import rasterio
     from rasterio.windows import Window
@@ -75,7 +77,8 @@ def main():
     from apps.core.storage import app_path, raster_source_path
     from apps.ecology.models import RemoteSensingProduct
     from apps.projects.access import can_access_project
-    from apps.projects.context import ProjectScope, project_scope
+    from apps.projects.context import ProjectScope, project_scope, selected_project_id
+    from apps.projects.models import Project
     from apps.raster.services.importer import import_raster_file
 
     assert Path(settings.DATABASES["default"]["NAME"]).resolve().is_relative_to(root)
@@ -92,6 +95,16 @@ def main():
         ).select_related("current_version", "project_tag")
     }
     assert flows.keys() == set(CODES)
+
+    def stage_raster(path, *, name, uploader_id, raster_kind):
+        # Candidate workers are already sending SQLite heartbeats. Reserve the
+        # writer before the importer's catalog read-for-update transaction.
+        with transaction.atomic():
+            Project.objects.filter(pk=selected_project_id()).update(name=F("name"))
+            return import_raster_file(
+                path, name=name, uploader_id=uploader_id, raster_kind=raster_kind
+            )
+
     gdal.UseExceptions()
     cases = {}
     for index, code_name in enumerate(CODES):
@@ -126,7 +139,7 @@ def main():
                     creationOptions=["COMPRESS=DEFLATE", "TILED=YES"],
                 )
                 image.Close()
-                raster = import_raster_file(
+                raster = stage_raster(
                     path,
                     name="候选验收 · 2米原始RGB",
                     uploader_id=actor.pk,
@@ -162,7 +175,7 @@ def main():
                             for band, name in enumerate(image.descriptions, 1):
                                 if name:
                                     narrowed.set_band_description(band, name)
-                    raster = import_raster_file(
+                    raster = stage_raster(
                         path,
                         name=f"候选验收 · 三时相2025-{month}",
                         uploader_id=actor.pk,

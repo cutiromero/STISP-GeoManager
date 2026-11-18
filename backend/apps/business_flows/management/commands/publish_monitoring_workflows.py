@@ -2,7 +2,8 @@
 
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
-from django.db import transaction
+from django.db import connection, transaction
+from django.db.models import F
 
 from apps.business_flows.catalog import publish_version, validate_bindings
 from apps.business_flows.definitions import normalize_definition
@@ -24,6 +25,12 @@ class Command(BaseCommand):
         if user is None or not is_superadmin(user):
             raise CommandError("请指定有效的超级管理员账号")
         with transaction.atomic():
+            if apply and connection.vendor == "sqlite":
+                BusinessFlowDefinition._base_manager.filter(
+                    code__in=PRESETS,
+                    is_active=True,
+                    project_tag__is_active=True,
+                ).update(updated_at=F("updated_at"))
             for flow in (
                 BusinessFlowDefinition._base_manager.filter(
                     code__in=PRESETS,
