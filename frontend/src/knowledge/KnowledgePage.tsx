@@ -21,7 +21,7 @@ import {
   PlusOutlined,
   SearchOutlined,
 } from "@ant-design/icons";
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import WorkspaceHeader from "../components/WorkspaceHeader";
 import { useProjectContext } from "../projects/ProjectContext";
@@ -112,9 +112,27 @@ function FieldList({
 export default function KnowledgePage() {
   const project = useProjectContext();
   const { user } = useAppContext();
+  const currentProject = Number(project?.current ?? "1");
+  return (
+    <KnowledgeWorkspace
+      key={`${currentProject}:${user?.id ?? "anonymous"}`}
+      currentProject={currentProject}
+      projectName={
+        project?.projects?.find((item) => item.id === currentProject)?.name
+      }
+    />
+  );
+}
+
+function KnowledgeWorkspace({
+  currentProject,
+  projectName,
+}: {
+  currentProject: number;
+  projectName?: string;
+}) {
   const { message } = App.useApp();
   const navigate = useNavigate();
-  const currentProject = Number(project?.current ?? "1");
   const [data, setData] = useState<KnowledgeEntryList | null>(null);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<string>();
@@ -160,11 +178,29 @@ export default function KnowledgePage() {
     return () => {
       sequence.current += 1;
     };
-  }, [query, category, domain, manage, page, reload, currentProject, user?.id]);
+  }, [query, category, domain, manage, page, reload]);
   const items = data?.items ?? [];
   const visible = node
     ? items.filter((entry) => entry.subject === node || entry.object === node)
     : items;
+  const groups = [
+    ...(currentProject !== 1
+      ? [
+          {
+            id: "project",
+            label: "项目知识库",
+            entries: visible.filter(
+              (entry) => entry.projectTagId === currentProject,
+            ),
+          },
+        ]
+      : []),
+    {
+      id: "public",
+      label: "公开知识库",
+      entries: visible.filter((entry) => entry.projectTagId === 1),
+    },
+  ];
   const sourceCount = new Set(
     items.flatMap((entry) =>
       entry.sources.map((source) => `${source.title}:${source.url}`),
@@ -203,7 +239,10 @@ export default function KnowledgePage() {
               从矿物关系、光谱证据到数据处理方法，把知识的适用条件与来源放在一起。沿着关系探索，也让智能体在处理数据时有据可查。
             </p>
             <Space wrap>
-              <Tag>当前项目与公共基础资料</Tag>
+              {currentProject !== 1 && (
+                <Tag color="blue">项目知识库：{projectName ?? "当前项目"}</Tag>
+              )}
+              <Tag>公开知识库</Tag>
               <Button
                 type="link"
                 onClick={() => handoff()}
@@ -227,49 +266,6 @@ export default function KnowledgePage() {
             </p>
           </div>
         </header>
-        <section className="knowledge-domains" aria-label="知识分区">
-          <div className="knowledge-domains-heading">
-            <h2>按研究方向探索</h2>
-            <Button
-              type={domain ? "text" : "primary"}
-              aria-pressed={!domain}
-              onClick={() => {
-                setDomain(undefined);
-                setCategory(undefined);
-                setPage(1);
-              }}
-            >
-              全部知识
-            </Button>
-          </div>
-          <div className="knowledge-domain-grid">
-            {KNOWLEDGE_DOMAINS.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                className={`knowledge-domain${domain === item.id ? " is-selected" : ""}`}
-                aria-pressed={domain === item.id}
-                onClick={() => {
-                  setDomain(item.id);
-                  setCategory(undefined);
-                  setPage(1);
-                }}
-                style={{ "--domain-color": item.color } as CSSProperties}
-              >
-                <span className="knowledge-domain-index">
-                  {String(KNOWLEDGE_DOMAINS.indexOf(item) + 1).padStart(2, "0")}
-                </span>
-                <strong>{item.label}</strong>
-                <p>{item.description}</p>
-                <span className="knowledge-domain-count">
-                  {data?.domains?.find((value) => value.id === item.id)
-                    ?.count ?? "—"}{" "}
-                  条知识 <ArrowRightOutlined />
-                </span>
-              </button>
-            ))}
-          </div>
-        </section>
         <Tabs
           activeKey={section}
           onChange={setSection}
@@ -281,7 +277,7 @@ export default function KnowledgePage() {
         />
         {section !== "rules" ? (
           <KnowledgeLibrary
-            key={`${currentProject}:${user?.id}:${domain ?? "all"}`}
+            key={domain ?? "all"}
             mode={section === "wiki" ? "wiki" : "library"}
             domain={domain}
           />
@@ -396,61 +392,72 @@ export default function KnowledgePage() {
                     </div>
                   </div>
                   {visible.length ? (
-                    <div className="knowledge-record-grid">
-                      {visible.map((entry) => (
-                        <article className="knowledge-record" key={entry.id}>
-                          <div className="knowledge-record-meta">
-                            <Tag>{domainLabel(entry.domain)}</Tag>
-                            <Tag>{entry.category}</Tag>
-                            <span>
-                              {entry.projectTagId === 1
-                                ? "公共基础资料"
-                                : "当前项目"}{" "}
-                              / v{entry.revision}
-                            </span>
-                            {entry.status !== "published" && (
-                              <Tag>{stateLabels[entry.status]}</Tag>
-                            )}
-                          </div>
-                          <h3>
-                            <button onClick={() => setDetail(entry)}>
-                              {entry.title}
-                            </button>
+                    groups
+                      .filter((group) => group.entries.length)
+                      .map((group) => (
+                        <section
+                          className="knowledge-record-group"
+                          key={group.id}
+                          aria-labelledby={`knowledge-group-${group.id}`}
+                        >
+                          <h3 id={`knowledge-group-${group.id}`}>
+                            {group.label}
                           </h3>
-                          <div className="knowledge-relation">
-                            <span>{entry.subject}</span>
-                            <em>{entry.predicate}</em>
-                            <span>{entry.object}</span>
+                          <div className="knowledge-record-grid">
+                            {group.entries.map((entry) => (
+                              <article
+                                className="knowledge-record"
+                                key={entry.id}
+                              >
+                                <div className="knowledge-record-meta">
+                                  <Tag>{domainLabel(entry.domain)}</Tag>
+                                  <Tag>{entry.category}</Tag>
+                                  <span>v{entry.revision}</span>
+                                  {entry.status !== "published" && (
+                                    <Tag>{stateLabels[entry.status]}</Tag>
+                                  )}
+                                </div>
+                                <h4>
+                                  <button onClick={() => setDetail(entry)}>
+                                    {entry.title}
+                                  </button>
+                                </h4>
+                                <div className="knowledge-relation">
+                                  <span>{entry.subject}</span>
+                                  <em>{entry.predicate}</em>
+                                  <span>{entry.object}</span>
+                                </div>
+                                <p className="knowledge-statement">
+                                  {entry.statement}
+                                </p>
+                                <dl>
+                                  <dt>适用条件</dt>
+                                  <dd>
+                                    {entry.conditions.join("；") ||
+                                      "使用前核对研究对象与观测条件"}
+                                  </dd>
+                                  <dt>核查方式</dt>
+                                  <dd>{ruleLabels[entry.ruleKind]}</dd>
+                                </dl>
+                                <footer>
+                                  <span>
+                                    {entry.sources.length} 项来源
+                                    {entry.exceptions.length
+                                      ? ` / ${entry.exceptions.length} 项例外 / 核验条件`
+                                      : ""}
+                                  </span>
+                                  <Button
+                                    type="text"
+                                    onClick={() => setDetail(entry)}
+                                  >
+                                    查看依据 <ArrowRightOutlined />
+                                  </Button>
+                                </footer>
+                              </article>
+                            ))}
                           </div>
-                          <p className="knowledge-statement">
-                            {entry.statement}
-                          </p>
-                          <dl>
-                            <dt>适用条件</dt>
-                            <dd>
-                              {entry.conditions.join("；") ||
-                                "使用前核对研究对象与观测条件"}
-                            </dd>
-                            <dt>核查方式</dt>
-                            <dd>{ruleLabels[entry.ruleKind]}</dd>
-                          </dl>
-                          <footer>
-                            <span>
-                              {entry.sources.length} 项来源
-                              {entry.exceptions.length
-                                ? ` / ${entry.exceptions.length} 项例外 / 核验条件`
-                                : ""}
-                            </span>
-                            <Button
-                              type="text"
-                              onClick={() => setDetail(entry)}
-                            >
-                              查看依据 <ArrowRightOutlined />
-                            </Button>
-                          </footer>
-                        </article>
-                      ))}
-                    </div>
+                        </section>
+                      ))
                   ) : (
                     <Empty
                       description={

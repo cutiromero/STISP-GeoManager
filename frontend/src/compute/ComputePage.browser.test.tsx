@@ -292,6 +292,21 @@ describe("计算任务排布", () => {
 });
 
 describe("通用计算界面", () => {
+  it("用黄色标签高亮项目算法，不高亮公开算法", async () => {
+    scope.current = "2";
+    api.algorithms.mockResolvedValue({
+      items: [
+        { ...algorithm, projectTagId: 2 },
+        { ...algorithm, id: 6, projectTagId: 1, name: "公开参考算法" },
+      ],
+      total: 2,
+    });
+    const view = show();
+    expect(await screen.findByText("项目算法")).toHaveClass("ant-tag-gold");
+    expect(screen.getByText("公开算法")).not.toHaveClass("ant-tag-gold");
+    view.unmount();
+  });
+
   it("动态显示管理员新算法并根据清单生成参数", async () => {
     const view = show();
     expect(await screen.findByText("管理员新增的表格算法")).toBeTruthy();

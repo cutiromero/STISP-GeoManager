@@ -2,7 +2,7 @@ import pytest
 from django.contrib.auth import get_user_model
 from django.test import Client
 
-from apps.compute.models import AlgorithmCategory, AlgorithmResource
+from apps.compute.models import AlgorithmCategory, AlgorithmResource, AlgorithmVersion
 from apps.compute.services import allowed_algorithms
 from apps.projects.context import ProjectScope, project_scope
 from apps.projects.models import Project
@@ -47,3 +47,40 @@ def test_project_topics_filter_shared_tools_but_keep_local_and_history(geology_c
     assert response.status_code == 200
     assert {row["name"] for row in response.json()["items"]} == {"地质检查", "矢量统计"}
     assert AlgorithmResource._base_manager.count() == 4
+
+
+@pytest.mark.django_db
+def test_project_algorithms_rank_before_public_across_pages():
+    user = get_user_model().objects.create_superuser("algorithm-order-admin")
+    project = Project.objects.create(name="科研项目", code="algorithm-order")
+    for pid, identifier, category, order in (
+        (1, "public-first", "公开优先分类", 1),
+        (1, "public-second", "公开次要分类", 2),
+        (project.pk, "project-first", "项目优先分类", 10),
+        (project.pk, "project-second", "项目次要分类", 20),
+    ):
+        with project_scope(ProjectScope((pid,), pid, user.pk, True)):
+            AlgorithmCategory.objects.create(name=category, sort_order=order)
+            algorithm = AlgorithmResource.objects.create(
+                name=identifier,
+                identifier=identifier,
+                category=category,
+                created_by=user,
+            )
+            AlgorithmVersion.objects.create(
+                algorithm=algorithm, version="1.0", status="published"
+            )
+
+    client = Client()
+    client.force_login(user)
+    items = []
+    for page in (1, 2):
+        response = client.get(
+            "/api/compute/algorithms/",
+            {"page": page, "pageSize": 2},
+            HTTP_X_PROJECT_ID=str(project.pk),
+        )
+        assert response.status_code == 200
+        assert response.json()["total"] == 4
+        items.extend(row["identifier"] for row in response.json()["items"])
+    assert items == ["project-first", "project-second", "public-first", "public-second"]

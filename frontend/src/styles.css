@@ -21246,7 +21246,7 @@ body:has(.workspace),
 .result-card {
   height: 100%;
   overflow: hidden;
-  border-color: #dde4e8;
+  border: 1px solid #aebfc9;
   box-shadow: 0 12px 34px rgba(32, 55, 70, 0.08);
 }
 
@@ -21255,6 +21255,7 @@ body:has(.workspace),
   aspect-ratio: 16 / 9;
   overflow: hidden;
   background: linear-gradient(135deg, #e0e7eb, #f3f5f6);
+  border-bottom: 1px solid #aebfc9;
 }
 
 .result-card-cover .ant-image,
@@ -21318,6 +21319,8 @@ body:has(.workspace),
 
 .result-card-grid-list .result-card-cover {
   aspect-ratio: 16 / 10;
+  border-right: 1px solid #aebfc9;
+  border-bottom: 0;
 }
 
 .results-page-empty {
@@ -21515,6 +21518,11 @@ body:has(.workspace),
   .result-card-grid-list .result-card .ant-card-cover {
     float: none;
     width: 100%;
+  }
+
+  .result-card-grid-list .result-card-cover {
+    border-right: 0;
+    border-bottom: 1px solid #aebfc9;
   }
 }
 

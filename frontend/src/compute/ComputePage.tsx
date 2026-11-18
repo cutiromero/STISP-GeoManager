@@ -186,7 +186,7 @@ function ComputeWorkspace({ admin }: { admin: boolean }) {
               </Space>
             }
             extra={
-              <Tag>
+              <Tag color={algorithm.projectTagId === 1 ? undefined : "gold"}>
                 {algorithm.projectTagId === 1
                   ? ui("公开算法", "Public algorithm")
                   : ui("项目算法", "Project algorithm")}

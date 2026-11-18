@@ -140,7 +140,9 @@ export default function ResultsPage() {
         ? api
             .mapCompositions({ status: "published" })
             .then((response) =>
-              response.items.filter((item) => item.publishedVersion),
+              response.items.filter(
+                (item) => item.status === "published" && item.publishedVersion,
+              ),
             )
         : Promise.resolve([]),
       canViewArtifactResults

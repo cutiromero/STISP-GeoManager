@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AppContext } from "../contexts/AppContext";
 import { appTheme } from "../theme";
 import type { Bootstrap, MapComposition, ResultArtifact, User } from "../types";
+import "../styles.css";
 import ResultsPage from "./ResultsPage";
 
 const mockApi = vi.hoisted(() => ({
@@ -256,6 +257,10 @@ describe("ResultsPage published map compositions", () => {
         .getByRole("img", { name: previewAlt })
         .closest(".card-cover");
       expect(cover).not.toBeNull();
+      const card = cover!.closest(".result-card");
+      const imageSection = cover!.closest(".result-card-cover");
+      expect(getComputedStyle(imageSection!).borderBottomStyle).toBe("solid");
+      expect(getComputedStyle(card!).borderTopWidth).toBe("1px");
       if (hasThumbnail) {
         const image = await screen.findByAltText(previewAlt);
         expect(image).toHaveAttribute("src", thumbnailUrl);
@@ -347,11 +352,15 @@ describe("ResultsPage published map compositions", () => {
         availableAudienceGroups: [],
       });
       mockApi.resultArtifacts.mockResolvedValue({
-        items: [artifact],
+        items: [
+          { ...artifact, id: 58, name: "当前岩性面积统计表", status: "draft" },
+          artifact,
+        ],
         availableAccessGroups: [],
       });
       renderResultsPage();
       fireEvent.click(await screen.findByRole("button", { name: /查看详情/ }));
+      expect(screen.queryByText("当前岩性面积统计表")).not.toBeInTheDocument();
       if (linked) {
         expect(await screen.findByText("关联数据")).toBeInTheDocument();
         expect(

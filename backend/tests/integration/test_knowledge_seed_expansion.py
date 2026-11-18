@@ -15,7 +15,7 @@ from apps.knowledge.models import (
 )
 from apps.knowledge.services import search_entries, validate_entry
 from apps.projects.context import ProjectScope, current_scope, project_scope
-from apps.projects.models import Project
+from apps.projects.models import Project, ProjectMembership
 
 
 SEED_DIRECTORY = Path(__file__).parents[2] / "apps/knowledge"
@@ -33,10 +33,11 @@ def run_seed(**options):
 
 
 @pytest.fixture
-def public_project(db):
-    return Project.objects.get_or_create(
+def geology_project(db):
+    Project.objects.get_or_create(
         pk=1, defaults={"name": "公开", "code": "default", "is_default": True}
-    )[0]
+    )
+    return Project.objects.create(name="核地院逻辑推理", code="02")
 
 
 def test_expansion_contains_thirty_sourced_conditional_entries():
@@ -65,21 +66,28 @@ def test_expansion_contains_thirty_sourced_conditional_entries():
         )
 
 
-def test_default_batch_preserves_original_twenty_entry_scope(public_project):
+def test_default_batch_preserves_original_twenty_entry_scope(geology_project):
     result = run_seed()
-    assert result == {"batch": "base", "dryRun": False, "created": 20, "preserved": 0}
+    assert result == {
+        "batch": "base",
+        "dryRun": False,
+        "created": 20,
+        "preserved": 0,
+        "moved": 0,
+    }
     assert set(KnowledgeEntry.objects.values_list("seed_key", flat=True)) == {
         entry["seedKey"] for entry in seeds("seed_entries.json")
     }
     assert KnowledgeRevision.objects.count() == 20
 
 
-def test_expansion_dry_run_and_independent_batch(public_project):
+def test_expansion_dry_run_and_independent_batch(geology_project):
     assert run_seed(batch=BATCH, dry_run=True) == {
         "batch": BATCH,
         "dryRun": True,
         "created": 30,
         "preserved": 0,
+        "moved": 0,
     }
     assert KnowledgeEntry.objects.count() == KnowledgeRevision.objects.count() == 0
     assert run_seed(batch=BATCH)["created"] == 30
@@ -90,7 +98,7 @@ def test_expansion_dry_run_and_independent_batch(public_project):
     assert KnowledgeDocument.objects.count() == KnowledgeLibrary.objects.count() == 0
 
 
-def test_expansion_only_appends_and_keeps_all_manual_fields(public_project):
+def test_expansion_only_appends_and_keeps_all_manual_fields(geology_project):
     run_seed()
     original = KnowledgeEntry.objects.first()
     original.title = "已有知识的人工标题"
@@ -117,11 +125,17 @@ def test_expansion_only_appends_and_keeps_all_manual_fields(public_project):
         == old_versions
     )
     additions = KnowledgeEntry.objects.exclude(pk__in=old_ids)
-    assert set(additions.values_list("project_tag_id", flat=True)) == {1}
+    assert set(additions.values_list("project_tag_id", flat=True)) == {
+        geology_project.pk
+    }
     for entry in additions:
         version = entry.versions.get()
         assert version.revision == entry.revision == 1
-        assert version.project_tag_id == version.snapshot["projectTagId"] == 1
+        assert (
+            version.project_tag_id
+            == version.snapshot["projectTagId"]
+            == geology_project.pk
+        )
         assert version.snapshot["title"] == entry.title
 
     addition = additions.first()
@@ -135,6 +149,7 @@ def test_expansion_only_appends_and_keeps_all_manual_fields(public_project):
         "dryRun": False,
         "created": 0,
         "preserved": 30,
+        "moved": 0,
     }
     assert run_seed(batch=BATCH, dry_run=True)["created"] == 0
     assert list(KnowledgeEntry.objects.order_by("id").values()) == all_entries
@@ -142,7 +157,9 @@ def test_expansion_only_appends_and_keeps_all_manual_fields(public_project):
     assert KnowledgeDocument.objects.count() == KnowledgeLibrary.objects.count() == 0
 
 
-def test_expansion_writes_public_project_even_with_private_active_scope(public_project):
+def test_expansion_writes_geology_project_even_with_private_active_scope(
+    geology_project,
+):
     private = Project.objects.create(name="临时隔离测试", code="seed-expansion-private")
     seed = seeds("seed_entries_20261009.json")[0]
     data = validate_entry({k: v for k, v in seed.items() if k != "seedKey"})
@@ -156,8 +173,13 @@ def test_expansion_writes_public_project_even_with_private_active_scope(public_p
         assert current_scope.get() == scope
         assert list(KnowledgeEntry.objects.values()) == before
         assert KnowledgeRevision.objects.count() == 0
-    assert KnowledgeEntry.objects.filter(project_tag_id=1).count() == 30
-    assert KnowledgeRevision.objects.filter(project_tag_id=1).count() == 30
+    assert (
+        KnowledgeEntry.objects.filter(project_tag_id=geology_project.pk).count() == 30
+    )
+    assert (
+        KnowledgeRevision.objects.filter(project_tag_id=geology_project.pk).count()
+        == 30
+    )
 
 
 @pytest.mark.parametrize(
@@ -169,10 +191,15 @@ def test_expansion_writes_public_project_even_with_private_active_scope(public_p
         ("Mississippi Valley", "mvt-carbonate-platform-hosts"),
     ],
 )
-def test_expansion_is_retrievable_with_sources(public_project, query, seed_key):
+def test_expansion_is_retrievable_with_sources(geology_project, query, seed_key):
     run_seed(batch=BATCH)
     user = get_user_model().objects.create_user("seed-reader")
-    result = search_entries(user, query, limit=30)
+    assert search_entries(user, query)["total"] == 0
+    ProjectMembership.objects.create(project=geology_project, user=user)
+    with project_scope(
+        ProjectScope((geology_project.pk,), geology_project.pk, user.pk)
+    ):
+        result = search_entries(user, query, limit=30)
     expected_id = KnowledgeEntry.objects.get(seed_key=seed_key).id
     assert expected_id in {entry["id"] for entry in result["items"]}
     match = next(entry for entry in result["items"] if entry["id"] == expected_id)

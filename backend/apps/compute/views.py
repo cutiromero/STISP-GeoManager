@@ -198,15 +198,16 @@ def algorithms(request):
     for category in categories:
         orders.setdefault(category.name, category.sort_order)
     query = query.annotate(
+        scope_order=Case(When(project_tag_id=1, then=Value(1)), default=Value(0)),
         category_order=Case(
             *[When(category=name, then=Value(order)) for name, order in orders.items()],
             default=Value(999999),
             output_field=IntegerField(),
-        )
+        ),
     )
     return page(
         request,
-        query.order_by("category_order", "category", "name", "id"),
+        query.order_by("scope_order", "category_order", "category", "name", "id"),
         lambda a: algorithm_data(a, request.user),
     )
 

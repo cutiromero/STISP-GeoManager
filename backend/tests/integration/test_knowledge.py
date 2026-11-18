@@ -178,6 +178,7 @@ def test_search_aliases_and_long_questions(users):
 
 
 def test_seed_preserves_manual_changes_and_is_repeatable(users):
+    Project.objects.create(name="核地院逻辑推理", code="02")
     call_command("seed_geology_knowledge")
     count = KnowledgeEntry.objects.count()
     assert count >= 15

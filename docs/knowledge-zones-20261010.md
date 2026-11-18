@@ -1,8 +1,8 @@
-# 知识分区与智能体资源选择
+# 知识分类与项目归属
 
 ## 页面与交互
 
-知识库在原有细分类上新增四个领域：遥感基础、油气管道相关、遥感地质填图逻辑推理、干旱区生态安全治理。原条目、资料原件、来源和修订记录保留，历史内容补充分区归属；可在管理入口修改归属。
+知识库以当前项目为入口，格式化知识按项目知识库、公开知识库分组。各项目的成员只读取当前项目内容和获准共享的公开内容。遥感基础、油气管道相关、遥感地质填图逻辑推理、干旱区生态安全治理保留为知识分类，用于检索和图谱。分类不是权限标签。
 
 智能体输入区显式提供“调用算法”“选择数据”“知识库”三个入口。算法与数据可自动筛选或手选；知识可自动选择、选择一个或多个分区、参考全部或不参考。每轮运行保存选项，重新进入会话后从后台恢复。分区改变检索范围，保持原有项目与个人数据权限。
 
@@ -37,7 +37,7 @@
 - [Drought.gov：Drought Basics](https://www.drought.gov/what-is-drought/drought-basics)
 - [UNCCD：Land Degradation Neutrality](https://www.unccd.int/land-and-life/land-degradation-neutrality/overview)
 
-## 载入与验收
+## 载入与归属
 
 在已配置项目运行环境的backend目录执行迁移后，运行：
 
@@ -45,5 +45,7 @@
 python manage.py seed_geology_knowledge --batch knowledge-zones-20261010 --dry-run
 python manage.py seed_geology_knowledge --batch knowledge-zones-20261010
 ```
+
+预设种子归属：遥感基础为公开（`default`），管道为中石油管道（`gd`），地质为核地院逻辑推理（`02`），干旱区生态为干旱区生态风险评估分析决策（`demo-arid-ecology`）。目标项目不存在或有同标识冲突时，命令不写入。现有站点仅整理存量时，对批次 `base`、`geology-20261009`、`knowledge-zones-20261010` 分别执行 `seed_geology_knowledge --batch <批次> --reassign-existing --dry-run` 核对数量，再移除 `--dry-run` 执行。调整仅限批次中的已知种子，保留条目 ID、版本与科学内容，不迁移资料原件或已有项目知识。
 
 验收覆盖领域过滤、手选执行约束、不参考模式、历史隔离、文档读取与Wiki权限、种子幂等、来源检索、缩放平移、恢复和窄屏。服务器按冻结提交先候选验收，后正式切换；保留业务内容和模型/WeKnora服务，新增知识与迁移单独核对。

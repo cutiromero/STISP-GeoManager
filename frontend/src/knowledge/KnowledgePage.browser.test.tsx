@@ -9,9 +9,10 @@ import {
 } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { page, userEvent } from "vitest/browser";
+import { userEvent } from "vitest/browser";
 import type { KnowledgeEntry } from "../api/generated/types.gen";
 
+const scope = vi.hoisted(() => ({ current: "2" }));
 const api = vi.hoisted(() => ({
   entries: vi.fn(),
   save: vi.fn(),
@@ -22,13 +23,15 @@ vi.mock("../contexts/AppContext", () => ({
   useAppContext: () => ({ user: { id: 1 } }),
 }));
 vi.mock("../projects/ProjectContext", () => ({
-  useProjectContext: () => ({ current: "2" }),
+  useProjectContext: () => ({
+    current: scope.current,
+    projects: [{ id: 2, name: "生态项目" }],
+  }),
 }));
 vi.mock("../components/WorkspaceHeader", () => ({
   default: () => <div>平台导航</div>,
 }));
 import KnowledgePage from "./KnowledgePage";
-import { KNOWLEDGE_DOMAINS } from "./domains";
 
 const publicEntry: KnowledgeEntry = {
   id: 1,
@@ -82,11 +85,11 @@ function show() {
 }
 beforeEach(() => {
   vi.clearAllMocks();
+  scope.current = "2";
   api.entries.mockResolvedValue({
     items: [publicEntry, privateEntry],
     total: 2,
     categories: ["矿物学", "遥感"],
-    domains: KNOWLEDGE_DOMAINS.map((item) => ({ ...item, count: 1 })),
     canEdit: false,
   });
 });
@@ -256,75 +259,51 @@ describe("knowledge network and records", () => {
     );
   });
 
-  it("filters the server records by research zone while retaining fine categories", async () => {
-    api.entries.mockImplementation(async (options) => ({
-      items: options.domain ? [privateEntry] : [publicEntry, privateEntry],
-      total: options.domain ? 1 : 2,
-      categories: ["遥感"],
-      domains: KNOWLEDGE_DOMAINS.map((item) => ({ ...item, count: 1 })),
-      canEdit: false,
-    }));
+  it("groups records by project and public scope without the research direction strip", async () => {
     show();
-    await screen.findByRole("button", { name: publicEntry.title, exact: true });
-    const zone = within(
-      screen.getByRole("region", { name: "知识分区" }),
-    ).getByRole("button", { name: /干旱区生态安全治理/ });
-    fireEvent.click(zone);
-    await waitFor(() =>
-      expect(api.entries).toHaveBeenLastCalledWith(
-        expect.objectContaining({
-          domain: "arid_ecology",
-          category: undefined,
-          offset: 0,
-        }),
-      ),
-    );
-    await waitFor(() =>
-      expect(
-        screen.queryByRole("button", { name: publicEntry.title, exact: true }),
-      ).toBeNull(),
-    );
-    expect(zone).toHaveAttribute("aria-pressed", "true");
+    const local = await screen.findByRole("region", { name: "项目知识库" });
+    const shared = screen.getByRole("region", { name: "公开知识库" });
     expect(
-      screen.getByRole("button", { name: privateEntry.title, exact: true }),
+      within(local).getByRole("button", { name: privateEntry.title }),
     ).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "全部知识" }));
-    await waitFor(() =>
-      expect(api.entries).toHaveBeenLastCalledWith(
-        expect.objectContaining({ domain: undefined }),
-      ),
-    );
     expect(
-      await screen.findByRole("button", {
-        name: publicEntry.title,
-        exact: true,
-      }),
+      within(shared).getByRole("button", { name: publicEntry.title }),
     ).toBeVisible();
+    expect(
+      local.compareDocumentPosition(shared) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(screen.getByText("项目知识库：生态项目")).toBeVisible();
+    expect(screen.queryByText("按研究方向探索")).not.toBeInTheDocument();
   });
 
-  it("keeps four zone controls readable and within the mobile viewport", async () => {
-    await page.viewport(390, 844);
-    try {
-      show();
-      await screen.findByRole("button", {
-        name: publicEntry.title,
-        exact: true,
-      });
-      for (const item of KNOWLEDGE_DOMAINS) {
-        const zone = within(
-          screen.getByRole("region", { name: "知识分区" }),
-        ).getByRole("button", {
-          name: new RegExp(item.label),
-        });
-        expect(zone).toBeVisible();
-        expect(zone.getBoundingClientRect().right).toBeLessThanOrEqual(390);
-      }
-      await page.screenshot({
-        path: "../../test-results/knowledge-zones-mobile.png",
-      });
-    } finally {
-      await page.viewport(1600, 900);
-    }
+  it("clears knowledge and open details immediately on project switch", async () => {
+    const view = show();
+    fireEvent.click(
+      await screen.findByRole("button", { name: privateEntry.title }),
+    );
+    expect(screen.getByRole("dialog")).toBeVisible();
+    scope.current = "1";
+    api.entries.mockResolvedValue({
+      items: [publicEntry],
+      total: 1,
+      categories: ["矿物学"],
+      canEdit: false,
+    });
+    view.rerender(
+      <AntApp>
+        <MemoryRouter>
+          <KnowledgePage />
+        </MemoryRouter>
+      </AntApp>,
+    );
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.queryByText(privateEntry.title)).not.toBeInTheDocument();
+    expect(
+      await screen.findByRole("region", { name: "公开知识库" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("region", { name: "项目知识库" }),
+    ).not.toBeInTheDocument();
   });
 
   it("offers editing only for current-project records", async () => {
