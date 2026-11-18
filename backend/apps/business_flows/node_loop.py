@@ -47,6 +47,16 @@ class RemedyRejected(ComputeError):
     pass
 
 
+class InputReferenceError(ComputeError):
+    """The action did not reach the scientific operator."""
+
+    def __init__(self):
+        super().__init__(
+            "输出输入绑定只能引用当前节点直接依赖的真实成果。原始资料值直接用整数资源ID；若预检已通过，按runAction提交usePreflight=true，不要重抄引用。",
+            failure={"code": "INPUT_REFERENCE_INVALID", "remedy": "correct_inputs"},
+        )
+
+
 def encoded(value):
     return json.dumps(
         value, ensure_ascii=False, separators=(",", ":"), allow_nan=False
@@ -516,7 +526,7 @@ def resolve_output_bindings(workflow, user, policy, node, loop, inputs):
             or type(identity) is not int
             or f"output-{identity}" not in visible
         ):
-            raise ComputeError("输出输入绑定只能引用当前节点直接依赖的真实成果")
+            raise InputReferenceError()
         output = ComputeOutput.objects.select_related("task").get(pk=identity)
         task = authorized_task(user, output.task_id, policy, workflow=workflow)
         if task.status != "succeeded":
@@ -1083,6 +1093,27 @@ def execute_tool(
     if action in {"preflight_operator", "run_operator", "prepare_input"}:
         from apps.compute.services import validate_submission, submit
 
+        if action in {"preflight_operator", "prepare_input"}:
+            for key in (
+                "validatedLaunch",
+                "preflightDigest",
+                "preflightSources",
+                "preflightRequestHash",
+            ):
+                loop.pop(key, None)
+        if action == "run_operator" and "usePreflight" in arguments:
+            if arguments["usePreflight"] is not True or set(arguments) - {
+                "usePreflight",
+                "remedy",
+            }:
+                raise InputReferenceError()
+            prepared = loop.get("validatedLaunch")
+            if not prepared or not loop.get("preflightRequestHash"):
+                raise PreflightRequired()
+            arguments = {
+                **deepcopy(prepared),
+                **({"remedy": arguments["remedy"]} if "remedy" in arguments else {}),
+            }
         sources = {}
         version, body = submission(
             workflow, user, policy, node, loop, arguments, source_state=sources
@@ -1094,7 +1125,20 @@ def execute_tool(
             loop["preflightDigest"] = submission_digest(body)
             loop["preflightSources"] = sources
             loop["preflightRequestHash"] = validated["digest"]
-            return {"valid": True, "gaps": [], "message": "预检通过，尚未提交计算"}
+            loop["validatedLaunch"] = {
+                key: deepcopy(item)
+                for key, item in body.items()
+                if key in {"versionId", "inputs", "parameters", "fieldMappings"}
+            }
+            return {
+                "valid": True,
+                "gaps": [],
+                "message": "预检通过，尚未提交计算；若按原方案执行，请调用runAction。",
+                "runAction": {
+                    "action": "run_operator",
+                    "arguments": {"usePreflight": True},
+                },
+            }
         from . import logic_nodes
         from .execution_session import session
 
@@ -1599,7 +1643,9 @@ def advance_tool_execution(
                 "run_operator",
                 "preflight_operator",
                 "prepare_input",
-            } and not isinstance(error, (RemedyRejected, PreflightRequired)):
+            } and not isinstance(
+                error, (RemedyRejected, PreflightRequired, InputReferenceError)
+            ):
                 failure["versionId"] = arguments.get("versionId")
                 loop["failure"] = failure
                 loop.setdefault("lastSubmission", deepcopy(arguments))

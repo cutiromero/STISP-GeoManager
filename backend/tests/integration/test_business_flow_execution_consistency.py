@@ -542,3 +542,24 @@ def test_main_contract_cannot_publish_an_unexecutable_output(missing):
     definition["nodes"][0]["contract"] = configured
     with pytest.raises(ValidationError):
         normalize_definition(definition)
+
+
+def test_reusing_validated_plan_cannot_override_or_accept_changed_source(operators):
+    env = operators
+    workflow = main_workflow(env)
+    action = tool(env, workflow, "preflight_operator", submit_args(env))["runAction"]
+    assert action == {"action": "run_operator", "arguments": {"usePreflight": True}}
+    with pytest.raises(ComputeError, match="不要重抄引用"):
+        tool(
+            env,
+            workflow,
+            "run_operator",
+            {**action["arguments"], "inputs": {"table": 999}},
+        )
+    env["resource"].save(update_fields=["updated_at"])
+    with pytest.raises(ComputeError, match="预检"):
+        tool(env, workflow, "run_operator", action["arguments"])
+    assert not ComputeTask.objects.exists()
+    tool(env, workflow, "preflight_operator", submit_args(env))
+    tool(env, workflow, "run_operator", action["arguments"])
+    assert ComputeTask.objects.count() == 1

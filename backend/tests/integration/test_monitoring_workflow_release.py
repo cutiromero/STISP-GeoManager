@@ -126,7 +126,7 @@ def test_one_main_agent_runs_real_queue_and_groups_task(operators, monkeypatch):
             action("start_node", nodeId="interpret"),
             action("operator_catalog", versionId=env["version"].pk),
             action("preflight_operator", **submit_args(env)),
-            action("run_operator", **submit_args(env)),
+            action("run_operator", usePreflight=True),
             finish_interpret,
             action("start_node", nodeId="finish"),
             finish_delivery,

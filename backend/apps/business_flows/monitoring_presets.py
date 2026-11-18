@@ -67,7 +67,7 @@ def definition(code, version_id):
     skill.update(
         title="遥感监测解译组织",
         nodeInstructions={
-            "interpret": "先查已绑定算子，沿用确认的资料和参数做真实预检。可将可修复差距交给已发布适配能力或受控prepare_input，修复后重新预检。保留原件、核心算法和已确认的时间范围。只有无法可靠判断科学含义时才提问，不循环重复同一方案。",
+            "interpret": "查nodeDefaults的versionId；用visibleInputs里的整数ID做预检（不是role对象或outputId）。成功后按返回的runAction调用run_operator，只传usePreflight=true，不重抄绑定。预检确有差距时用已发布适配能力或受控prepare_input，结果就绪后重新预检。保留原件、核心算法和已确认的时空范围；只有无法可靠判断含义时提问。",
             "finish": "通过实际图表、日期、单位与输入来源交付。任务入库不等于正式发布，不调用大屏或替用户登记。",
         },
     )

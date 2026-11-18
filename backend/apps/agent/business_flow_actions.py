@@ -21,7 +21,14 @@ ARGUMENT_KEYS = {
         "view",
     },
     "preflight_operator": {"versionId", "inputs", "parameters", "fieldMappings"},
-    "run_operator": {"versionId", "inputs", "parameters", "fieldMappings", "remedy"},
+    "run_operator": {
+        "versionId",
+        "inputs",
+        "parameters",
+        "fieldMappings",
+        "remedy",
+        "usePreflight",
+    },
     "prepare_input": {"versionId", "inputs", "parameters", "remedy"},
     "ask_user": {"question"},
     "finish_node": {
@@ -60,6 +67,8 @@ run_operator/preflight_operator使用versionId、inputs(端口→resourceId或�
 nodeDefaults给出节点已配置的默认版本、参数及输入绑定，先按versionId查询核对，以此为起点适配；配置已经由平台填入，沿用时无需重复提交参数。固定配置可以原样复述，不能改值。
 nodeDefaults的Complete=false表示仅有短预览，不能把缺省条目当作没有配置。完整配置按其evidenceId使用read_evidence按需读取，不要为抄写默认值读取长代码或文件正文。
 集合成员格式为{"resourceId":整数,"label":"类别名"}；fieldMappings遵循目录的语义角色。
+原始资料输入的值是visibleInputs中的实际整数资源ID，不是nodeDefaults的{"role":"..."}配置对象。
+预检通过后直接使用返回的runAction：run_operator的arguments只传{"usePreflight":true}（若实际补救还须传已确认的remedy）。不要重抄inputs、parameters和fieldMappings；若要改变方案，重新预检。
 单输入也可使用{"outputId":整数}引用直接依赖的真实成果，平台通过现有队列准备后再提交，不得引用无关成果。
 prepare_input复用现有脚本生成、独立审核、隔离执行；不是执行任意脚本的工具。
 read_evidence按evidenceId、offset(UTF-8字节偏移)、length(最多4096)取真实证据片段。
