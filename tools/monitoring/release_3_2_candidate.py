@@ -296,6 +296,8 @@ def main():
     checks = {}
     expires = time.monotonic() + WAIT_SECONDS
     while time.monotonic() < expires:
+        if (root / "monitoring-browser-rejected").is_file():
+            raise RuntimeError("gongxt 浏览器已拒绝本次候选；未进入正式切换")
         for code_name, case in cases.items():
             if checks.get(code_name):
                 continue

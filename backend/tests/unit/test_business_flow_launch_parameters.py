@@ -61,3 +61,26 @@ def test_defaults_conditions_and_agent_adjustable_parameters_keep_their_semantic
     require_fixed_parameters(manifest, {})
     with pytest.raises(MissingFixedParameters):
         require_fixed_parameters(manifest, {"product": "fcci_ba"})
+
+
+@pytest.mark.parametrize("domain", ["spartina-rf", "wildfire-observe"])
+def test_declared_spatial_defaults_defer_all_four_bounds_but_not_date(domain):
+    import json
+    from pathlib import Path
+
+    path = (
+        Path(__file__).resolve().parents[3]
+        / "examples/compute"
+        / domain
+        / "operator.yaml"
+    )
+    manifest = json.loads(path.read_text())
+    inputs = {"time_index": 873} if domain == "wildfire-observe" else {}
+    require_fixed_parameters(manifest, inputs)
+    with pytest.raises(MissingFixedParameters) as caught:
+        require_fixed_parameters(manifest, {**inputs, "west": 100})
+    assert set(caught.value.failure["parameters"]) == {"south", "east", "north"}
+    if inputs:
+        with pytest.raises(MissingFixedParameters) as caught:
+            require_fixed_parameters(manifest, {})
+        assert caught.value.failure["parameters"] == ["time_index"]
