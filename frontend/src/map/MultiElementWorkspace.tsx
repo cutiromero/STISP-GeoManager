@@ -176,6 +176,8 @@ export default function MultiElementWorkspace({
   const [prospectError, setProspectError] = useState("");
   const prospectOutputId =
     workflow.plan.multiElementMap?.prospectHeatmapOutputId;
+  const currentProspectsOnly =
+    workflow.plan.multiElementMap?.prospectProtocol === "after_only_v2";
   useEffect(() => {
     let disposed = false;
     setProspectPreview(undefined);
@@ -864,7 +866,12 @@ export default function MultiElementWorkspace({
         )
       : undefined;
   const spotlight = useMemo(() => {
-    if (viewMode === "outcome" && focusedOutcome) return focusedOutcome;
+    if (viewMode === "outcome" && focusedOutcome) {
+      // Keep the rock background dimmed and let the support raster own the fill.
+      return currentProspectsOnly
+        ? { before: empty, after: empty }
+        : focusedOutcome;
+    }
     if (viewMode !== "tour" || !currentTour) return null;
     const currentLabels = tourLabels(currentTour, tourBefore, tourAfter);
     return {
@@ -885,7 +892,15 @@ export default function MultiElementWorkspace({
       beforeLabel: currentLabels.before,
       afterLabel: currentLabels.after,
     };
-  }, [viewMode, focusedOutcome, currentTour, tourBefore, tourAfter, workflow]);
+  }, [
+    viewMode,
+    focusedOutcome,
+    currentProspectsOnly,
+    currentTour,
+    tourBefore,
+    tourAfter,
+    workflow,
+  ]);
   const suggestion = workflow.modificationReview?.suggestions.find(
     (item) =>
       selected &&
@@ -1155,19 +1170,14 @@ export default function MultiElementWorkspace({
                   viewMode === "tour"
                     ? "当前对象前后状态"
                     : viewMode === "outcome"
-                      ? workflow.plan.multiElementMap?.prospectProtocol ===
-                        "after_only_v2"
+                      ? currentProspectsOnly
                         ? "修正后远景目标"
                         : "调查建议前后对比"
                       : "全区前后对比"
                 }
               >
                 <GeologyReviewMaps
-                  single={
-                    viewMode === "outcome" &&
-                    workflow.plan.multiElementMap?.prospectProtocol ===
-                      "after_only_v2"
-                  }
+                  single={viewMode === "outcome" && currentProspectsOnly}
                   singleSide="after"
                   before={data.before}
                   rasterOverlays={[
@@ -1230,7 +1240,9 @@ export default function MultiElementWorkspace({
               )}
               {viewMode === "outcome" && (
                 <p className="multi-tour-map-note">
-                  只突出实际改变的核查区；相同的核查区保持淡化。左右拖动、缩放保持同一视角。
+                  {currentProspectsOnly
+                    ? "渐变表示圈区内的综合证据支持度；点击远景区轮廓可查看构造、蚀变和岩性依据。"
+                    : "只突出实际改变的核查区；相同的核查区保持淡化。左右拖动、缩放保持同一视角。"}
                 </p>
               )}
             </section>
@@ -1322,10 +1334,7 @@ export default function MultiElementWorkspace({
               result={outcome}
               colorRamp={prospectPreview?.metadata.colorRamp}
               heatmapError={prospectError}
-              currentOnly={
-                workflow.plan.multiElementMap?.prospectProtocol ===
-                "after_only_v2"
-              }
+              currentOnly={currentProspectsOnly}
               active={viewMode === "outcome"}
               onFocus={showOutcome}
               onObjectFocus={inspect}

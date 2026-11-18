@@ -47,6 +47,9 @@
   gap: 1px;
   background: #dce6f1;
 }
+.geology-review-map-pair.is-single {
+  grid-template-columns: minmax(0, 1fr);
+}
 .geology-review-map-pair section {
   min-width: 0;
   background: white;
