@@ -10,6 +10,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from .models import AgentWorkflowStep
+from .workflow_controls import locked_workflow
 
 
 # Configuration: progress saves are small and independent of the workflow plan.
@@ -169,13 +170,14 @@ class WorkflowModelActivity:
         }
         # The cursor and the snapshot must commit together: a reconnect must
         # never observe new thinking before its corresponding stream event.
-        atomic = (
-            transaction.atomic
-            if self.workflow.parameters.get("_businessFlow")
-            else nullcontext
-        )
-        with atomic():
+        bound = bool(self.workflow.parameters.get("_businessFlow"))
+        with transaction.atomic() if bound else nullcontext():
             if self.step_id is None:
+                if bound:
+                    # Reserve the SQLite writer before reading the next sequence.
+                    # Heartbeats can otherwise invalidate the read snapshot and
+                    # abort an otherwise valid model request on its first insert.
+                    locked_workflow(self.workflow.pk)
                 record = AgentWorkflowStep.objects.create(
                     workflow=self.workflow,
                     sequence=self.workflow.steps.count() + 1,
@@ -202,7 +204,7 @@ class WorkflowModelActivity:
                 AgentWorkflowStep.objects.filter(
                     pk=self.step_id, workflow=self.workflow
                 ).update(**values)
-            if self.workflow.parameters.get("_businessFlow"):
+            if bound:
                 from .workflow_model_events import publish_activity
 
                 reset = self.published_step != self.step_id
