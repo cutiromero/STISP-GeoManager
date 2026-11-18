@@ -790,6 +790,264 @@
         }
       }
     },
+    "/api/ecology/monitoring/official/": {
+      "get": {
+        "tags": [
+          "数据目录"
+        ],
+        "operationId": "getOfficialMonitoring",
+        "summary": "读取正式登记的监测展板",
+        "description": "仅按当前项目与场景读取获准访问的最新区域成果。不会提交算子、创建瓦片任务或读取源科学文件。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Project-Id",
+            "in": "header",
+            "required": true,
+            "description": "当前项目编号。",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "scene",
+            "in": "query",
+            "required": true,
+            "description": "展示场景。",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "spartina",
+                "wildfire",
+                "landcover"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "精选区域及已准备好的地图展示描述。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OfficialMonitoringList"
+                },
+                "example": {
+                  "scene": "landcover",
+                  "items": []
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/api/ecology/monitoring/registration/": {
+      "post": {
+        "tags": [
+          "数据目录"
+        ],
+        "operationId": "registerMonitoringOutput",
+        "summary": "将本人的监测任务主成果正式登记到大屏",
+        "description": "仅接收当前项目本人计算、已入库并通过质量核查的主地图成果。使用冻结成果及来源登记，不重算、不扩大资料可见范围；重复确认幂等。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Project-Id",
+            "in": "header",
+            "required": true,
+            "description": "当前项目编号。",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "明确确认的计算输出编号。",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "outputId"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "outputId": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "主地图计算输出编号。"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "正式登记回执。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "scene"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "integer",
+                      "description": "正式成果编号。"
+                    },
+                    "scene": {
+                      "type": "string",
+                      "enum": [
+                        "spartina",
+                        "wildfire",
+                        "landcover"
+                      ],
+                      "description": "展示场景。"
+                    }
+                  }
+                },
+                "example": {
+                  "id": 24,
+                  "scene": "landcover"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/api/compute/result-groups/": {
+      "get": {
+        "tags": [
+          "计算中心"
+        ],
+        "operationId": "getCatalogueComputeResultGroups",
+        "summary": "按业务任务与运行时间组织已入库计算成果",
+        "description": "当前项目有权访问的任务成果；业务流子算子按同一业务任务归组，独立计算用计算任务归组。原始资料不进入本列表。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Project-Id",
+            "in": "header",
+            "required": true,
+            "description": "当前项目编号。",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "分页页码。",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10000
+            }
+          },
+          {
+            "name": "groupId",
+            "in": "query",
+            "description": "只查看指定任务组。",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "任务分组列表及分页状态。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogueComputeResultGroups"
+                },
+                "example": {
+                  "items": [
+                    {
+                      "id": "c88c66bd-7aae-4540-b65d-eeaee44d0c7b",
+                      "name": "样区地表覆盖解译",
+                      "workflowId": "c88c66bd-7aae-4540-b65d-eeaee44d0c7b",
+                      "createdAt": "2026-11-18T13:00:00Z",
+                      "total": 1,
+                      "items": [
+                        {
+                          "id": 626,
+                          "taskId": "03f5ddbf-326f-4772-8b25-84b549cebe18",
+                          "taskName": "六类分类与面积",
+                          "name": "样区分类图",
+                          "kind": "raster",
+                          "fileName": "classification.tif",
+                          "resourceId": 1730,
+                          "registered": false,
+                          "canRegister": true,
+                          "downloadUrl": "/api/compute/outputs/626/file/?projectTagId=2"
+                        }
+                      ]
+                    }
+                  ],
+                  "hasMore": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
     "/api/sharing/check/": {
       "post": {
         "tags": [
@@ -9792,6 +10050,17 @@
               "type": "string"
             },
             "description": "按名称模糊搜索"
+          },
+          {
+            "name": "excludeComputeResults",
+            "in": "query",
+            "description": "传1时只读取资料目录，不混入已入库的计算成果。",
+            "schema": {
+              "type": "integer",
+              "enum": [
+                1
+              ]
+            }
           },
           {
             "name": "dataType",
@@ -38170,6 +38439,197 @@
           }
         }
       },
+      "OfficialMonitoringList": {
+        "type": "object",
+        "description": "只读大屏的区域展示结果。",
+        "required": [
+          "scene",
+          "items"
+        ],
+        "properties": {
+          "scene": {
+            "type": "string",
+            "enum": [
+              "spartina",
+              "wildfire",
+              "landcover"
+            ],
+            "description": "展示场景。"
+          },
+          "items": {
+            "type": "array",
+            "description": "每个区域与物理量仅展示最新观测期的正式版本。",
+            "maxItems": 60,
+            "items": {
+              "$ref": "#/components/schemas/OfficialMonitoringProduct"
+            }
+          }
+        }
+      },
+      "OfficialMonitoringProduct": {
+        "description": "已核对访问权限的正式登记产品与持久地图展示。",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/MonitoringProduct"
+          },
+          {
+            "type": "object",
+            "required": [
+              "regionLabel",
+              "display"
+            ],
+            "properties": {
+              "regionLabel": {
+                "type": "string",
+                "description": "来自原始资料或既有成果的区域名称。"
+              },
+              "display": {
+                "description": "已准备的只读栅格展示，无展示时为null。",
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/RasterRenderResult"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "CatalogueComputeResultGroups": {
+        "type": "object",
+        "description": "当前页的可见任务分组。",
+        "required": [
+          "items",
+          "hasMore"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "description": "按实际任务时间倒序的分组。",
+            "maxItems": 15,
+            "items": {
+              "$ref": "#/components/schemas/CatalogueComputeResultGroup"
+            }
+          },
+          "hasMore": {
+            "type": "boolean",
+            "description": "是否还有下一页。"
+          }
+        }
+      },
+      "CatalogueComputeResultGroup": {
+        "type": "object",
+        "description": "一个业务流任务或独立计算任务的可见目录成果。",
+        "required": [
+          "id",
+          "name",
+          "workflowId",
+          "createdAt",
+          "total",
+          "items"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "业务流或独立计算任务编号。"
+          },
+          "name": {
+            "type": "string",
+            "description": "已登记任务名称或业务任务目标。"
+          },
+          "workflowId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "本人可回看的业务流编号。"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "任务创建时间。"
+          },
+          "total": {
+            "type": "integer",
+            "description": "本任务组可见入库结果总数。"
+          },
+          "items": {
+            "type": "array",
+            "description": "本组前100项，保留所属算子计算任务引用。",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/CatalogueComputeResult"
+            }
+          }
+        }
+      },
+      "CatalogueComputeResult": {
+        "type": "object",
+        "description": "已成功入库、当前授权可读的任务结果。",
+        "required": [
+          "id",
+          "taskId",
+          "taskName",
+          "name",
+          "kind",
+          "fileName",
+          "resourceId",
+          "registered",
+          "canRegister",
+          "downloadUrl"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "计算输出编号。"
+          },
+          "taskId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "所属算子任务编号。"
+          },
+          "taskName": {
+            "type": "string",
+            "description": "所属算子任务名。"
+          },
+          "name": {
+            "type": "string",
+            "description": "目录成果名称。"
+          },
+          "kind": {
+            "type": "string",
+            "description": "结果物理类型。"
+          },
+          "fileName": {
+            "type": "string",
+            "description": "下载使用的文件名。"
+          },
+          "resourceId": {
+            "type": "integer",
+            "description": "可见的目录成果资源编号。"
+          },
+          "registered": {
+            "type": "boolean",
+            "description": "是否已明确登记为正式监测成果。"
+          },
+          "canRegister": {
+            "type": "boolean",
+            "description": "是否具备正式登记资格；提交时重验。"
+          },
+          "downloadUrl": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "当前可用文件下载入口。"
+          }
+        }
+      },
       "MonitoringProduct": {
         "description": "已通过全部依赖访问检查的遥感产品及地图资源。",
         "allOf": [
@@ -53362,10 +53822,11 @@
           },
           "executionMode": {
             "type": "string",
-            "description": "main_agent由一个任务级主循环选择合法目标、调用工具并继续；省略保留旧节点执行方式。",
+            "description": "main_agent运行任务级主循环；fixed仅按确定输入运行冻结算子并入库，不调用模型；省略保留旧节点方式。",
             "enum": [
               "nodes",
-              "main_agent"
+              "main_agent",
+              "fixed"
             ]
           }
         },
@@ -54726,6 +55187,16 @@
           "definition": {
             "$ref": "#/components/schemas/BusinessFlowSpec"
           },
+          "name": {
+            "type": "string",
+            "maxLength": 120,
+            "description": "可同时更新的流程名称"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 3000,
+            "description": "可同时更新的使用说明"
+          },
           "updatedAt": {
             "type": "string",
             "description": "元信息版本时间，也是保存的乐观并发凭据",
@@ -54755,7 +55226,7 @@
           },
           "model": {
             "type": "string",
-            "description": "执行模型别名",
+            "description": "Agent流程必填执行模型别名；固定执行不发送此字段",
             "maxLength": 80
           },
           "reviewerModel": {
@@ -54818,7 +55289,6 @@
         },
         "required": [
           "goal",
-          "model",
           "inputs",
           "parameters",
           "idempotencyKey"

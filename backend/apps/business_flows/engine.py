@@ -54,6 +54,7 @@ def cancel_tasks(user, workflow):
 def live_guard(workflow):
     touched = [0.0]
     frozen = deepcopy(binding(workflow))
+    fixed = frozen["definitionSnapshot"].get("executionMode") == "fixed"
     frozen_resource_ids = tuple(workflow.resource_ids or [])
     epoch = workflow.policy_snapshot.get("businessFlowControlEpoch", 0)
 
@@ -78,7 +79,7 @@ def live_guard(workflow):
         from .scopes import available_flows
 
         user = fresh_user(current.owner_id)
-        policy = require_access(user, "agent", workflow.model)
+        policy = require_access(user, "agent", None if fixed else workflow.model)
         if (
             not policy.get("workflowEnabled", True)
             or not available_flows(current.project_tag_id)
@@ -457,7 +458,11 @@ def _operator(workflow, user, policy, node, item, evidence):
             **node.get("parameters", {}),
             **workflow.parameters.get("nodeParameters", {}).get(node["id"], {}),
         }
-        if item["attempt"] > 1 and item.get("feedback"):
+        if (
+            item["attempt"] > 1
+            and item.get("feedback")
+            and binding(workflow)["definitionSnapshot"].get("executionMode") != "fixed"
+        ):
             from apps.agent.business_flow_operator_repair import propose_parameters
 
             planned = propose_parameters(
@@ -537,6 +542,11 @@ def _operator(workflow, user, policy, node, item, evidence):
         raise ComputeError(
             "节点算子未完成：" + (task.error or task.status), failure=task.failure
         )
+    if binding(workflow)["definitionSnapshot"].get("executionMode") == "fixed":
+        from .fixed_outputs import prepare_delivery
+
+        if not prepare_delivery(workflow, user, node, task):
+            return None
     actual = []
     for value in read_task_outputs(
         parent_run(workflow), user, policy, task, workflow=workflow
@@ -666,7 +676,22 @@ def advance(workflow_id):
                 emit(workflow, "executor", node["id"], "node_started", workflow.detail)
             evidence = input_evidence(workflow, user, policy, node)
             if not item["executor"].get("summary"):
-                if item.get("reanalyzeExistingOutputs") and not session(workflow):
+                if (
+                    definition.get("executionMode") == "fixed"
+                    and node["kind"] == "operator"
+                ):
+                    result = _operator(workflow, user, policy, node, item, evidence)
+                    if result is None:
+                        return
+                elif definition.get("executionMode") == "fixed":
+                    result = {
+                        "summary": node["description"],
+                        "findings": [],
+                        "limitations": [],
+                        "evidenceIds": [row["id"] for row in evidence],
+                        "status": "succeeded",
+                    }
+                elif item.get("reanalyzeExistingOutputs") and not session(workflow):
                     from apps.agent.business_flow_execution import execute_node
 
                     prior = resolve_evidence(workflow, item.get("revisionEvidence", []))

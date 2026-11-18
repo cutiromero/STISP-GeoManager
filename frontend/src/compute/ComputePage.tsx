@@ -510,6 +510,7 @@ function ComputeWorkspace({ admin }: { admin: boolean }) {
             label: ui("算法管理", "Algorithm management"),
             children: (
               <AlgorithmManager
+                openCreate={params.get("newOperator") === "1"}
                 runtime={runtime}
                 refreshKey={revision}
                 onTrial={(version) => setCreating({ version, trial: true })}
@@ -625,6 +626,18 @@ function ComputeWorkspace({ admin }: { admin: boolean }) {
         items={tabs}
         tabBarExtraContent={
           <Space>
+            {!admin && permissions.manage_algorithms && (
+              <Button
+                type="primary"
+                onClick={() =>
+                  navigate(
+                    `/admin/compute?newOperator=1&projectTagId=${project?.current ?? "1"}`,
+                  )
+                }
+              >
+                {ui("新建算子", "New operator")}
+              </Button>
+            )}
             {!admin && permissions.manage_algorithms && (
               <Button onClick={() => navigate("/admin/compute")}>
                 {ui("管理算法", "Manage algorithms")}

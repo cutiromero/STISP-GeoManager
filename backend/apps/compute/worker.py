@@ -409,19 +409,12 @@ def process_import(record):
 
             record_import_metadata(record.pk)
             if (
-                record.output.task.version.algorithm.identifier
-                == "landcover-unet-infer"
+                record.output.task.version.algorithm.identifier == "spartina-rf-infer"
+                and record.output.key == "probability"
             ):
-                from apps.ecology.landcover import register_import
-
-                register_import(record.pk)
-            elif record.output.task.version.algorithm.identifier == "spartina-rf-infer":
                 from apps.ecology.spartina import register_import
 
-                register_import(record.pk)
-            elif record.output.task.version.algorithm.identifier == "wildfire-observe":
-                from apps.ecology.wildfire import register_import
-
+                # Configure probability display only. It is not a formal product.
                 register_import(record.pk)
             return
         except Exception as exc:

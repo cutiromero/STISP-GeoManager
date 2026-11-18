@@ -31,10 +31,12 @@ export default function AlgorithmManager({
   runtime,
   onTrial,
   refreshKey = 0,
+  openCreate = false,
 }: {
   runtime: ComputeRuntimeStatus | null;
   onTrial: (version: ComputeVersion) => void;
   refreshKey?: number;
+  openCreate?: boolean;
 }) {
   const ui = useComputeText();
   const { message, modal } = App.useApp();
@@ -54,6 +56,7 @@ export default function AlgorithmManager({
   const [category, setCategory] = useState("");
   const [categoryOpen, setCategoryOpen] = useState(false);
   const alive = useRef(true);
+  const openedCreate = useRef(false);
   const packageInput = useRef<HTMLInputElement>(null);
   const runtimeAvailable = runtime?.available ?? false;
   const runtimeDetail =
@@ -111,6 +114,18 @@ export default function AlgorithmManager({
     form.resetFields();
     form.setFieldsValue(value ?? { enabled: true });
   };
+  useEffect(() => {
+    if (
+      !openCreate ||
+      !runtimePermissions.manage_algorithms ||
+      openedCreate.current
+    )
+      return;
+    openedCreate.current = true;
+    setEditing(null);
+    form.resetFields();
+    form.setFieldsValue({ enabled: true });
+  }, [openCreate, runtimePermissions.manage_algorithms, form]);
   const remove = (algorithm: ComputeAlgorithm) => {
     modal.confirm({
       title: ui("删除算法登记", "Delete algorithm registration"),
@@ -161,7 +176,7 @@ export default function AlgorithmManager({
       )}
       <Space wrap>
         <Button type="primary" onClick={() => edit(null)}>
-          {ui("登记算法", "Register algorithm")}
+          {ui("新建算子", "New operator")}
         </Button>
         <Button onClick={() => setCategoryOpen(true)}>
           {ui("新增分类", "New category")}
@@ -196,7 +211,11 @@ export default function AlgorithmManager({
               </Space>
             ),
           },
-          { title: ui("分类", "Category"), dataIndex: "category", render: (value: string) => ui(value) },
+          {
+            title: ui("分类", "Category"),
+            dataIndex: "category",
+            render: (value: string) => ui(value),
+          },
           {
             title: ui("状态", "Status"),
             key: "enabled",
@@ -269,7 +288,7 @@ export default function AlgorithmManager({
         title={
           editing
             ? ui("编辑算法", "Edit algorithm")
-            : ui("登记算法", "Register algorithm")
+            : ui("新建算子", "New operator")
         }
         onCancel={() => setEditing(undefined)}
         confirmLoading={busy}

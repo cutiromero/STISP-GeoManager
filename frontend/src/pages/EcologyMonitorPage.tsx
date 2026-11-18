@@ -41,9 +41,9 @@ import { useMonitor } from "../monitor/useMonitor";
 import "./ecology-monitor.css";
 
 const MonitorGlobe = lazy(() => import("../monitor/MonitorGlobe"));
-const WildfireDashboard = lazy(() => import("../monitor/WildfireDashboard"));
-const SpartinaDashboard = lazy(() => import("../monitor/SpartinaDashboard"));
-const LandcoverDashboard = lazy(() => import("../monitor/LandcoverDashboard"));
+const OfficialMonitoringDashboard = lazy(
+  () => import("../monitor/OfficialMonitoringDashboard"),
+);
 
 export default function EcologyMonitorPage() {
   const project = useMonitorProject();
@@ -108,29 +108,13 @@ export default function EcologyMonitorPage() {
       }}
     >
       <App>
-        {selectedScene === "landcover" ? (
+        {selectedScene === "landcover" ||
+        selectedScene === "spartina" ||
+        selectedScene === "wildfire" ? (
           <Suspense fallback={<Spin />}>
-            <LandcoverDashboard
-              key={`${user?.id ?? "visitor"}:${project.id}:${i18n.resolvedLanguage}`}
-              projectId={project.id}
-              config={config}
-              navigation={sceneNavigation()}
-            />
-          </Suspense>
-        ) : selectedScene === "spartina" ? (
-          <Suspense fallback={<Spin />}>
-            <SpartinaDashboard
-              key={`${user?.id ?? "visitor"}:${project.id}:${i18n.resolvedLanguage}`}
-              projectId={project.id}
-              config={config}
-              navigation={sceneNavigation()}
-            />
-          </Suspense>
-        ) : selectedScene === "wildfire" ? (
-          <Suspense fallback={<Spin />}>
-            <WildfireDashboard
-              key={`${user?.id ?? "visitor"}:${project.id}:${i18n.resolvedLanguage}`}
-              projectId={project.id}
+            <OfficialMonitoringDashboard
+              key={`${user?.id ?? "visitor"}:${project.id}:${selectedScene}:${i18n.resolvedLanguage}`}
+              scene={selectedScene}
               config={config}
               navigation={sceneNavigation()}
             />

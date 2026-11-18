@@ -1,0 +1,36 @@
+{
+  "GET /api/ecology/monitoring/official/": {
+    "200": { "scene": "landcover", "items": [] }
+  },
+  "POST /api/ecology/monitoring/registration/": {
+    "200": { "id": 24, "scene": "landcover" }
+  },
+  "GET /api/compute/result-groups/": {
+    "200": {
+      "items": [
+        {
+          "id": "c88c66bd-7aae-4540-b65d-eeaee44d0c7b",
+          "name": "样区地表覆盖解译",
+          "workflowId": "c88c66bd-7aae-4540-b65d-eeaee44d0c7b",
+          "createdAt": "2026-11-18T13:00:00Z",
+          "total": 1,
+          "items": [
+            {
+              "id": 626,
+              "taskId": "03f5ddbf-326f-4772-8b25-84b549cebe18",
+              "taskName": "六类分类与面积",
+              "name": "样区分类图",
+              "kind": "raster",
+              "fileName": "classification.tif",
+              "resourceId": 1730,
+              "registered": false,
+              "canRegister": true,
+              "downloadUrl": "/api/compute/outputs/626/file/?projectTagId=2"
+            }
+          ]
+        }
+      ],
+      "hasMore": false
+    }
+  }
+}

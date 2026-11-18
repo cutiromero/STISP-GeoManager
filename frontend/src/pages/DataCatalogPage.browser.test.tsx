@@ -18,6 +18,7 @@ import "../styles.css";
 
 const mockApi = vi.hoisted(() => ({
   resources: vi.fn(),
+  resultGroups: vi.fn(),
   dataSchemaSummary: vi.fn(),
   deleteResources: vi.fn(),
   previewResourceDeletion: vi.fn(),
@@ -26,6 +27,7 @@ const permissionState = vi.hoisted(() => ({ canDeleteDataResources: true }));
 vi.mock("../api/client", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../api/client")>()),
   api: mockApi,
+  requestJson: mockApi.resultGroups,
 }));
 vi.mock("../contexts/AppContext", () => ({
   useAppContext: () => ({
@@ -115,28 +117,54 @@ describe("data catalog computation results", () => {
       .mockResolvedValue({ catalogTree: fallbackTaxonomyTree });
   });
 
-  it("filters stored computation results and hides internal provenance markers", async () => {
-    renderCatalog();
-    expect(await screen.findByText(result.name)).toBeInTheDocument();
-    fireEvent.click(within(screen.getByRole("tree")).getByText("计算结果"));
-    await waitFor(() => {
-      expect(mockApi.resources).toHaveBeenLastCalledWith({
-        categoryCode: "compute_results",
-      });
+  it("opens the task view from the computation category, hiding internal provenance", async () => {
+    const groupId = "e06f259d-c103-4eba-bb03-be0ced7be656";
+    mockApi.resultGroups.mockResolvedValue({
+      hasMore: false,
+      items: [
+        {
+          id: groupId,
+          name: "绿洲统计任务",
+          workflowId: null,
+          createdAt: "2026-10-10T08:00:00Z",
+          total: 1,
+          items: [
+            {
+              id: 12,
+              taskId: groupId,
+              taskName: "NDVI 统计",
+              name: result.name,
+              kind: "raster",
+              resourceId: result.id,
+              canRegister: false,
+              registered: false,
+            },
+          ],
+        },
+      ],
     });
+    mockApi.resources.mockResolvedValue({ items: [] });
+    renderCatalog();
+    fireEvent.click(
+      await within(await screen.findByRole("tree")).findByText("计算结果"),
+    );
     expect(
-      screen.getByText("已入库的算法输出，可查看结果或继续用于计算。"),
-    ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /详情/ }));
-    expect(await screen.findByText("平台算法计算")).toBeInTheDocument();
+      await screen.findByRole("heading", { name: "任务成果" }),
+    ).toBeVisible();
+    expect(mockApi.resources).toHaveBeenCalledWith({
+      excludeComputeResults: 1,
+    });
+    expect(mockApi.resultGroups).toHaveBeenCalledWith(
+      "/api/compute/result-groups/?page=1",
+      expect.anything(),
+    );
+    fireEvent.click(await screen.findByText("绿洲统计任务"));
+    expect(await screen.findByText(result.name)).toBeVisible();
     expect(
       screen.queryByText(
         /internal-storage-key|internal-task-id|internal-checksum/,
       ),
     ).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "用于计算" }),
-    ).toBeInTheDocument();
   });
 
   it("keeps computation raster results linked to the map workspace", async () => {

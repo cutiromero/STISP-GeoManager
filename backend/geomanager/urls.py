@@ -4,7 +4,12 @@ from django.urls import include, path, re_path
 
 from apps.core.views import frontend_app
 from apps.core.frontend_assets import historical_asset
-from apps.ecology.monitoring_views import monitoring, wildfire_catalog
+from apps.ecology.monitoring_views import (
+    monitoring,
+    wildfire_catalog,
+    official_monitoring,
+    publish_monitoring,
+)
 from apps.ecology.source_catalog_views import (
     sources as monitoring_sources,
     times as monitoring_source_times,
@@ -25,6 +30,8 @@ urlpatterns = [
     path("api/ecology/monitoring/sources/", monitoring_sources),
     path("api/ecology/monitoring/source-times/", monitoring_source_times),
     path("api/ecology/monitoring/", monitoring),
+    path("api/ecology/monitoring/official/", official_monitoring),
+    path("api/ecology/monitoring/registration/", publish_monitoring),
     path("api/ecology/wildfire/catalog/", wildfire_catalog),
     path("api/business-flows/", include("apps.business_flows.urls")),
     re_path(r"^static/assets/(?P<asset_path>.+)$", historical_asset),

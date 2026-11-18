@@ -20,6 +20,7 @@ import {
   Empty,
   Input,
   Layout,
+  Modal,
   Select,
   Space,
   Spin,
@@ -40,11 +41,16 @@ import type {
   BusinessFlowDefinition,
   BusinessFlowDetail,
   BusinessFlowNode,
+  BusinessFlowRun,
   BusinessFlowSpec,
   BusinessFlowSummary,
 } from "../api/generated/types.gen";
 import BusinessFlowGraph from "./BusinessFlowGraph";
 import BusinessFlowEditor from "./BusinessFlowEditor";
+import BusinessFlowLaunch, {
+  type BusinessFlowLaunchIntent,
+} from "./BusinessFlowLaunch";
+import FixedFlowRunPanel from "./FixedFlowRunPanel";
 import "./business-flows.css";
 
 const dataTypes: Record<string, string> = {
@@ -101,7 +107,16 @@ export default function BusinessFlowsPage() {
   const [nodeId, setNodeId] = useState<string>();
   const [goal, setGoal] = useState("");
   const [catalogOpen, setCatalogOpen] = useState(false);
-  const [editor, setEditor] = useState<"create" | "version" | null>(null);
+  const [editor, setEditor] = useState<"create" | "version" | "copy" | null>(
+    null,
+  );
+  const [fixedLaunch, setFixedLaunch] = useState<BusinessFlowLaunchIntent>();
+  const [recentRun, setRecentRun] = useState<BusinessFlowRun>();
+  useEffect(() => {
+    setFixedLaunch(undefined);
+    setRecentRun(undefined);
+    setEditor(null);
+  }, [scope]);
   const currentProject = String(project?.current ?? "1");
   const linkedProject = searchParams.get("projectTagId");
   const differentProject =
@@ -336,15 +351,18 @@ export default function BusinessFlowsPage() {
   );
   const launch = () => {
     if (!detail || !version || !canStart) return;
+    const intent = {
+      definitionId: detail.flow.id,
+      versionId: version.id,
+      title: detail.flow.name,
+      goal: goal.trim() || detail.flow.description || detail.flow.name,
+    };
+    if (version.definition.executionMode === "fixed") {
+      setFixedLaunch(intent);
+      return;
+    }
     navigate(`/agent/workbench?projectTagId=${project?.current ?? "1"}`, {
-      state: {
-        businessFlowLaunch: {
-          definitionId: detail.flow.id,
-          versionId: version.id,
-          title: detail.flow.name,
-          goal: goal.trim() || detail.flow.description || detail.flow.name,
-        },
-      },
+      state: { businessFlowLaunch: intent },
     });
   };
   const save = async (
@@ -361,6 +379,8 @@ export default function BusinessFlowsPage() {
         ? await businessFlowsApi.publish(detail.flow.id, {
             definition,
             updatedAt: detail.flow.updatedAt,
+            name: metadata.name,
+            description: metadata.description,
           })
         : await businessFlowsApi.create({
             ...metadata,
@@ -405,7 +425,7 @@ export default function BusinessFlowsPage() {
       />
       {canManage && (
         <Button icon={<PlusOutlined />} onClick={() => setEditor("create")}>
-          {ui("登记业务流", "Register a flow")}
+          {ui("新建业务流", "New flow")}
         </Button>
       )}
       <div className="business-flow-catalog-list">
@@ -617,7 +637,12 @@ export default function BusinessFlowsPage() {
                     </Button>
                     {detail.canManage && (
                       <Button onClick={() => setEditor("version")}>
-                        {ui("发布新版本", "Publish new version")}
+                        {ui("编辑业务流", "Edit workflow")}
+                      </Button>
+                    )}
+                    {canManage && spec.adapter === "research_flow" && (
+                      <Button onClick={() => setEditor("copy")}>
+                        {ui("复制为新业务流", "Duplicate as new flow")}
                       </Button>
                     )}
                   </Space>
@@ -852,11 +877,60 @@ export default function BusinessFlowsPage() {
       >
         <div style={{ height: "100%", display: "flex" }}>{catalog}</div>
       </Drawer>
+      {fixedLaunch && detail?.flow.id === fixedLaunch.definitionId && (
+        <Modal
+          open
+          title="准备监测任务"
+          width={980}
+          footer={null}
+          closable={false}
+          mask={{ closable: false }}
+          keyboard={false}
+        >
+          <BusinessFlowLaunch
+            key={`${scope}:${fixedLaunch.versionId}`}
+            launch={fixedLaunch}
+            model=""
+            canImport={user?.permissions.canUploadData}
+            onCancel={() => setFixedLaunch(undefined)}
+            onStarted={(run) => {
+              setRecentRun(run);
+              setFixedLaunch(undefined);
+              setSearchParams((previous) => {
+                const next = new URLSearchParams(previous);
+                next.set("run", run.id);
+                return next;
+              });
+            }}
+          />
+        </Modal>
+      )}
+      {searchParams.get("run") && (
+        <FixedFlowRunPanel
+          key={`${scope}:${searchParams.get("run")}`}
+          id={searchParams.get("run")!}
+          initial={
+            recentRun?.projectId === Number(currentProject)
+              ? recentRun
+              : undefined
+          }
+          onClose={() =>
+            setSearchParams((previous) => {
+              const next = new URLSearchParams(previous);
+              next.delete("run");
+              return next;
+            })
+          }
+        />
+      )}
       {editor && (
         <BusinessFlowEditor
           open
           flow={editor === "version" ? detail?.flow : undefined}
-          version={editor === "version" ? version : undefined}
+          version={
+            editor === "version" || editor === "copy" ? version : undefined
+          }
+          sourceName={editor === "copy" ? detail?.flow.name : undefined}
           onClose={() => setEditor(null)}
           onSave={save}
         />

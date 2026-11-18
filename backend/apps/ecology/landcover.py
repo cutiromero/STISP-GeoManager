@@ -124,6 +124,9 @@ def register_import(record_id):
     digest = hashlib.sha256(
         json.dumps(classification["models"], sort_keys=True).encode()
     ).hexdigest()
+    from .product_time import input_periods, interval
+
+    begin, end = interval(input_periods(task))
     value = {
         "schemaVersion": 1,
         "code": "landcover-" + str(task.pk) + "-" + str(output.pk),
@@ -132,8 +135,8 @@ def register_import(record_id):
         "scene": "landcover",
         "kind": "model",
         "quality": "passed",
-        "observedStart": None,
-        "observedEnd": None,
+        "observedStart": begin,
+        "observedEnd": end,
         "sourceResourceIds": source_ids,
         "sourceLabel": "原始RGB影像与已登记UNet模型组",
         "limitations": ["裸地为五类模型之外的有效剩余区。"],

@@ -4437,6 +4437,124 @@ export type MonitoringMetric = {
 };
 
 /**
+ * 只读大屏的区域展示结果。
+ */
+export type OfficialMonitoringList = {
+    /**
+     * 展示场景。
+     */
+    scene: 'spartina' | 'wildfire' | 'landcover';
+    /**
+     * 每个区域与物理量仅展示最新观测期的正式版本。
+     */
+    items: Array<OfficialMonitoringProduct>;
+};
+
+/**
+ * 已核对访问权限的正式登记产品与持久地图展示。
+ */
+export type OfficialMonitoringProduct = MonitoringProduct & {
+    /**
+     * 来自原始资料或既有成果的区域名称。
+     */
+    regionLabel: string;
+    /**
+     * 已准备的只读栅格展示，无展示时为null。
+     */
+    display: RasterRenderResult | null;
+};
+
+/**
+ * 当前页的可见任务分组。
+ */
+export type CatalogueComputeResultGroups = {
+    /**
+     * 按实际任务时间倒序的分组。
+     */
+    items: Array<CatalogueComputeResultGroup>;
+    /**
+     * 是否还有下一页。
+     */
+    hasMore: boolean;
+};
+
+/**
+ * 一个业务流任务或独立计算任务的可见目录成果。
+ */
+export type CatalogueComputeResultGroup = {
+    /**
+     * 业务流或独立计算任务编号。
+     */
+    id: string;
+    /**
+     * 已登记任务名称或业务任务目标。
+     */
+    name: string;
+    /**
+     * 本人可回看的业务流编号。
+     */
+    workflowId: string | null;
+    /**
+     * 任务创建时间。
+     */
+    createdAt: string;
+    /**
+     * 本任务组可见入库结果总数。
+     */
+    total: number;
+    /**
+     * 本组前100项，保留所属算子计算任务引用。
+     */
+    items: Array<CatalogueComputeResult>;
+};
+
+/**
+ * 已成功入库、当前授权可读的任务结果。
+ */
+export type CatalogueComputeResult = {
+    /**
+     * 计算输出编号。
+     */
+    id: number;
+    /**
+     * 所属算子任务编号。
+     */
+    taskId: string;
+    /**
+     * 所属算子任务名。
+     */
+    taskName: string;
+    /**
+     * 目录成果名称。
+     */
+    name: string;
+    /**
+     * 结果物理类型。
+     */
+    kind: string;
+    /**
+     * 下载使用的文件名。
+     */
+    fileName: string;
+    /**
+     * 可见的目录成果资源编号。
+     */
+    resourceId: number;
+    /**
+     * 是否已明确登记为正式监测成果。
+     */
+    registered: boolean;
+    /**
+     * 是否具备正式登记资格；提交时重验。
+     */
+    canRegister: boolean;
+    /**
+     * 当前可用文件下载入口。
+     */
+    downloadUrl: string | null;
+};
+
+/**
  * 已通过全部依赖访问检查的遥感产品及地图资源。
  */
 export type MonitoringProduct = MonitoringProductManifest & {
@@ -13490,9 +13608,9 @@ export type BusinessFlowSpec = {
     inputPreparation?: BusinessFlowInputPreparationPolicy;
     skill?: BusinessFlowSkill;
     /**
-     * main_agent由一个任务级主循环选择合法目标、调用工具并继续；省略保留旧节点执行方式。
+     * main_agent运行任务级主循环；fixed仅按确定输入运行冻结算子并入库，不调用模型；省略保留旧节点方式。
      */
-    executionMode?: 'nodes' | 'main_agent';
+    executionMode?: 'nodes' | 'main_agent' | 'fixed';
 };
 
 /**
@@ -14319,6 +14437,14 @@ export type BusinessFlowUpdate = {
 export type BusinessFlowVersionPublish = {
     definition: BusinessFlowSpec;
     /**
+     * 可同时更新的流程名称
+     */
+    name?: string;
+    /**
+     * 可同时更新的使用说明
+     */
+    description?: string;
+    /**
      * 元信息版本时间，也是保存的乐观并发凭据
      */
     updatedAt: string;
@@ -14337,9 +14463,9 @@ export type BusinessFlowStart = {
      */
     goal: string;
     /**
-     * 执行模型别名
+     * Agent流程必填执行模型别名；固定执行不发送此字段
      */
-    model: string;
+    model?: string;
     /**
      * 独立审核请求使用的模型别名；可与执行模型相同但上下文和职责独立
      */
@@ -16278,6 +16404,162 @@ export type GetMonitoringProductsResponses = {
 };
 
 export type GetMonitoringProductsResponse = GetMonitoringProductsResponses[keyof GetMonitoringProductsResponses];
+
+export type GetOfficialMonitoringData = {
+    body?: never;
+    headers: {
+        /**
+         * 当前项目编号。
+         */
+        'X-Project-Id': number;
+    };
+    path?: never;
+    query: {
+        /**
+         * 展示场景。
+         */
+        scene: 'spartina' | 'wildfire' | 'landcover';
+    };
+    url: '/api/ecology/monitoring/official/';
+};
+
+export type GetOfficialMonitoringErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+};
+
+export type GetOfficialMonitoringError = GetOfficialMonitoringErrors[keyof GetOfficialMonitoringErrors];
+
+export type GetOfficialMonitoringResponses = {
+    /**
+     * 精选区域及已准备好的地图展示描述。
+     */
+    200: OfficialMonitoringList;
+};
+
+export type GetOfficialMonitoringResponse = GetOfficialMonitoringResponses[keyof GetOfficialMonitoringResponses];
+
+export type RegisterMonitoringOutputData = {
+    /**
+     * 明确确认的计算输出编号。
+     */
+    body: {
+        /**
+         * 主地图计算输出编号。
+         */
+        outputId: number;
+    };
+    headers: {
+        /**
+         * 当前项目编号。
+         */
+        'X-Project-Id': number;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/ecology/monitoring/registration/';
+};
+
+export type RegisterMonitoringOutputErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+    /**
+     * 当前资源状态或名称发生冲突
+     */
+    409: ErrorResponse;
+};
+
+export type RegisterMonitoringOutputError = RegisterMonitoringOutputErrors[keyof RegisterMonitoringOutputErrors];
+
+export type RegisterMonitoringOutputResponses = {
+    /**
+     * 正式登记回执。
+     */
+    200: {
+        /**
+         * 正式成果编号。
+         */
+        id: number;
+        /**
+         * 展示场景。
+         */
+        scene: 'spartina' | 'wildfire' | 'landcover';
+    };
+};
+
+export type RegisterMonitoringOutputResponse = RegisterMonitoringOutputResponses[keyof RegisterMonitoringOutputResponses];
+
+export type GetCatalogueComputeResultGroupsData = {
+    body?: never;
+    headers: {
+        /**
+         * 当前项目编号。
+         */
+        'X-Project-Id': number;
+    };
+    path?: never;
+    query?: {
+        /**
+         * 分页页码。
+         */
+        page?: number;
+        /**
+         * 只查看指定任务组。
+         */
+        groupId?: string;
+    };
+    url: '/api/compute/result-groups/';
+};
+
+export type GetCatalogueComputeResultGroupsErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+};
+
+export type GetCatalogueComputeResultGroupsError = GetCatalogueComputeResultGroupsErrors[keyof GetCatalogueComputeResultGroupsErrors];
+
+export type GetCatalogueComputeResultGroupsResponses = {
+    /**
+     * 任务分组列表及分页状态。
+     */
+    200: CatalogueComputeResultGroups;
+};
+
+export type GetCatalogueComputeResultGroupsResponse = GetCatalogueComputeResultGroupsResponses[keyof GetCatalogueComputeResultGroupsResponses];
 
 export type CheckShareInvitationData = {
     /**
@@ -19251,6 +19533,10 @@ export type GetResourcesData = {
          * 按名称模糊搜索
          */
         q?: string;
+        /**
+         * 传1时只读取资料目录，不混入已入库的计算成果。
+         */
+        excludeComputeResults?: 1;
         /**
          * 数据类型筛选
          */

@@ -3140,6 +3140,12 @@ API JSON 元数据默认 `Cache-Control: private,no-store`，文件和瓦片的�
 
 业务流的站内入口由`get_platform_link(page="business_flows")`产生，对应`/business-flows?projectTagId=当前项目`；`AgentPlatformAction.page`包含该枚举。该按钮仅导航目录，不能因此取得业务流执行或人工批准能力。业务流启动的通用`parameters`只允许`nodeParameters`字典，键为已冻结定义中的operator节点ID，值为该节点已发布manifest声明的参数对象；不能传入任意根级键或未知节点让服务器忽略。节点默认值和本次覆盖值合并后仍由计算中心验证实际类型、范围、字段及波段。
 
+### 固定监测业务流与正式成果登记
+
+`BusinessFlowSpec.executionMode=fixed` 只接受冻结算子和交付节点。启动请求不提交模型、预算或会话字段。初始输入和明确参数按算子版本复核；正常计算使用同一 ComputeTask/ComputeImport 队列，并等待全部必需输出通过质量门禁和入库。业务流发布支持在同一操作更新名称、用途和新版本，沿用 `updatedAt` 并发凭据。
+
+数据中心通过 `GET /api/compute/result-groups/` 按实际业务任务或独立计算组织结果。资料目录请求 `excludeComputeResults=1`。在同一项目内，产出者通过 `POST /api/ecology/monitoring/registration/` 确认登记监测主地图；后端重验来源和质量、登记持久展示样式，不扩大访问范围。大屏使用 `GET /api/ecology/monitoring/official/` 获取已登记成果和瓦片描述，不调用计算或源图准备。完整操作见 [监测任务与算子维护](workflow-monitoring-3.2.md)。
+
 ### 业务流目录分页与搜索
 
 `GET /api/business-flows/?q=...&offset=0&limit=50`按名称、说明和编码执行当前项目范围内的搜索，按名称、编号稳定排序。`limit`为1至50，`offset`为0至1000000。响应保持`items/canManage`；只有后续页存在时增加`nextOffset`。服务端只读取`limit+1`条判定是否有后续页，不另查总数。前端对搜索词防抖并取消旧请求，加载更多按编号去重；查询及翻页不重新读取当前已选流程详情，切换项目清除旧目录与选择。

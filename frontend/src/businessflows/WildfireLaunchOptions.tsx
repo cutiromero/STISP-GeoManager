@@ -73,7 +73,11 @@ export default function WildfireLaunchOptions({
       aria-label="野火观测选择"
     >
       <strong>观测产品与日期</strong>
-      <p>选择真实观测时期后启动，时间索引由已登记资料确定。</p>
+      <p>
+        选择实际观测期。GWIS、GFED、FCCI 输出火烧面积（ha）；CAMS
+        输出有效格网火辐射功率密度（W/m²）。FCCI
+        按月汇总。结果为观测，不是火灾预测。
+      </p>
       {!resourceId && <p>请先绑定原始立方体资料。</p>}
       {w.loading && <Spin size="small" />}
       {w.error && <Alert type="error" title={w.error} />}

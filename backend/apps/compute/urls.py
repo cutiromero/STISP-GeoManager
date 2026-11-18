@@ -12,6 +12,7 @@ urlpatterns = [
     path("templates/<int:template_id>/", views.template_file),
     path("inputs/", views.inputs),
     path("preflight/", views.preflight),
+    path("result-groups/", views.result_groups),
     path("tasks/", views.tasks),
     path("tasks/<uuid:task_id>/", views.task_detail),
     path("outputs/<int:output_id>/file/", views.output_file),

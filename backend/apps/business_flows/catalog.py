@@ -229,7 +229,7 @@ def check_revision(flow, expected):
         raise ComputeError("业务流已由其他页面更新，请刷新后再保存", 409)
 
 
-def publish_version(user, flow, definition, *, expected=None):
+def publish_version(user, flow, definition, *, expected=None, metadata=None):
     require_manager(user)
     spec = normalize_definition(definition)
     validate_bindings(spec, flow.project_tag_id)
@@ -249,7 +249,19 @@ def publish_version(user, flow, definition, *, expected=None):
             created_by=user,
         )
         flow.current_version = version
-        flow.save(update_fields=["current_version", "updated_at"])
+        fields = ["current_version", "updated_at"]
+        for field, label, length in (
+            ("name", "业务流名称", 120),
+            ("description", "业务流说明", 3000),
+        ):
+            if metadata is not None and field in metadata:
+                setattr(
+                    flow,
+                    field,
+                    text(metadata[field], label, length, empty=field == "description"),
+                )
+                fields.append(field)
+        flow.save(update_fields=fields)
     return flow, version
 
 

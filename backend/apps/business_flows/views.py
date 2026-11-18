@@ -142,11 +142,15 @@ def flow_detail(request, flow_id):
 @endpoint(["POST"])
 def versions(request, flow_id):
     flow = get_object_or_404(BusinessFlowDefinition.objects, pk=flow_id)
-    value = body(request, {"definition", "updatedAt"})
+    value = body(request, {"definition", "updatedAt", "name", "description"})
     if "updatedAt" not in value:
         raise ValidationError("发布版本需要最后读取的updatedAt")
     flow, _ = catalog.publish_version(
-        request.user, flow, value.get("definition"), expected=value["updatedAt"]
+        request.user,
+        flow,
+        value.get("definition"),
+        expected=value["updatedAt"],
+        metadata=value,
     )
     return JsonResponse(detail_value(flow, request.user), status=201)
 

@@ -45,6 +45,8 @@ export default function ProductMap({
   focusKey,
   information = true,
   refreshKey,
+  readOnly = false,
+  preparedDisplay,
 }: {
   product?: MonitoringProduct;
   config: ProjectMonitorConfig;
@@ -56,6 +58,8 @@ export default function ProductMap({
   focusKey?: number;
   information?: boolean;
   refreshKey?: number;
+  readOnly?: boolean;
+  preparedDisplay?: RasterRenderResult | null;
 }) {
   const { t } = useTranslation();
   const {
@@ -176,7 +180,9 @@ export default function ProductMap({
           if (map.getSource("product")) map.removeSource("product");
         }
         const styleKey = `${identity}:${visibleCodes?.join(",") ?? "default"}`;
-        let result = styles.current.get(styleKey);
+        let result = preparedDisplay ?? styles.current.get(styleKey);
+        if (!result && readOnly)
+          throw new Error("地图切片尚未登记，暂不展示图层。");
         if (!result) {
           if (visibleCodes !== undefined && swap.current?.hasActive())
             await waitForAbortableDelay(75, signal);
@@ -361,6 +367,8 @@ export default function ProductMap({
     target?.id,
     target?.updatedAt,
     refreshKey,
+    readOnly,
+    preparedDisplay?.styleHash,
     retry,
     focusKey,
     visibleCodes?.join(","),

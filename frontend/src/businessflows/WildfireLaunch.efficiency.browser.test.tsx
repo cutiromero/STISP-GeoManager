@@ -184,3 +184,51 @@ it("preserves the explicit dashboard observation selection without another catal
   });
   expect(requestJson).not.toHaveBeenCalled();
 });
+
+it("starts the fixed wildcard-free workflow using the real period selection and no Agent model", async () => {
+  const frozen = {
+    ...version,
+    definition: { ...definition, executionMode: "fixed" as const },
+  };
+  vi.mocked(businessFlowsApi.detail).mockResolvedValue({
+    ...detail,
+    version: frozen,
+    versions: [frozen],
+  });
+  vi.mocked(requestJson).mockImplementation(
+    async (url) =>
+      (url.includes("source-times")
+        ? { ...sourceTimes, resourceId: resource.id }
+        : sourceCatalog("wildfire", [resource])) as never,
+  );
+  const start = vi
+    .spyOn(businessFlowsApi, "start")
+    .mockResolvedValue(businessFlowRun());
+  render(
+    <App>
+      <BusinessFlowLaunch
+        launch={launch}
+        model=""
+        initialInputs={{ cube: resource.id }}
+        onStarted={vi.fn()}
+        onCancel={vi.fn()}
+      />
+    </App>,
+  );
+  expect(await screen.findByText("一次配置，直接解译")).toBeVisible();
+  const button = screen.getByRole("button", { name: "开始业务流" });
+  await waitFor(() => expect(button).toBeEnabled());
+  expect(screen.queryByText("任务执行")).toBeNull();
+  fireEvent.click(button);
+  await waitFor(() => expect(start).toHaveBeenCalledOnce());
+  const [, payload] = start.mock.calls[0]!;
+  expect(payload).not.toHaveProperty("model");
+  expect(payload).toMatchObject({
+    agentEnabled: false,
+    parameters: {
+      nodeParameters: {
+        interpret: { product: "gwis_ba", time_index: 2000, history: 1 },
+      },
+    },
+  });
+});

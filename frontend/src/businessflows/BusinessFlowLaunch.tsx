@@ -70,6 +70,7 @@ export default function BusinessFlowLaunch({
   parameters,
   presentation = "default",
   fixedInputs = false,
+  canImport = false,
 }: {
   launch: BusinessFlowLaunchIntent;
   model: string;
@@ -84,6 +85,7 @@ export default function BusinessFlowLaunch({
   parameters?: BusinessFlowStart["parameters"];
   presentation?: "default" | "task";
   fixedInputs?: boolean;
+  canImport?: boolean;
 }) {
   const ui = useComputeText();
   const { bootstrap } = useAgentBootstrapState();
@@ -249,11 +251,22 @@ export default function BusinessFlowLaunch({
     return () => controller.abort();
   }, [launch.definitionId, launch.versionId, attempt]);
   const isLegacy = version?.definition.adapter === "geology_generic";
+  const fixed = version?.definition.executionMode === "fixed";
   const suppliedNodes = parameters?.nodeParameters as
     | Record<string, Record<string, unknown>>
     | undefined;
   const needsWildfireSelection =
-    flowCode === "wildfire-history-observation" &&
+    (flowCode === "wildfire-history-observation" ||
+      (fixed &&
+        version?.definition.inputRequirements.some(
+          (entry) => entry.key === "cube",
+        ) &&
+        version.definition.nodes.some(
+          (node) =>
+            node.id === "interpret" &&
+            node.contract?.importOutputs?.includes("observation") &&
+            node.contract.importOutputs.includes("series"),
+        ))) &&
     !Number.isInteger(suppliedNodes?.interpret?.time_index);
   const wildfireReady =
     !needsWildfireSelection ||
@@ -475,7 +488,10 @@ export default function BusinessFlowLaunch({
       setError("请先选择有效的野火观测产品与时期。");
       return;
     }
-    if (!model || !bootstrap?.canAgent || !bootstrap.workerOnline) {
+    if (
+      !bootstrap?.canAgent ||
+      (!fixed && (!model || !bootstrap.workerOnline))
+    ) {
       setError("智能体执行服务尚未就绪，请连接成功后再开始。");
       return;
     }
@@ -490,10 +506,9 @@ export default function BusinessFlowLaunch({
         needsWildfireSelection && wildfireSelection
           ? `${goal.trim()}\n本次确认的观测选择：${wildfireSelection.summary}`
           : goal.trim(),
-      model,
-      reviewerModel,
-      ...(thinkingAvailable ? { reasoningEffort: effort } : {}),
-      ...(bootstrap.budgets?.enabled
+      ...(fixed ? { agentEnabled: false } : { model, reviewerModel }),
+      ...(!fixed && thinkingAvailable ? { reasoningEffort: effort } : {}),
+      ...(!fixed && bootstrap.budgets?.enabled
         ? {
             budgetProfile,
             ...(outputTokens !== undefined
@@ -526,7 +541,7 @@ export default function BusinessFlowLaunch({
             { versionId: item.versionId, parameters: item.parameters ?? {} },
           ]),
       ),
-      ...(conversationId !== undefined ? { conversationId } : {}),
+      ...(!fixed && conversationId !== undefined ? { conversationId } : {}),
     };
     const fingerprint = canonicalReadKey([launch.definitionId, body]);
     if (retry.current?.fingerprint !== fingerprint)
@@ -557,9 +572,8 @@ export default function BusinessFlowLaunch({
   };
   const canStart = Boolean(
     version &&
-    model &&
     bootstrap?.canAgent &&
-    bootstrap.workerOnline &&
+    (fixed || (model && bootstrap.workerOnline)) &&
     !busy &&
     !uploading &&
     inputReady &&
@@ -617,6 +631,14 @@ export default function BusinessFlowLaunch({
             <div className="flow-launch-grid">
               <div className="flow-launch-form">
                 {error && <Alert type="error" showIcon title={error} />}
+                {fixed && (
+                  <Alert
+                    type="info"
+                    showIcon
+                    title="一次配置，直接解译"
+                    description="绑定原始资料，按冻结版本计算全范围，不需要再次框选或选择 AI 模型。任务完成后可在数据中心登记主地图。"
+                  />
+                )}
                 <label
                   className="business-flow-launch-field"
                   htmlFor="business-flow-launch-goal"
@@ -631,90 +653,85 @@ export default function BusinessFlowLaunch({
                     autoSize={{ minRows: 2, maxRows: 5 }}
                   />
                 </label>
-                {needsWildfireSelection && (
-                  <WildfireLaunchOptions
-                    key={`${candidateScope}:${inputs.cube ?? "none"}`}
-                    resourceId={inputs.cube}
-                    onChange={setWildfireSelection}
-                  />
-                )}
-                <SettingsTag className="business-flow-launch-settings">
-                  {presentation === "task" && (
-                    <summary>{ui("高级设置", "Advanced settings")}</summary>
-                  )}
-                  <div className="business-flow-launch-roles">
-                    <span>
-                      <RobotOutlined />
-                      {ui("任务执行", "Executor")}
-                      <strong>
-                        {modelOptions.find((option) => option.value === model)
-                          ?.label ||
-                          model ||
-                          ui("尚未选择模型", "No model selected")}
-                      </strong>
-                    </span>
-                    {needsReview && (
-                      <label>
-                        <AuditOutlined />
-                        {ui("结果审核", "Independent reviewer")}
-                        <Select
-                          aria-label={ui("审核模型", "Reviewer model")}
-                          value={reviewerModel || undefined}
-                          options={
-                            modelOptions.length
-                              ? modelOptions
-                              : model
-                                ? [
-                                    {
-                                      value: model,
-                                      label: model,
-                                      disabled: false,
-                                    },
-                                  ]
-                                : []
-                          }
-                          disabled={busy}
-                          onChange={setReviewer}
-                        />
-                      </label>
+                {!fixed && (
+                  <SettingsTag className="business-flow-launch-settings">
+                    {presentation === "task" && (
+                      <summary>{ui("高级设置", "Advanced settings")}</summary>
                     )}
-                  </div>
-                  {thinkingAvailable && (
-                    <ReasoningEffortControl
-                      value={effort}
-                      overridden={effort !== "medium"}
-                      disabled={busy}
-                      onChange={(value) => {
-                        const selected = value ?? "medium";
-                        setEffort(selected);
-                        onReasoningEffortChange?.(selected);
-                      }}
-                    />
-                  )}
-                  {bootstrap?.budgets?.enabled && (
-                    <div>
-                      <TaskBudgetControl
-                        canManage={bootstrap.canManage}
-                        options={bootstrap.budgets}
-                        profile={budgetProfile}
-                        output={outputTokens}
-                        serviceWindow={budgetWindow}
-                        disabled={busy}
-                        onProfile={(value) => {
-                          setBudgetProfile(value);
-                          setOutputTokens(undefined);
-                        }}
-                        onOutput={setOutputTokens}
-                      />
-                      <p className="business-flow-launch-note">
-                        {ui(
-                          "额度受所用模型窗口限制，每次请求分别计量；思考强度沿用上方所选档位。",
-                          "Model windows bound this budget, counted per request. Thinking effort follows the selection above.",
-                        )}
-                      </p>
+                    <div className="business-flow-launch-roles">
+                      <span>
+                        <RobotOutlined />
+                        {ui("任务执行", "Executor")}
+                        <strong>
+                          {modelOptions.find((option) => option.value === model)
+                            ?.label ||
+                            model ||
+                            ui("尚未选择模型", "No model selected")}
+                        </strong>
+                      </span>
+                      {needsReview && (
+                        <label>
+                          <AuditOutlined />
+                          {ui("结果审核", "Independent reviewer")}
+                          <Select
+                            aria-label={ui("审核模型", "Reviewer model")}
+                            value={reviewerModel || undefined}
+                            options={
+                              modelOptions.length
+                                ? modelOptions
+                                : model
+                                  ? [
+                                      {
+                                        value: model,
+                                        label: model,
+                                        disabled: false,
+                                      },
+                                    ]
+                                  : []
+                            }
+                            disabled={busy}
+                            onChange={setReviewer}
+                          />
+                        </label>
+                      )}
                     </div>
-                  )}
-                </SettingsTag>
+                    {thinkingAvailable && (
+                      <ReasoningEffortControl
+                        value={effort}
+                        overridden={effort !== "medium"}
+                        disabled={busy}
+                        onChange={(value) => {
+                          const selected = value ?? "medium";
+                          setEffort(selected);
+                          onReasoningEffortChange?.(selected);
+                        }}
+                      />
+                    )}
+                    {bootstrap?.budgets?.enabled && (
+                      <div>
+                        <TaskBudgetControl
+                          canManage={bootstrap.canManage}
+                          options={bootstrap.budgets}
+                          profile={budgetProfile}
+                          output={outputTokens}
+                          serviceWindow={budgetWindow}
+                          disabled={busy}
+                          onProfile={(value) => {
+                            setBudgetProfile(value);
+                            setOutputTokens(undefined);
+                          }}
+                          onOutput={setOutputTokens}
+                        />
+                        <p className="business-flow-launch-note">
+                          {ui(
+                            "额度受所用模型窗口限制，每次请求分别计量；思考强度沿用上方所选档位。",
+                            "Model windows bound this budget, counted per request. Thinking effort follows the selection above.",
+                          )}
+                        </p>
+                      </div>
+                    )}
+                  </SettingsTag>
+                )}
                 {isLegacy ? (
                   <Suspense fallback={<Spin />}>
                     <GenericWorkflowUploads
@@ -896,6 +913,28 @@ export default function BusinessFlowLaunch({
                     }
                   />
                 )}
+                {needsWildfireSelection && (
+                  <WildfireLaunchOptions
+                    key={`${candidateScope}:${inputs.cube ?? "none"}`}
+                    resourceId={inputs.cube}
+                    onChange={setWildfireSelection}
+                  />
+                )}
+                {fixed && (
+                  <p className="business-flow-launch-note">
+                    新资料请先入库，再在这里绑定；野火 Zarr 由资料管理员登记。
+                    {canImport && (
+                      <a
+                        href={`/admin/data/import?projectTagId=${getActiveProject()}`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        {" "}
+                        打开资料导入
+                      </a>
+                    )}
+                  </p>
+                )}
                 <InputAdaptationReview
                   flowId={launch.definitionId}
                   request={inputRequest}
@@ -911,7 +950,7 @@ export default function BusinessFlowLaunch({
                     {missing.map((input) => input.label).join("、")}
                   </p>
                 )}
-                {!bootstrap?.workerOnline && (
+                {!fixed && !bootstrap?.workerOnline && (
                   <Alert
                     type="info"
                     showIcon
@@ -989,7 +1028,9 @@ export default function BusinessFlowLaunch({
               disabled={busy}
               onClick={() => callbacks.current.onCancel()}
             >
-              {ui("返回对话", "Back to conversation")}
+              {fixed
+                ? ui("返回业务流", "Back to flows")
+                : ui("返回对话", "Back to conversation")}
             </Button>
             <Button
               type="primary"

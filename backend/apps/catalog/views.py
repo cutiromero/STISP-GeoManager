@@ -167,6 +167,8 @@ def resources(request):
         .exclude(task_resource_q())
         .select_related("category", "category__parent")
     )
+    if request.GET.get("excludeComputeResults") == "1":
+        queryset = queryset.filter(is_compute_result=False)
     if query:
         queryset = queryset.filter(name__icontains=query)
     if data_type:

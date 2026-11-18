@@ -1,4 +1,5 @@
 import { ProjectLabel } from "../projects/ProjectLabel";
+import TaskResultCatalogue from "./TaskResultCatalogue";
 import ResourceObservationEditor from "../monitor/ResourceObservationEditor";
 import { getActiveProject } from "../projects/session";
 import {
@@ -58,6 +59,11 @@ export default function DataCatalogPage() {
   const { user } = useAppContext();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const taskView =
+    searchParams.get("view") === "task-results" ||
+    searchParams.get("categoryCode") === "compute_results";
+  const taskGroup = searchParams.get("taskGroup") ?? undefined;
+  const projectId = getActiveProject();
   const [schema, setSchema] = useState<DataSchemaSummary | null>(null);
   const [resources, setResources] = useState<ResourceListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -175,7 +181,12 @@ export default function DataCatalogPage() {
   }, [canBrowseData]);
 
   useEffect(() => {
+    if (taskView) {
+      resourceRequestSequenceRef.current += 1;
+      return;
+    }
     void loadResources({
+      excludeComputeResults: 1,
       ...(categoryCode ? { categoryCode } : {}),
       ...(searchParams.get("q")
         ? { q: searchParams.get("q") ?? undefined }
@@ -190,6 +201,7 @@ export default function DataCatalogPage() {
     loadResources,
     refreshVersion,
     searchParams,
+    taskView,
   ]);
 
   function toggleResourceSelection(id: number, selected: boolean) {
@@ -350,8 +362,9 @@ export default function DataCatalogPage() {
 
   function selectCategory(code: string | null) {
     const next = new URLSearchParams(searchParams);
-    if (code) next.set("categoryCode", code);
-    else next.delete("categoryCode");
+    if (code === "compute_results") next.set("view", "task-results");
+    else if (code) next.set("categoryCode", code);
+    if (!code || code === "compute_results") next.delete("categoryCode");
     setSearchParams(next);
   }
 
@@ -388,9 +401,28 @@ export default function DataCatalogPage() {
         >
           <Typography.Title level={2}>数据资源目录</Typography.Title>
           <Typography.Paragraph>
-            浏览当前项目的数据，按分类、数据类型和关键词筛选。共{" "}
-            {resources.length} 项可见资源。
+            {taskView
+              ? "浏览独立计算与业务流的归档成果。"
+              : `浏览当前项目的原始与标准资料。共 ${resources.length} 项可见资源。`}
           </Typography.Paragraph>
+          {canBrowseData && (
+            <Segmented
+              value={taskView ? "task-results" : "catalog"}
+              aria-label="数据中心视图"
+              options={[
+                { value: "catalog", label: "资料目录" },
+                { value: "task-results", label: "任务成果" },
+              ]}
+              onChange={(value) => {
+                const next = new URLSearchParams(searchParams);
+                next.delete("taskGroup");
+                next.delete("categoryCode");
+                if (value === "task-results") next.set("view", value);
+                else next.delete("view");
+                setSearchParams(next);
+              }}
+            />
+          )}
         </section>
 
         {!canBrowseData && (
@@ -401,220 +433,243 @@ export default function DataCatalogPage() {
           />
         )}
 
-        <section id="public-data-catalog" className="data-catalog-toolbar">
-          <Input.Search
-            allowClear
-            value={keyword}
-            prefix={<SearchOutlined />}
-            placeholder={t("catalog.searchPlaceholder")}
-            onChange={(event) => setKeyword(event.target.value)}
-            onSearch={applySearch}
-          />
-          <Select
-            allowClear
-            placeholder={t("catalog.physicalType")}
-            value={dataType}
-            options={Object.entries(dataTypeLabels).map(([value, label]) => ({
-              value,
-              label,
-            }))}
-            onChange={setDataType}
-          />
-          <Select
-            allowClear
-            placeholder={t("catalog.classificationStatus")}
-            value={classificationStatus}
-            options={[
-              { value: "classified", label: t("catalog.classified") },
-              { value: "pending", label: t("catalog.pending") },
-            ]}
-            onChange={setClassificationStatus}
-          />
-          <Segmented<CatalogView>
-            value={view}
-            onChange={setView}
-            options={[
-              {
-                value: "cards",
-                label: t("catalog.cards"),
-                icon: <AppstoreOutlined />,
-              },
-              {
-                value: "list",
-                label: t("catalog.list"),
-                icon: <DatabaseOutlined />,
-              },
-            ]}
-          />
-        </section>
+        {taskView ? (
+          canBrowseData && (
+            <TaskResultCatalogue
+              key={`${user?.id ?? "visitor"}:${projectId}:${taskGroup ?? "all"}`}
+              projectId={projectId}
+              groupId={taskGroup}
+            />
+          )
+        ) : (
+          <>
+            <section id="public-data-catalog" className="data-catalog-toolbar">
+              <Input.Search
+                allowClear
+                value={keyword}
+                prefix={<SearchOutlined />}
+                placeholder={t("catalog.searchPlaceholder")}
+                onChange={(event) => setKeyword(event.target.value)}
+                onSearch={applySearch}
+              />
+              <Select
+                allowClear
+                placeholder={t("catalog.physicalType")}
+                value={dataType}
+                options={Object.entries(dataTypeLabels).map(
+                  ([value, label]) => ({
+                    value,
+                    label,
+                  }),
+                )}
+                onChange={setDataType}
+              />
+              <Select
+                allowClear
+                placeholder={t("catalog.classificationStatus")}
+                value={classificationStatus}
+                options={[
+                  { value: "classified", label: t("catalog.classified") },
+                  { value: "pending", label: t("catalog.pending") },
+                ]}
+                onChange={setClassificationStatus}
+              />
+              <Segmented<CatalogView>
+                value={view}
+                onChange={setView}
+                options={[
+                  {
+                    value: "cards",
+                    label: t("catalog.cards"),
+                    icon: <AppstoreOutlined />,
+                  },
+                  {
+                    value: "list",
+                    label: t("catalog.list"),
+                    icon: <DatabaseOutlined />,
+                  },
+                ]}
+              />
+            </section>
 
-        {canManageFiles && (
-          <section
-            className="catalog-file-management"
-            aria-label={computeUi("文件管理", "File management")}
-          >
-            <Space wrap>
-              <Button
-                aria-label={
-                  managingFiles
-                    ? computeUi("完成管理", "Finish managing")
-                    : computeUi("文件管理", "File management")
-                }
-                icon={<FolderOpenOutlined />}
-                type={managingFiles ? "primary" : "default"}
-                disabled={deleting}
-                onClick={() => {
-                  setManagingFiles((value) => !value);
-                  setSelectedIds([]);
-                }}
+            {canManageFiles && (
+              <section
+                className="catalog-file-management"
+                aria-label={computeUi("文件管理", "File management")}
               >
-                {managingFiles
-                  ? computeUi("完成管理", "Finish managing")
-                  : computeUi("文件管理", "File management")}
-              </Button>
-              {managingFiles && (
-                <>
-                  <Checkbox
-                    checked={allSelectableSelected}
-                    indeterminate={
-                      selectedResources.length > 0 && !allSelectableSelected
+                <Space wrap>
+                  <Button
+                    aria-label={
+                      managingFiles
+                        ? computeUi("完成管理", "Finish managing")
+                        : computeUi("文件管理", "File management")
                     }
-                    disabled={loading || deleting || resources.length === 0}
-                    onChange={(event) =>
-                      setSelectedIds(
-                        event.target.checked
-                          ? resources.slice(0, 100).map((item) => item.id)
-                          : [],
-                      )
-                    }
+                    icon={<FolderOpenOutlined />}
+                    type={managingFiles ? "primary" : "default"}
+                    disabled={deleting}
+                    onClick={() => {
+                      setManagingFiles((value) => !value);
+                      setSelectedIds([]);
+                    }}
                   >
-                    {resources.length > 100
-                      ? computeUi("选择前 100 项", "Select the first 100")
-                      : computeUi("全选当前结果", "Select current results")}
-                  </Checkbox>
+                    {managingFiles
+                      ? computeUi("完成管理", "Finish managing")
+                      : computeUi("文件管理", "File management")}
+                  </Button>
+                  {managingFiles && (
+                    <>
+                      <Checkbox
+                        checked={allSelectableSelected}
+                        indeterminate={
+                          selectedResources.length > 0 && !allSelectableSelected
+                        }
+                        disabled={loading || deleting || resources.length === 0}
+                        onChange={(event) =>
+                          setSelectedIds(
+                            event.target.checked
+                              ? resources.slice(0, 100).map((item) => item.id)
+                              : [],
+                          )
+                        }
+                      >
+                        {resources.length > 100
+                          ? computeUi("选择前 100 项", "Select the first 100")
+                          : computeUi("全选当前结果", "Select current results")}
+                      </Checkbox>
+                      <Typography.Text type="secondary">
+                        {computeUi(
+                          `已选择 ${selectedResources.length} 项`,
+                          `${selectedResources.length} selected`,
+                        )}
+                      </Typography.Text>
+                      <Button
+                        aria-label={computeUi("删除所选", "Delete selected")}
+                        danger
+                        icon={<DeleteOutlined />}
+                        disabled={
+                          loading || deleting || !selectedResources.length
+                        }
+                        onClick={() => void previewSelectedDeletion()}
+                      >
+                        {computeUi("删除所选", "Delete selected")}
+                      </Button>
+                    </>
+                  )}
+                </Space>
+                {managingFiles && (
                   <Typography.Text type="secondary">
                     {computeUi(
-                      `已选择 ${selectedResources.length} 项`,
-                      `${selectedResources.length} selected`,
+                      "可批量删除；历史计算结果确认后清理，运行中任务及已保存成果、工程依赖继续保护。",
+                      "Delete in batches. Historical computation results can be removed after confirmation; active tasks and saved results or workspaces remain protected.",
                     )}
                   </Typography.Text>
-                  <Button
-                    aria-label={computeUi("删除所选", "Delete selected")}
-                    danger
-                    icon={<DeleteOutlined />}
-                    disabled={loading || deleting || !selectedResources.length}
-                    onClick={() => void previewSelectedDeletion()}
-                  >
-                    {computeUi("删除所选", "Delete selected")}
-                  </Button>
-                </>
-              )}
-            </Space>
-            {managingFiles && (
-              <Typography.Text type="secondary">
-                {computeUi(
-                  "可批量删除；历史计算结果确认后清理，运行中任务及已保存成果、工程依赖继续保护。",
-                  "Delete in batches. Historical computation results can be removed after confirmation; active tasks and saved results or workspaces remain protected.",
                 )}
-              </Typography.Text>
+              </section>
             )}
-          </section>
-        )}
 
-        {deleteOutcome && (
-          <Alert
-            className="catalog-delete-feedback"
-            showIcon
-            closable
-            onClose={() => setDeleteOutcome(null)}
-            type={
-              deleteOutcome.failures.length ||
-              deleteOutcome.completed.some((item) => item.detail.includes("；"))
-                ? "warning"
-                : "success"
-            }
-            title={computeUi(
-              `已删除 ${deleteOutcome.deletedCount} 项${deleteOutcome.failures.length ? `，${deleteOutcome.failures.length} 项未删除` : ""}`,
-              `Deleted ${deleteOutcome.deletedCount}${deleteOutcome.failures.length ? `; ${deleteOutcome.failures.length} retained` : ""}`,
-            )}
-            description={
-              <ul>
-                {[...deleteOutcome.failures, ...deleteOutcome.completed].map(
-                  (item) => (
-                    <li key={item.key}>
-                      <strong>{item.name}</strong>：{item.detail}
-                    </li>
-                  ),
-                )}
-              </ul>
-            }
-          />
-        )}
-
-        <div className="data-catalog-body">
-          <aside className="data-catalog-taxonomy">
-            <div className="data-catalog-section-title">
-              <Typography.Text strong>{t("catalog.taxonomy")}</Typography.Text>
-              <Button
-                type="link"
-                size="small"
-                onClick={() => selectCategory(null)}
-              >
-                {t("common.all")}
-              </Button>
-            </div>
-            <Tree
-              blockNode
-              defaultExpandAll
-              selectedKeys={categoryCode ? [categoryCode] : []}
-              treeData={taxonomyTreeData(tree)}
-              onSelect={(keys) => selectCategory(String(keys[0] ?? "") || null)}
-            />
-            {selectedNode && (
+            {deleteOutcome && (
               <Alert
-                className="data-catalog-boundary"
-                type="info"
+                className="catalog-delete-feedback"
                 showIcon
-                title={selectedNode.path.join(" / ")}
-                description={selectedNode.description}
+                closable
+                onClose={() => setDeleteOutcome(null)}
+                type={
+                  deleteOutcome.failures.length ||
+                  deleteOutcome.completed.some((item) =>
+                    item.detail.includes("；"),
+                  )
+                    ? "warning"
+                    : "success"
+                }
+                title={computeUi(
+                  `已删除 ${deleteOutcome.deletedCount} 项${deleteOutcome.failures.length ? `，${deleteOutcome.failures.length} 项未删除` : ""}`,
+                  `Deleted ${deleteOutcome.deletedCount}${deleteOutcome.failures.length ? `; ${deleteOutcome.failures.length} retained` : ""}`,
+                )}
+                description={
+                  <ul>
+                    {[
+                      ...deleteOutcome.failures,
+                      ...deleteOutcome.completed,
+                    ].map((item) => (
+                      <li key={item.key}>
+                        <strong>{item.name}</strong>：{item.detail}
+                      </li>
+                    ))}
+                  </ul>
+                }
               />
             )}
-          </aside>
 
-          <section className="data-catalog-results">
-            <Spin spinning={loading}>
-              {resources.length ? (
-                <div
-                  className={
-                    view === "cards"
-                      ? "data-resource-grid"
-                      : "data-resource-list"
-                  }
-                >
-                  {resources.map((resource) => (
-                    <ResourceCard
-                      key={resource.id}
-                      resource={resource}
-                      compact={view === "list"}
-                      onOpen={() => openResource(resource)}
-                      onDetail={() => setDetailResource(resource)}
-                      dataTypeLabel={dataTypeLabels[resource.dataType]}
-                      selecting={canManageFiles && managingFiles}
-                      selected={selectedIds.includes(resource.id)}
-                      selectionDisabled={deleting}
-                      onSelect={(selected) =>
-                        toggleResourceSelection(resource.id, selected)
-                      }
-                      t={t}
-                    />
-                  ))}
+            <div className="data-catalog-body">
+              <aside className="data-catalog-taxonomy">
+                <div className="data-catalog-section-title">
+                  <Typography.Text strong>
+                    {t("catalog.taxonomy")}
+                  </Typography.Text>
+                  <Button
+                    type="link"
+                    size="small"
+                    onClick={() => selectCategory(null)}
+                  >
+                    {t("common.all")}
+                  </Button>
                 </div>
-              ) : (
-                <Empty description={t("catalog.empty")} />
-              )}
-            </Spin>
-          </section>
-        </div>
+                <Tree
+                  blockNode
+                  defaultExpandAll
+                  selectedKeys={categoryCode ? [categoryCode] : []}
+                  treeData={taxonomyTreeData(tree)}
+                  onSelect={(keys) =>
+                    selectCategory(String(keys[0] ?? "") || null)
+                  }
+                />
+                {selectedNode && (
+                  <Alert
+                    className="data-catalog-boundary"
+                    type="info"
+                    showIcon
+                    title={selectedNode.path.join(" / ")}
+                    description={selectedNode.description}
+                  />
+                )}
+              </aside>
+
+              <section className="data-catalog-results">
+                <Spin spinning={loading}>
+                  {resources.length ? (
+                    <div
+                      className={
+                        view === "cards"
+                          ? "data-resource-grid"
+                          : "data-resource-list"
+                      }
+                    >
+                      {resources.map((resource) => (
+                        <ResourceCard
+                          key={resource.id}
+                          resource={resource}
+                          compact={view === "list"}
+                          onOpen={() => openResource(resource)}
+                          onDetail={() => setDetailResource(resource)}
+                          dataTypeLabel={dataTypeLabels[resource.dataType]}
+                          selecting={canManageFiles && managingFiles}
+                          selected={selectedIds.includes(resource.id)}
+                          selectionDisabled={deleting}
+                          onSelect={(selected) =>
+                            toggleResourceSelection(resource.id, selected)
+                          }
+                          t={t}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <Empty description={t("catalog.empty")} />
+                  )}
+                </Spin>
+              </section>
+            </div>
+          </>
+        )}
       </main>
 
       <Drawer
@@ -656,7 +711,9 @@ export default function DataCatalogPage() {
               dataTypeLabel={dataTypeLabels[detailResource.dataType]}
               t={t}
             />
-            {user && <ResourceObservationEditor resourceId={detailResource.id} />}
+            {user && (
+              <ResourceObservationEditor resourceId={detailResource.id} />
+            )}
           </>
         )}
       </Drawer>

@@ -98,8 +98,8 @@ def normalize_definition(value):
     result = json.loads(encoded)
     if not isinstance(result.get("executionMode", "nodes"), str) or result.get(
         "executionMode", "nodes"
-    ) not in {"nodes", "main_agent"}:
-        invalid("业务流执行方式须为nodes或main_agent")
+    ) not in {"nodes", "main_agent", "fixed"}:
+        invalid("业务流执行方式须为nodes、main_agent或fixed")
     if "inputPreparation" in result:
         from .input_policy import validate
 
@@ -350,6 +350,32 @@ def normalize_definition(value):
                 "contract"
             ):
                 invalid("输入连线只可引用前序算子的真实输出")
+    if result.get("executionMode") == "fixed":
+        if (
+            result["adapter"] != "research_flow"
+            or any(row.get("multiple") for row in inputs)
+            or result.get("inputPreparation", {}).get("allowScripts") is not False
+            or not any(node["kind"] == "operator" for node in nodes)
+            or any(
+                node["kind"] not in {"operator", "result"}
+                or node["review"]["ai"]
+                or node["review"]["human"]
+                or node["review"]["maxRevisions"]
+                or node.get("allowSkip")
+                for node in nodes
+            )
+        ):
+            invalid(
+                "固定执行仅支持有明确输入的算子和交付节点，不执行模型、脚本或自动返修"
+            )
+        for node in nodes:
+            if node["kind"] != "operator":
+                continue
+            contract = node.get("contract", {})
+            if not contract.get("importOutputs") or set(contract["importOutputs"]) != {
+                item["name"] for item in contract["requiredOutputs"]
+            }:
+                invalid("固定算子节点须声明完整的必交付、入库结果键")
     if result["adapter"] == "geology_generic":
         from .builtins import GEOLOGY_CURRENT_ROLES, GEOLOGY_NODES, GEOLOGY_ROLES
 

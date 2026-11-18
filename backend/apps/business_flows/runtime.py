@@ -59,7 +59,8 @@ def authorize(user, workflow, *, history=False):
         or version.definition != bind["definitionSnapshot"]
     ):
         raise PermissionDenied("冻结的业务流版本无法核实")
-    policy = require_access(user, "agent", workflow.model)
+    fixed = version.definition.get("executionMode") == "fixed"
+    policy = require_access(user, "agent", None if fixed else workflow.model)
     if not policy.get("workflowEnabled", True):
         raise PermissionDenied("业务流执行权限已关闭")
     if workflow.workflow_type == "geology_generic":
@@ -429,17 +430,36 @@ def start_flow(user, version, value, *, source_run=None):
         or version.status != "published"
     ):
         raise PermissionDenied("业务流版本不可执行")
-    model, key = value.get("model"), value.get("idempotencyKey")
-    if not isinstance(model, str) or not model:
+    definition = deepcopy(version.definition)
+    fixed = definition.get("executionMode") == "fixed"
+    if fixed:
+        if (
+            source_run
+            or {
+                "model",
+                "reviewerModel",
+                "reasoningEffort",
+                "budgetProfile",
+                "maxOutputTokens",
+                "conversationId",
+            }
+            & value.keys()
+        ):
+            raise ValidationError("固定流程请在业务流页面启动，不需要模型或对话设置")
+        value = {**value, "agentEnabled": False}
+    model, key = ("" if fixed else value.get("model")), value.get("idempotencyKey")
+    if not fixed and (not isinstance(model, str) or not model):
         raise ValidationError("请选择已登记的执行模型")
-    policy = require_access(user, "agent", model)
+    policy = require_access(user, "agent", None if fixed else model)
     from apps.agent.config import registry
     from apps.agent.workflow_model_policy import REASONING_EFFORTS
 
     effort = value.get("reasoningEffort", "medium")
     if not isinstance(effort, str) or effort not in REASONING_EFFORTS:
         raise ValidationError("思考强度必须为low、medium或xhigh")
-    thinking = bool(policy.get("thinkingEnabled", True) and registry()[model].qwen)
+    thinking = bool(
+        not fixed and policy.get("thinkingEnabled", True) and registry()[model].qwen
+    )
     if "reasoningEffort" in value and not thinking:
         raise PermissionDenied("当前模型或策略不支持深度思考，不能应用所选强度")
     if (
@@ -473,7 +493,6 @@ def start_flow(user, version, value, *, source_run=None):
             raise ValidationError("启动参数超过128KiB边界")
     except (ValueError, TypeError, RecursionError) as error:
         raise ValidationError("启动参数必须是有限数值的有界JSON") from error
-    definition = deepcopy(version.definition)
     if type(value.get("agentEnabled", True)) is not bool:
         raise ValidationError("agentEnabled必须为布尔值")
     if any(node["kind"] == "operator" for node in definition["nodes"]):
@@ -482,7 +501,7 @@ def start_flow(user, version, value, *, source_run=None):
         from apps.compute.access import require_actor
 
         require_actor(user, selected_project_id(), "submit_task")
-    if any(
+    if fixed or any(
         "nodeId" in source
         for node in definition["nodes"]
         for source in node.get("inputBindings", {}).values()
@@ -542,8 +561,10 @@ def start_flow(user, version, value, *, source_run=None):
             raise PermissionDenied(
                 "审核模型不支持本次深度思考设置，请选择支持思考的模型"
             )
-    budget_snapshot = _launch_budget(
-        user, policy, model, value, source_run, reviewer_aliases
+    budget_snapshot = (
+        {}
+        if fixed
+        else _launch_budget(user, policy, model, value, source_run, reviewer_aliases)
     )
     request_hash = digest(
         {
@@ -615,7 +636,7 @@ def start_flow(user, version, value, *, source_run=None):
         raise ComputeError("本次输入超过当前策略允许的资料数量")
     with transaction.atomic():
         lock_run_queue()
-        if not source_run:
+        if not source_run and not fixed:
             from apps.agent.policy import daily_quota
 
             quota = daily_quota(user, policy)

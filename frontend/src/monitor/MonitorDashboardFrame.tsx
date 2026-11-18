@@ -29,6 +29,7 @@ export default function MonitorDashboardFrame({
   sourceLabel,
   status,
   scene,
+  displayOnly = false,
   children,
 }: {
   config: ProjectMonitorConfig;
@@ -38,6 +39,7 @@ export default function MonitorDashboardFrame({
   sourceLabel: ReactNode;
   status: (state: MonitorFrameState) => ReactNode;
   scene?: string;
+  displayOnly?: boolean;
   children: (state: MonitorFrameState) => ReactNode;
 }) {
   const { t } = useTranslation();
@@ -75,7 +77,7 @@ export default function MonitorDashboardFrame({
     <MonitorLayerStatusProvider>
       <div
         ref={root}
-        className={`ecology-monitor${scene ? " monitor-remote" : ""}`}
+        className={`ecology-monitor${scene ? " monitor-remote" : ""}${displayOnly ? " monitor-showcase" : ""}`}
         data-scene={scene}
         data-motion={animated ? "running" : "paused"}
         data-reduced-motion={reducedMotion}
@@ -131,9 +133,13 @@ export default function MonitorDashboardFrame({
             {status(state)}
           </span>
           <span>
-            {t(
-              reducedMotion ? "monitor.motionReduced" : "monitor.rotationHint",
-            )}
+            {displayOnly
+              ? "以登记的实际观测期与统计口径为准"
+              : t(
+                  reducedMotion
+                    ? "monitor.motionReduced"
+                    : "monitor.rotationHint",
+                )}
           </span>
           <span>{sourceLabel}</span>
         </footer>

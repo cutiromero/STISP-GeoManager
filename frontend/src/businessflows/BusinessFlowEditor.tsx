@@ -78,12 +78,14 @@ export default function BusinessFlowEditor({
   open,
   flow,
   version,
+  sourceName,
   onClose,
   onSave,
 }: {
   open: boolean;
   flow?: BusinessFlowDefinition;
   version?: BusinessFlowVersion | null;
+  sourceName?: string;
   onClose: () => void;
   onSave: (
     metadata: Pick<BusinessFlowDefinition, "code" | "name" | "description">,
@@ -128,14 +130,15 @@ export default function BusinessFlowEditor({
     );
     form.setFieldsValue({
       code: flow?.code ?? "",
-      name: flow?.name ?? "",
+      name:
+        flow?.name ?? (sourceName ? `${sourceName} · 副本`.slice(0, 120) : ""),
       description: flow?.description ?? "",
     });
     setError("");
     setParameterDrafts({});
     setBindingDrafts({});
     rowKeys.current.clear();
-  }, [open, flow?.id, version?.id, form]);
+  }, [open, flow?.id, version?.id, sourceName, form]);
   useEffect(() => {
     if (!open || !hasOperator || managedSkeleton) return;
     const controller = new AbortController();
@@ -302,8 +305,11 @@ export default function BusinessFlowEditor({
       open={open}
       title={
         flow
-          ? ui("发布业务流新版本", "Publish a new flow version")
-          : ui("登记业务流", "Register a business flow")
+          ? ui(
+              "编辑业务流 · 发布新版本",
+              "Edit workflow · publish a new version",
+            )
+          : ui("新建业务流", "New business flow")
       }
       onCancel={() => {
         if (!busy) onClose();
@@ -353,11 +359,7 @@ export default function BusinessFlowEditor({
             ]}
             style={{ flex: 1 }}
           >
-            <Input
-              maxLength={120}
-              disabled={Boolean(flow)}
-              placeholder="例如：岩性—构造—蚀变综合推理"
-            />
+            <Input maxLength={120} placeholder="例如：岩性—构造—蚀变综合推理" />
           </Form.Item>
           <Form.Item
             name="code"
@@ -386,11 +388,18 @@ export default function BusinessFlowEditor({
           <Input.TextArea
             rows={2}
             maxLength={3000}
-            disabled={Boolean(flow)}
             placeholder="这项流程解决什么问题，适合哪些资料。"
           />
         </Form.Item>
       </Form>
+      {spec.executionMode === "fixed" && (
+        <Alert
+          type="info"
+          showIcon
+          title="固定算子流程"
+          description="任务按已发布算子和资料绑定执行，不调用 Agent。这里的节点说明用于描述处理与交付要求。"
+        />
+      )}
       <details className="flow-input-policy" style={{ marginBottom: 16 }}>
         <summary>{ui("资料衔接策略", "Input preparation policy")}</summary>
         <div
@@ -400,6 +409,7 @@ export default function BusinessFlowEditor({
             <Switch
               size="small"
               checked={spec.inputPreparation?.allowScripts !== false}
+              disabled={spec.executionMode === "fixed"}
               onChange={(allowScripts) =>
                 setSpec((old) => ({
                   ...old,

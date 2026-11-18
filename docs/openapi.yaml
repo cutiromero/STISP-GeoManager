@@ -472,6 +472,81 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
+  /api/ecology/monitoring/official/:
+    get:
+      tags: [数据目录]
+      operationId: getOfficialMonitoring
+      summary: 读取正式登记的监测展板
+      description: 仅按当前项目与场景读取获准访问的最新区域成果。不会提交算子、创建瓦片任务或读取源科学文件。
+      security: [{sessionAuth: []}]
+      parameters:
+      - {name: X-Project-Id, in: header, required: true, description: 当前项目编号。, schema: {type: integer, minimum: 1}}
+      - {name: scene, in: query, required: true, description: 展示场景。, schema: {type: string, enum: [spartina, wildfire, landcover]}}
+      responses:
+        '200':
+          description: 精选区域及已准备好的地图展示描述。
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/OfficialMonitoringList'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/ecology/monitoring/registration/:
+    post:
+      tags: [数据目录]
+      operationId: registerMonitoringOutput
+      summary: 将本人的监测任务主成果正式登记到大屏
+      description: 仅接收当前项目本人计算、已入库并通过质量核查的主地图成果。使用冻结成果及来源登记，不重算、不扩大资料可见范围；重复确认幂等。
+      security: [{sessionAuth: []}]
+      parameters:
+      - {name: X-Project-Id, in: header, required: true, description: 当前项目编号。, schema: {type: integer, minimum: 1}}
+      requestBody:
+        required: true
+        description: 明确确认的计算输出编号。
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [outputId]
+              additionalProperties: false
+              properties:
+                outputId: {type: integer, minimum: 1, description: 主地图计算输出编号。}
+      responses:
+        '200':
+          description: 正式登记回执。
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, scene]
+                properties:
+                  id: {type: integer, description: 正式成果编号。}
+                  scene: {type: string, enum: [spartina, wildfire, landcover], description: 展示场景。}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/compute/result-groups/:
+    get:
+      tags: [计算中心]
+      operationId: getCatalogueComputeResultGroups
+      summary: 按业务任务与运行时间组织已入库计算成果
+      description: 当前项目有权访问的任务成果；业务流子算子按同一业务任务归组，独立计算用计算任务归组。原始资料不进入本列表。
+      security: [{sessionAuth: []}]
+      parameters:
+      - {name: X-Project-Id, in: header, required: true, description: 当前项目编号。, schema: {type: integer, minimum: 1}}
+      - {name: page, in: query, description: 分页页码。, schema: {type: integer, minimum: 1, maximum: 10000}}
+      - {name: groupId, in: query, description: 只查看指定任务组。, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: 任务分组列表及分页状态。
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CatalogueComputeResultGroups'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
   /api/sharing/check/:
     post:
       tags: [邀请分享]
@@ -3424,6 +3499,10 @@ paths:
         schema:
           type: string
         description: 按名称模糊搜索
+      - name: excludeComputeResults
+        in: query
+        description: 传1时只读取资料目录，不混入已入库的计算成果。
+        schema: {type: integer, enum: [1]}
       - name: dataType
         in: query
         schema:
@@ -14015,6 +14094,71 @@ components:
         label: {type: string, description: 指标名称。}
         unit: {type: string, description: 单位；无量纲概率为空字符串。}
         value: {type: [number, 'null'], description: 实测统计值；null在界面显示为破折号。}
+    OfficialMonitoringList:
+      type: object
+      description: 只读大屏的区域展示结果。
+      required: [scene, items]
+      properties:
+        scene: {type: string, enum: [spartina, wildfire, landcover], description: 展示场景。}
+        items:
+          type: array
+          description: 每个区域与物理量仅展示最新观测期的正式版本。
+          maxItems: 60
+          items: {$ref: '#/components/schemas/OfficialMonitoringProduct'}
+    OfficialMonitoringProduct:
+      description: 已核对访问权限的正式登记产品与持久地图展示。
+      allOf:
+      - {$ref: '#/components/schemas/MonitoringProduct'}
+      - type: object
+        required: [regionLabel, display]
+        properties:
+          regionLabel: {type: string, description: 来自原始资料或既有成果的区域名称。}
+          display:
+            description: 已准备的只读栅格展示，无展示时为null。
+            oneOf:
+            - {$ref: '#/components/schemas/RasterRenderResult'}
+            - {type: 'null'}
+    CatalogueComputeResultGroups:
+      type: object
+      description: 当前页的可见任务分组。
+      required: [items, hasMore]
+      properties:
+        items:
+          type: array
+          description: 按实际任务时间倒序的分组。
+          maxItems: 15
+          items: {$ref: '#/components/schemas/CatalogueComputeResultGroup'}
+        hasMore: {type: boolean, description: 是否还有下一页。}
+    CatalogueComputeResultGroup:
+      type: object
+      description: 一个业务流任务或独立计算任务的可见目录成果。
+      required: [id, name, workflowId, createdAt, total, items]
+      properties:
+        id: {type: string, format: uuid, description: 业务流或独立计算任务编号。}
+        name: {type: string, description: 已登记任务名称或业务任务目标。}
+        workflowId: {type: [string, 'null'], format: uuid, description: 本人可回看的业务流编号。}
+        createdAt: {type: string, format: date-time, description: 任务创建时间。}
+        total: {type: integer, description: 本任务组可见入库结果总数。}
+        items:
+          type: array
+          description: 本组前100项，保留所属算子计算任务引用。
+          maxItems: 100
+          items: {$ref: '#/components/schemas/CatalogueComputeResult'}
+    CatalogueComputeResult:
+      type: object
+      description: 已成功入库、当前授权可读的任务结果。
+      required: [id, taskId, taskName, name, kind, fileName, resourceId, registered, canRegister, downloadUrl]
+      properties:
+        id: {type: integer, description: 计算输出编号。}
+        taskId: {type: string, format: uuid, description: 所属算子任务编号。}
+        taskName: {type: string, description: 所属算子任务名。}
+        name: {type: string, description: 目录成果名称。}
+        kind: {type: string, description: 结果物理类型。}
+        fileName: {type: string, description: 下载使用的文件名。}
+        resourceId: {type: integer, description: 可见的目录成果资源编号。}
+        registered: {type: boolean, description: 是否已明确登记为正式监测成果。}
+        canRegister: {type: boolean, description: 是否具备正式登记资格；提交时重验。}
+        downloadUrl: {type: [string, 'null'], description: 当前可用文件下载入口。}
     MonitoringProduct:
       description: 已通过全部依赖访问检查的遥感产品及地图资源。
       allOf:
@@ -22647,7 +22791,7 @@ components:
     BusinessFlowInputScriptSummary: {"type": "object", "description": "适配脚本进度摘要；代码按需读取，不随状态帧反复传送", "properties": {"attempt": {"type": "integer", "description": "当前真实脚本尝试序号", "minimum": 0, "maximum": 3}, "status": {"type": "string", "description": "真实编写、审核或执行状态"}, "sha256": {"type": "string", "description": "实际代码SHA256，尚未生成时为空"}, "summary": {"type": "string", "description": "本次衔接目的和处理说明"}, "question": {"type": "string", "description": "确实缺少必要含义时需要用户补充的资料说明"}, "lastError": {"type": "string", "description": "真实失败原因的有界摘要"}, "available": {"type": "boolean", "description": "是否已有可按需查看的实际代码"}}, "required": ["attempt", "status", "sha256", "summary", "available"], "additionalProperties": false}
     BusinessFlowInputScriptDetail: {"type": "object", "description": "本人当前项目任务的实际适配脚本和审计；原始资料不被改写", "properties": {"role": {"type": "string", "description": "输入衔接绑定键"}, "attempt": {"type": "integer", "description": "代码尝试序号", "minimum": 1, "maximum": 3}, "language": {"type": "string", "description": "语言", "enum": ["python"]}, "code": {"type": "string", "description": "模型实际编写的代码", "maxLength": 16000}, "sha256": {"type": "string", "description": "代码SHA256", "pattern": "^[0-9a-f]{64}$"}, "status": {"type": "string", "description": "当前真实状态"}, "summary": {"type": "string", "description": "转换目的和假设"}, "diagnostics": {"type": "array", "description": "实际执行或审核反馈，最多8条", "items": {"type": "string", "description": "有界诊断"}, "maxItems": 8}, "sourceIds": {"type": "array", "description": "本次实际授权来源", "items": {"type": "integer", "description": "资料编号", "minimum": 1}, "maxItems": 30}, "targetType": {"type": "string", "description": "声明的目标资料类型", "enum": ["vector", "raster", "table", "gene", "document", "image"]}}, "required": ["role", "attempt", "language", "code", "sha256", "status", "summary", "diagnostics", "sourceIds", "targetType"], "additionalProperties": false}
     BusinessFlowInputClarification: {"type": "object", "description": "仅补充数据适配所需含义；不批准任何科研或对象修改节点", "properties": {"role": {"type": "string", "description": "当前待说明的输入衔接键"}, "feedback": {"type": "string", "description": "用户的实际资料说明", "minLength": 1, "maxLength": 4000}, "revision": {"type": "integer", "description": "当前业务流控制修订", "minimum": 0}, "idempotencyKey": {"type": "string", "description": "本次说明的幂等键", "minLength": 8, "maxLength": 80}}, "required": ["role", "feedback", "revision", "idempotencyKey"], "additionalProperties": false}
-    BusinessFlowSpec: {"type": "object", "description": "不可变科研流程规范。通用research_flow逐节点自由配置审核；专业geology_generic锁定骨架、资料角色、人工门禁（仅inputs/apply）及真实AI边界（仅apply/finish）。", "properties": {"schemaVersion": {"type": "integer", "description": "定义规范版本", "enum": [1]}, "adapter": {"type": "string", "description": "平台注册执行适配器", "enum": ["geology_generic", "research_flow"]}, "inputRequirements": {"type": "array", "description": "输入资料规范", "items": {"$ref": "#/components/schemas/BusinessFlowInputRequirement"}, "maxItems": 30}, "nodes": {"type": "array", "description": "无环依赖节点，最多32个", "items": {"$ref": "#/components/schemas/BusinessFlowNode"}, "minItems": 1, "maxItems": 32}, "outputRequirements": {"type": "array", "description": "最终成果说明", "items": {"type": "string", "description": "条目文字"}, "maxItems": 30}, "inputPreparation": {"$ref": "#/components/schemas/BusinessFlowInputPreparationPolicy"}, "skill": {"$ref": "#/components/schemas/BusinessFlowSkill"}, "executionMode": {"type": "string", "description": "main_agent由一个任务级主循环选择合法目标、调用工具并继续；省略保留旧节点执行方式。", "enum": ["nodes", "main_agent"]}}, "required": ["schemaVersion", "adapter", "inputRequirements", "nodes", "outputRequirements"], "additionalProperties": false}
+    BusinessFlowSpec: {"type": "object", "description": "不可变科研流程规范。通用research_flow逐节点自由配置审核；专业geology_generic锁定骨架、资料角色、人工门禁（仅inputs/apply）及真实AI边界（仅apply/finish）。", "properties": {"schemaVersion": {"type": "integer", "description": "定义规范版本", "enum": [1]}, "adapter": {"type": "string", "description": "平台注册执行适配器", "enum": ["geology_generic", "research_flow"]}, "inputRequirements": {"type": "array", "description": "输入资料规范", "items": {"$ref": "#/components/schemas/BusinessFlowInputRequirement"}, "maxItems": 30}, "nodes": {"type": "array", "description": "无环依赖节点，最多32个", "items": {"$ref": "#/components/schemas/BusinessFlowNode"}, "minItems": 1, "maxItems": 32}, "outputRequirements": {"type": "array", "description": "最终成果说明", "items": {"type": "string", "description": "条目文字"}, "maxItems": 30}, "inputPreparation": {"$ref": "#/components/schemas/BusinessFlowInputPreparationPolicy"}, "skill": {"$ref": "#/components/schemas/BusinessFlowSkill"}, "executionMode": {"type": "string", "description": "main_agent运行任务级主循环；fixed仅按确定输入运行冻结算子并入库，不调用模型；省略保留旧节点方式。", "enum": ["nodes", "main_agent", "fixed"]}}, "required": ["schemaVersion", "adapter", "inputRequirements", "nodes", "outputRequirements"], "additionalProperties": false}
     BusinessFlowSkill: {"type": "object", "description": "随业务流版本固定的简短配套技能；只注入核心及当前节点指导，不保存文件正文。", "properties": {"title": {"type": "string", "description": "技能名称", "minLength": 1, "maxLength": 80}, "instructions": {"type": "string", "description": "简短核心执行指导，仍服从节点工具和人工边界", "minLength": 1, "maxLength": 600}, "nodeInstructions": {"type": "object", "description": "按节点选择的专项指导，不把全部节点说明一起发送", "maxProperties": 32, "additionalProperties": {"type": "string", "description": "对应节点的简短说明", "minLength": 1, "maxLength": 300}}}, "required": ["title", "instructions"], "additionalProperties": false}
     BusinessFlowExecutorSession: {"type": "object", "description": "贯穿本次任务的主执行会话，仅含身份和冻结技能引用，不传递台账或文件正文。", "properties": {"id": {"type": "string", "description": "同一任务主执行者的稳定会话编号", "pattern": "^[a-f0-9]{32}$"}, "mode": {"type": "string", "description": "持续执行模式", "enum": ["main_agent_v1"]}, "skillTitle": {"type": "string", "description": "本任务配套技能名称"}, "skillHash": {"type": "string", "description": "冻结配套技能SHA-256", "pattern": "^[a-f0-9]{64}$"}, "flowVersionId": {"type": "integer", "description": "技能所属的冻结业务流发布版本", "minimum": 1}}, "required": ["id", "mode", "skillTitle", "skillHash", "flowVersionId"], "additionalProperties": false}
     BusinessFlowDefinition: {"type": "object", "description": "业务流登记归属一个项目；公开项目登记的通用定义可跨项目读取和启动，维护仅限登记项目。", "properties": {"id": {"type": "integer", "description": "业务流登记编号", "minimum": 1}, "projectId": {"type": "integer", "description": "业务流登记所属项目；1表示公开共享定义，执行任务仍归当前项目", "minimum": 1}, "ownerId": {"type": "integer", "description": "登记所有者", "minimum": 1}, "code": {"type": "string", "description": "当前项目唯一稳定编码", "pattern": "^[a-z][a-z0-9_-]{1,79}$"}, "name": {"type": "string", "description": "业务流名称", "maxLength": 120}, "description": {"type": "string", "description": "科研任务、适用条件与用途", "maxLength": 3000}, "isActive": {"type": "boolean", "description": "是否允许新任务启动"}, "currentVersionId": {"anyOf": [{"type": "integer", "description": "当前发布版本编号", "minimum": 1}, {"type": "null"}], "description": "当前发布版本编号"}, "createdAt": {"type": "string", "description": "登记时间", "format": "date-time"}, "updatedAt": {"type": "string", "description": "元信息版本时间，也是保存的乐观并发凭据", "format": "date-time"}}, "required": ["id", "projectId", "ownerId", "code", "name", "description", "isActive", "currentVersionId", "createdAt", "updatedAt"], "additionalProperties": false}
@@ -22731,8 +22875,8 @@ components:
     BusinessFlowRunList: {"type": "object", "description": "本人当前项目最近30个业务流执行。", "properties": {"items": {"type": "array", "description": "轻量执行摘要，最多30项", "items": {"$ref": "#/components/schemas/BusinessFlowRunSummary"}}}, "required": ["items"], "additionalProperties": false}
     BusinessFlowCreate: {"type": "object", "description": "登记并立即发布第一版；仅当前项目超级管理员可调用。", "properties": {"code": {"type": "string", "description": "当前项目唯一稳定编码", "pattern": "^[a-z][a-z0-9_-]{1,79}$"}, "name": {"type": "string", "description": "业务流名称", "maxLength": 120}, "description": {"type": "string", "description": "科研任务、适用条件与用途", "maxLength": 3000}, "isActive": {"type": "boolean", "description": "是否允许新任务启动"}, "definition": {"$ref": "#/components/schemas/BusinessFlowSpec"}}, "required": ["code", "name", "definition"], "additionalProperties": false}
     BusinessFlowUpdate: {"type": "object", "description": "只修改登记元信息，不覆盖已发布定义。", "properties": {"name": {"type": "string", "description": "业务流名称", "maxLength": 120}, "description": {"type": "string", "description": "科研任务、适用条件与用途", "maxLength": 3000}, "isActive": {"type": "boolean", "description": "是否允许新任务启动"}, "updatedAt": {"type": "string", "description": "元信息版本时间，也是保存的乐观并发凭据", "format": "date-time"}}, "required": ["updatedAt"], "additionalProperties": false}
-    BusinessFlowVersionPublish: {"type": "object", "description": "发布新不可变版本并设为当前版本；不修改正在运行任务的快照。", "properties": {"definition": {"$ref": "#/components/schemas/BusinessFlowSpec"}, "updatedAt": {"type": "string", "description": "元信息版本时间，也是保存的乐观并发凭据", "format": "date-time"}}, "required": ["definition", "updatedAt"], "additionalProperties": false}
-    BusinessFlowStart: {"type": "object", "description": "按固定版本启动任务；数据编号仍按当前用户、项目和隐私边界重验。", "properties": {"versionId": {"type": "integer", "description": "省略时使用当前发布版本", "minimum": 1}, "goal": {"type": "string", "description": "本次目标", "minLength": 1, "maxLength": 12000}, "model": {"type": "string", "description": "执行模型别名", "maxLength": 80}, "reviewerModel": {"type": "string", "description": "独立审核请求使用的模型别名；可与执行模型相同但上下文和职责独立", "maxLength": 80}, "inputs": {"type": "object", "description": "角色到当前项目资料编号的映射，最多30项", "additionalProperties": {"type": "integer", "description": "资料编号", "minimum": 1}}, "parameters": {"type": "object", "description": "受控任务参数，不新增任意根级配置。research_flow仅允许nodeParameters对象（operator节点ID→该已发布算法manifest声明的参数值对象）；节点必须存在且类型为operator，未知节点/参数键不静默忽略。与冻结node.parameters默认值合并后，固定必填参数的缺失、类型及范围在任务创建前校验，非法返回400且不消耗模型调用；真实字段、波段和来源仍由计算中心预检验证。geology_generic只允许既有专业参数及uploadBatchId；禁止_businessFlow等内部状态。", "additionalProperties": true}, "conversationId": {"type": "integer", "description": "可选本人当前项目会话，未传则由服务器建立", "minimum": 1}, "idempotencyKey": {"type": "string", "description": "同一操作重试的稳定键", "minLength": 8, "maxLength": 80}, "inputAdapters": {"$ref": "#/components/schemas/BusinessFlowInputAdapterChoices"}, "agentEnabled": {"type": "boolean", "default": true, "description": "允许智能体执行合同与自动补救；关闭时算子失败直接等待用户"}, "reasoningEffort": {"type": "string", "enum": ["low", "medium", "xhigh"], "default": "medium", "description": "本次业务流全部执行、审核及返修请求的思考强度，默认标准medium；low轻量，xhigh深度。模型与当前策略须支持深度思考；通过会话工具启动时继承发起运行的思考模式与强度。"}, "budgetProfile": {"$ref": "#/components/schemas/AgentBudgetProfileId", "description": "管理员开启任务预算后选择本次方案；通过会话工具发起时继承父运行预算，不替换思考强度。"}, "maxOutputTokens": {"type": "integer", "minimum": 128, "description": "可选的本次单轮生成上限，受当前账号及实际服务窗口约束；记录到父运行供主执行和独立审核共用。"}}, "required": ["goal", "model", "inputs", "parameters", "idempotencyKey"], "additionalProperties": false}
+    BusinessFlowVersionPublish: {"type": "object", "description": "发布新不可变版本并设为当前版本；不修改正在运行任务的快照。", "properties": {"definition": {"$ref": "#/components/schemas/BusinessFlowSpec"}, "name": {"type": "string", "maxLength": 120, "description": "可同时更新的流程名称"}, "description": {"type": "string", "maxLength": 3000, "description": "可同时更新的使用说明"}, "updatedAt": {"type": "string", "description": "元信息版本时间，也是保存的乐观并发凭据", "format": "date-time"}}, "required": ["definition", "updatedAt"], "additionalProperties": false}
+    BusinessFlowStart: {"type": "object", "description": "按固定版本启动任务；数据编号仍按当前用户、项目和隐私边界重验。", "properties": {"versionId": {"type": "integer", "description": "省略时使用当前发布版本", "minimum": 1}, "goal": {"type": "string", "description": "本次目标", "minLength": 1, "maxLength": 12000}, "model": {"type": "string", "description": "Agent流程必填执行模型别名；固定执行不发送此字段", "maxLength": 80}, "reviewerModel": {"type": "string", "description": "独立审核请求使用的模型别名；可与执行模型相同但上下文和职责独立", "maxLength": 80}, "inputs": {"type": "object", "description": "角色到当前项目资料编号的映射，最多30项", "additionalProperties": {"type": "integer", "description": "资料编号", "minimum": 1}}, "parameters": {"type": "object", "description": "受控任务参数，不新增任意根级配置。research_flow仅允许nodeParameters对象（operator节点ID→该已发布算法manifest声明的参数值对象）；节点必须存在且类型为operator，未知节点/参数键不静默忽略。与冻结node.parameters默认值合并后，固定必填参数的缺失、类型及范围在任务创建前校验，非法返回400且不消耗模型调用；真实字段、波段和来源仍由计算中心预检验证。geology_generic只允许既有专业参数及uploadBatchId；禁止_businessFlow等内部状态。", "additionalProperties": true}, "conversationId": {"type": "integer", "description": "可选本人当前项目会话，未传则由服务器建立", "minimum": 1}, "idempotencyKey": {"type": "string", "description": "同一操作重试的稳定键", "minLength": 8, "maxLength": 80}, "inputAdapters": {"$ref": "#/components/schemas/BusinessFlowInputAdapterChoices"}, "agentEnabled": {"type": "boolean", "default": true, "description": "允许智能体执行合同与自动补救；关闭时算子失败直接等待用户"}, "reasoningEffort": {"type": "string", "enum": ["low", "medium", "xhigh"], "default": "medium", "description": "本次业务流全部执行、审核及返修请求的思考强度，默认标准medium；low轻量，xhigh深度。模型与当前策略须支持深度思考；通过会话工具启动时继承发起运行的思考模式与强度。"}, "budgetProfile": {"$ref": "#/components/schemas/AgentBudgetProfileId", "description": "管理员开启任务预算后选择本次方案；通过会话工具发起时继承父运行预算，不替换思考强度。"}, "maxOutputTokens": {"type": "integer", "minimum": 128, "description": "可选的本次单轮生成上限，受当前账号及实际服务窗口约束；记录到父运行供主执行和独立审核共用。"}}, "required": ["goal", "inputs", "parameters", "idempotencyKey"], "additionalProperties": false}
     BusinessFlowInputAdapterChoice: {"type": "object", "description": "已发布转换版本及其参数，不授予额外访问权", "properties": {"versionId": {"type": "integer", "minimum": 1, "description": "已发布转换版本"}, "parameters": {"type": "object", "description": "真实manifest已声明的有界参数值", "additionalProperties": true}}, "additionalProperties": false}
     BusinessFlowInputAdapterChoices: {"type": "object", "description": "来源绑定键到显式适配选择", "additionalProperties": {"$ref": "#/components/schemas/BusinessFlowInputAdapterChoice"}, "maxProperties": 30}
     BusinessFlowInputAdapterCandidate: {"type": "object", "description": "当前项目及用户允许的已发布输入转换工具", "properties": {"versionId": {"type": "integer", "minimum": 1, "description": "算子版本编号"}, "name": {"type": "string", "description": "工具名称"}, "description": {"type": "string", "description": "转换的含义与限制"}, "targetType": {"type": "string", "description": "真实目标类型"}, "parameters": {"type": "array", "description": "真实manifest参数规范", "items": {"$ref": "#/components/schemas/ComputeParameterSpec"}}}, "required": ["versionId", "name", "description", "targetType", "parameters"], "additionalProperties": false}

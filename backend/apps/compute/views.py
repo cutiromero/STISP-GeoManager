@@ -440,6 +440,26 @@ def tasks(request):
     return page(request, query, task_data)
 
 
+@endpoint(["GET"])
+def result_groups(request):
+    import uuid
+
+    from .result_groups import catalogue_groups
+
+    if not request.headers.get("X-Project-Id"):
+        raise ComputeError("请显式选择当前项目")
+    try:
+        group_id = (
+            uuid.UUID(request.GET["groupId"]) if request.GET.get("groupId") else None
+        )
+        page_number = int(request.GET.get("page", "1"))
+    except (ValueError, TypeError) as error:
+        raise ComputeError("任务或分页参数格式无效") from error
+    if not 1 <= page_number <= 10000:
+        raise ComputeError("页码超出范围")
+    return JsonResponse(catalogue_groups(request.user, page_number, group_id))
+
+
 @endpoint(["GET", "POST"])
 def task_detail(request, task_id):
     task = get_object_or_404(
