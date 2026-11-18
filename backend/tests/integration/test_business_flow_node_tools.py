@@ -802,7 +802,73 @@ def test_format_retry_once_and_whitelist(operators, monkeypatch):
     calls = install(monkeypatch, ["not json", "still not json"])
     item = advance(env, workflow, 2)
     assert len(calls) == 2 and item["status"] == "waiting_recovery"
-    assert item["toolLoop"]["modelCalls"] == 3  # Two action attempts and one diagnosis.
+    assert (
+        item["toolLoop"]["modelCalls"] == 2
+    )  # Do not ask a second model to diagnose syntax.
+    assert item["recovery"]["failure"]["code"] == "MODEL_ACTION_FORMAT"
+    assert item["recovery"]["attempts"]
+    assert ComputeTask.objects.count() == 0
+    with project_scope(env["scope"]):
+        workflow.refresh_from_db()
+        resumed = runtime.decide_flow(
+            env["owner"],
+            workflow,
+            {
+                "nodeId": "calculate",
+                "decision": "retry_recovery",
+                "revision": state(workflow)["revision"],
+                "idempotencyKey": uuid4().hex,
+            },
+        )
+        current = state(resumed)["nodes"]["calculate"]["toolLoop"]
+        assert current["modelCalls"] == 2 and "formatRetries" not in current
+    calls = install(
+        monkeypatch, ["bad again", action("ask_user", question="请确认用法")]
+    )
+    item = advance(env, workflow, 2)
+    assert len(calls) == 2 and item["recovery"]["question"] == "请确认用法"
+    assert not ComputeTask.objects.exists()
+
+
+def test_format_recovery_after_computation_delivers_original_task(
+    operators, monkeypatch
+):
+    env = operators
+    upgrade(env)
+    workflow = create(env, node_contract=contract(maxOperatorCalls=1))
+    install(
+        monkeypatch,
+        [
+            action("operator_catalog"),
+            action("run_operator", **submit_args(env)),
+            "bad",
+            "bad again",
+        ],
+    )
+    item = advance(env, workflow, 2)
+    task_id = item["computeTaskId"]
+    finish_task(env, task_id, "PRESERVED")
+    item = advance(env, workflow, 3)
+    assert item["recovery"]["failure"]["code"] == "MODEL_ACTION_FORMAT"
+    count = ComputeTask.objects.count()
+    with project_scope(env["scope"]):
+        runtime.decide_flow(
+            env["owner"],
+            workflow,
+            {
+                "nodeId": "calculate",
+                "decision": "retry_recovery",
+                "feedback": "继续交付已有结果",
+                "revision": state(workflow)["revision"],
+                "idempotencyKey": uuid4().hex,
+            },
+        )
+    install(monkeypatch, [finish_action])
+    item = advance(env, workflow)
+    assert item["toolLoop"]["successfulTaskId"] == task_id
+    assert item["toolLoop"]["operatorCalls"] == 1
+    assert ComputeTask.objects.count() == count
+    finish_flow(env, workflow)
 
 
 def test_large_catalog_keeps_all_returned_versions_and_byte_ranges(operators):

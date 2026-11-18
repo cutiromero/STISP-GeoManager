@@ -1277,6 +1277,8 @@ it("2.0仅显示修正后远景目标单图、连续色带与实际依据", asyn
   );
   await screen.findByText("优先核查的找矿目标");
   await screen.findByLabelText("远景相对置信度色带");
+  fireEvent.click(screen.getByRole("button", { name: "查看岩性章节" }));
+  expect(view.container.querySelector('image[href*="803"]')).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "查看调查建议章节" }));
   expect(
     view.container.querySelectorAll(".geology-review-map-pair section"),

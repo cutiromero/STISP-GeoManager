@@ -1,6 +1,5 @@
 """Short guidance and reference-only recall over one durable task identity."""
 
-from copy import deepcopy
 from types import SimpleNamespace
 
 import pytest
@@ -154,3 +153,28 @@ def test_new_session_accepts_data_bindings_but_protects_core_and_approval_inputs
     workflow.parameters["_businessFlow"].pop("executorSession")
     with pytest.raises(ComputeError):
         check_submission(workflow, node, version, body)
+
+
+def test_workflow_control_resume_clears_only_reply_repair_state():
+    from apps.business_flows.context_recovery import retry_node
+
+    workflow = task()
+    workflow.current_step = "check"
+    loop = session(workflow)["loop"]
+    loop["formatFeedback"] = "上一条动作不合法"
+    loop["steps"] = 4
+    loop["history"] = [{"nodeId": "inputs", "action": "start_node"}]
+    item = state(workflow)["nodes"]["check"]
+    item["contextRecovery"] = {
+        "kind": "model_protocol_error",
+        "actor": "executor",
+        "requestScope": "workflow",
+        "reason": "动作无法解析",
+        "resumeCheckpoint": {"step": "check", "phase": "decide"},
+    }
+    item["contextResumeStatus"] = "pending"
+    retry_node(workflow, item, {})
+    assert "formatFeedback" not in loop
+    assert loop["steps"] == 4 and loop["history"][0]["nodeId"] == "inputs"
+    assert item["status"] == "pending" and "contextRecovery" not in item
+    assert workflow.plan["phase"] == "decide"

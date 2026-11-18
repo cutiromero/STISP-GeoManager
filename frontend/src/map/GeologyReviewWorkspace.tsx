@@ -58,15 +58,18 @@ export default function GeologyReviewWorkspace({
   const [loading, setLoading] = useState(true);
   const [reload, setReload] = useState(0);
   const comparePage = useRef<{
+    workflowId: string;
     offset: number;
     element: "all" | "lithology" | "structure" | "alteration";
-  }>({ offset: 0, element: "all" });
+  }>({ workflowId, offset: 0, element: "all" });
+  const comparisonRequest = useRef<AbortController | undefined>(undefined);
   const [selected, setSelected] = useState(0);
   const [focus, setFocus] = useState<[number, number, number, number] | null>(
     null,
   );
   useEffect(() => {
     let disposed = false;
+    const initialRequest = new AbortController();
     const load = async () => {
       setError("");
       setLoading(true);
@@ -75,10 +78,15 @@ export default function GeologyReviewWorkspace({
       try {
         if (projectTagId && projectTagId !== currentProject)
           throw new Error("请切换到检查任务所属项目后查看");
+        if (comparePage.current.workflowId !== workflowId)
+          comparePage.current = { workflowId, offset: 0, element: "all" };
+        const { offset, element } = comparePage.current;
         const value = await agentApi.workflow(workflowId, {
           view: "compare",
+          signal: initialRequest.signal,
           limit: 25,
-          ...comparePage.current,
+          offset,
+          element,
           suggestionId: suggestionId ?? undefined,
         });
         if (disposed) return;
@@ -147,6 +155,8 @@ export default function GeologyReviewWorkspace({
     void load();
     return () => {
       disposed = true;
+      initialRequest.abort();
+      comparisonRequest.current?.abort();
     };
   }, [workflowId, projectTagId, currentProject, reload, suggestionId]);
   const current = data?.differences.features[selected];
@@ -195,25 +205,38 @@ export default function GeologyReviewWorkspace({
   )
     return (
       <MultiElementWorkspace
+        key={workflow.id}
         workflow={workflow}
         suggestionId={suggestionId}
         onReload={() => setReload((value) => value + 1)}
         onPage={async (offset, element = "all") => {
-          comparePage.current = { offset, element };
-          const next = await agentApi.workflow(workflowId, {
-            view: "compare",
-            limit: 25,
-            offset,
-            element,
-          });
-          if (getActiveProject() !== currentProject) return;
-          const previousRevision =
-            record(workflow.plan.pagination).revision ?? workflow.planHash;
-          const nextRevision =
-            record(next.plan.pagination).revision ?? next.planHash;
-          if (nextRevision !== previousRevision)
-            throw new Error("成果已更新，请刷新后继续浏览");
-          setWorkflow(next);
+          comparisonRequest.current?.abort();
+          const controller = new AbortController();
+          comparisonRequest.current = controller;
+          try {
+            const next = await agentApi.workflow(workflowId, {
+              view: "compare",
+              limit: 25,
+              offset,
+              element,
+              signal: controller.signal,
+            });
+            if (controller.signal.aborted || getActiveProject() !== currentProject)
+              return;
+            const previousRevision =
+              record(workflow.plan.pagination).revision ?? workflow.planHash;
+            const nextRevision =
+              record(next.plan.pagination).revision ?? next.planHash;
+            if (next.id !== workflowId || nextRevision !== previousRevision)
+              throw new Error("成果已更新，请刷新后继续浏览");
+            comparePage.current = { workflowId, offset, element };
+            setWorkflow(next);
+          } catch (reason) {
+            if (!controller.signal.aborted) throw reason;
+          } finally {
+            if (comparisonRequest.current === controller)
+              comparisonRequest.current = undefined;
+          }
         }}
       />
     );

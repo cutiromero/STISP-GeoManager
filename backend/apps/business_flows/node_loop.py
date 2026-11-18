@@ -8,7 +8,7 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 
 from apps.agent.models import AgentWorkflowStep
-from apps.agent.provider import ModelError
+from apps.agent.provider import ModelError, ToolProtocolError
 from apps.agent.workflow_controls import locked_workflow
 from apps.compute.packages import ComputeError, PreflightRequired
 from .node_contracts import (
@@ -166,6 +166,9 @@ def wait_recovery(workflow, node, item, failure, *, question=""):
             "id"
         ]
     item["status"] = "waiting_recovery"
+    code = failure.get("code", "")
+    from apps.agent.business_flow_actions import ACTION_FORMAT
+
     explanations = {
         "adjust_parameters": "算子参数不符合当前资料或允许范围。",
         "complete_mapping": "算子所需的字段或类别对应尚未补齐。",
@@ -175,8 +178,10 @@ def wait_recovery(workflow, node, item, failure, *, question=""):
         "human_review": "需要您确认资料或处理方式。",
     }
     prefix = (
-        "计算服务发生故障，已停止自动重试。"
-        if str(failure.get("code", "")).startswith("PLATFORM_")
+        "模型动作格式未通过校验，已保留本节点已完成的计算。"
+        if code == ACTION_FORMAT
+        else "计算服务发生故障，已停止自动重试。"
+        if str(code).startswith("PLATFORM_")
         else explanations.get(failure.get("remedy"), "")
     )
     item["recovery"] = {
@@ -198,6 +203,8 @@ def wait_recovery(workflow, node, item, failure, *, question=""):
             "cancel",
         ],
     }
+    if code == ACTION_FORMAT and loop.get("formatRetries"):
+        item["recovery"]["attempts"].append("已尝试用严格 JSON 重新获取同一步动作")
     contract = node.get("contract")
     if contract and (
         loop["steps"] >= contract["maxSteps"]
@@ -208,8 +215,8 @@ def wait_recovery(workflow, node, item, failure, *, question=""):
         item["recovery"]["reason"] += (
             " 本节点合同额度已用尽，恢复不会重置额度；请停止，或在定义允许时跳过。"
         )
-    if loop.get("failure") or (
-        not question and failure.get("code") != "MAIN_AGENT_QUESTION"
+    if code != ACTION_FORMAT and (
+        loop.get("failure") or (not question and code != "MAIN_AGENT_QUESTION")
     ):
         from .failure_handoff import diagnose
 
@@ -1672,9 +1679,11 @@ def advance_tool_execution(
         return result if action == "finish_node" else None
     except InputsPending:
         return None
-    except ActionFormatError as error:
+    except (ActionFormatError, ToolProtocolError) as error:
         if loop.get("formatRetries", 0) >= 1:
-            wait_recovery(workflow, node, item, observation(error))
+            wait_recovery(
+                workflow, node, item, observation(ActionFormatError(str(error)))
+            )
         else:
             loop["formatRetries"] = loop.get("formatRetries", 0) + 1
             loop["formatFeedback"] = str(error)
@@ -1683,7 +1692,7 @@ def advance_tool_execution(
                 "executor",
                 node["id"],
                 "action_format_retry",
-                "模型动作格式不符，将进行一次有界修正",
+                "模型动作格式不符，将使用严格 JSON 修正一次",
             )
         return None
     except (ComputeError, ValidationError) as error:

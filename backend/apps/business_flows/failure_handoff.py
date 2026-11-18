@@ -297,6 +297,7 @@ def handoff_exception(workflow, error):
     """Execution exceptions always retain their original resumable checkpoint."""
     from .model_recovery import model_wait
     from .node_loop import observation
+    from apps.agent.business_flow_actions import ActionFormatError
 
     if workflow.workflow_type != "business_flow" and isinstance(error, ComputeError):
         from .legacy import recover_failed_task
@@ -327,7 +328,9 @@ def handoff_exception(workflow, error):
     recovery = model_wait(
         node["id"],
         reason,
-        kind="model_request_error"
+        kind="model_protocol_error"
+        if isinstance(error, ActionFormatError)
+        else "model_request_error"
         if isinstance(error, ModelError)
         else "execution_error"
         if expected
@@ -346,7 +349,8 @@ def handoff_exception(workflow, error):
         "nodeStatus": item["status"],
     }
     workflow.current_step = node["id"]
-    diagnose(workflow, node, recovery)
+    if not isinstance(error, ActionFormatError):
+        diagnose(workflow, node, recovery)
     item["contextResumeStatus"] = item["status"]
     item.update(status="waiting_context", contextRecovery=recovery)
     workflow.current_step = node["id"]

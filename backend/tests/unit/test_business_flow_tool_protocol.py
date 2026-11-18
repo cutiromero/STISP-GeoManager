@@ -10,6 +10,8 @@ from apps.agent.business_flow_actions import (
     validate_action,
     ActionFormatError,
     NATIVE_TOOLS,
+    action_tools,
+    validate_contract_action,
 )
 from apps.agent.config import ModelConfig
 
@@ -135,3 +137,45 @@ def test_json_protocol_never_admits_extra_commands(value):
 
 def test_json_protocol_accepts_exactly_one_action():
     assert validate_action(json.dumps(ACTION), set()) == ACTION
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        {"name": "node_action", "arguments": ACTION},
+        {"name": "node_action", "arguments": json.dumps(ACTION)},
+        {"name": ACTION["action"], "arguments": ACTION["arguments"]},
+        {**ACTION, "arguments": json.dumps(ACTION["arguments"])},
+    ],
+)
+def test_exact_native_wrappers_do_not_change_the_action(raw):
+    assert (
+        validate_contract_action(json.dumps(raw), set(), [ACTION["action"]]) == ACTION
+    )
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        '{"action":"ask_user","action":"operator_catalog","arguments":{}}',
+        '{"action":"operator_catalog","arguments":{"limit":NaN}}',
+        '{"name":"node_action","arguments":{"action":"ask_user","arguments":{"approved":true}}}',
+        '{"name":"start_node","arguments":{"nodeId":"other"}}',
+        '[{"action":"operator_catalog","arguments":{}}]',
+    ],
+)
+def test_normalization_never_selects_ambiguous_or_nonlocal_actions(raw):
+    with pytest.raises(ActionFormatError):
+        validate_contract_action(raw, set(), ["operator_catalog"])
+
+
+def test_native_schema_only_offers_current_phase_actions():
+    native = action_tools(["start_node", "ask_user"])
+    assert native[0]["function"]["parameters"]["properties"]["action"]["enum"] == [
+        "start_node",
+        "ask_user",
+    ]
+    assert (
+        "run_operator"
+        in NATIVE_TOOLS[0]["function"]["parameters"]["properties"]["action"]["enum"]
+    )

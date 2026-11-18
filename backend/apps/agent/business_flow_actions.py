@@ -1,6 +1,8 @@
 """单动作模型协议；复用节点请求的预算、取消与审计。"""
 
 import json
+import math
+from copy import deepcopy
 
 from apps.compute.packages import ComputeError
 from .business_flow_model import request_node_result
@@ -92,14 +94,59 @@ operator节点必须交付本节点真实计算产生的输出，不能把上游
 )
 
 
+ACTION_FORMAT = "MODEL_ACTION_FORMAT"
+
+
 class ActionFormatError(ComputeError):
-    pass
+    def __init__(self, message):
+        super().__init__(message)
+        self.failure = {"code": ACTION_FORMAT, "remedy": "human_review"}
+
+
+def _unique_object(pairs):
+    value = dict(pairs)
+    if len(value) != len(pairs):
+        raise ValueError("duplicate JSON key")
+    return value
+
+
+def _reject_constant(value):
+    raise ValueError(value)
+
+
+def _finite_float(value):
+    number = float(value)
+    if not math.isfinite(number):
+        raise ValueError("nonfinite JSON number")
+    return number
+
+
+def _read_json(raw):
+    return json.loads(
+        raw,
+        object_pairs_hook=_unique_object,
+        parse_constant=_reject_constant,
+        parse_float=_finite_float,
+    )
 
 
 def validate_action(raw, available):
     try:
-        value = json.loads(raw)
-    except (ValueError, TypeError) as error:
+        value = _read_json(raw)
+        # Some providers return the tool envelope as text, or serialize the
+        # argument object twice. Accept only the exact, unambiguous envelope.
+        if isinstance(value, dict) and set(value) == {"name", "arguments"}:
+            name = value["name"]
+            args = value["arguments"]
+            if isinstance(args, str):
+                args = _read_json(args)
+            if name == "node_action":
+                value = args
+            elif isinstance(name, str) and name in ARGUMENT_KEYS:
+                value = {"action": name, "arguments": args}
+        if isinstance(value, dict) and isinstance(value.get("arguments"), str):
+            value["arguments"] = _read_json(value["arguments"])
+    except (ValueError, TypeError, RecursionError) as error:
         raise ActionFormatError("每步必须返回一个有效JSON动作对象") from error
     if (
         not isinstance(value, dict)
@@ -111,6 +158,31 @@ def validate_action(raw, available):
     ):
         raise ActionFormatError("动作或参数结构无效；不得混入工具外字段或批准指令")
     return value
+
+
+def validate_contract_action(raw, available, allowed):
+    value = validate_action(raw, available)
+    if value["action"] not in allowed:
+        raise ActionFormatError("当前任务阶段仅允许：" + "、".join(allowed))
+    return value
+
+
+def action_tools(allowed):
+    tool = deepcopy(NATIVE_TOOLS)
+    tool[0]["function"]["parameters"]["properties"]["action"]["enum"] = [
+        name for name in allowed if name in ARGUMENT_KEYS
+    ]
+    return tool
+
+
+def _format_instruction(context, contract):
+    allowed = "、".join(contract["tools"])
+    body = "本步仅允许以下动作：" + allowed + "。必须返回一个动作和 arguments 对象。"
+    if context.get("formatFeedback"):
+        body += (
+            "上一条动作未执行。只修正输出格式，沿用当前证据、已完成的计算和已批准范围。"
+        )
+    return body
 
 
 def request_action(
@@ -126,15 +198,19 @@ def request_action(
     on_progress=None,
     on_thinking=None,
 ):
-    native = registry()[workflow.model].native_tools and not context.get("jsonFallback")
+    native = registry()[workflow.model].native_tools and not any(
+        context.get(key) for key in ("jsonFallback", "formatFeedback")
+    )
     return request_node_result(
         workflow,
         node,
         context["step"],
         evidence,
         role="executor",
-        instruction=INSTRUCTION,
-        validate=validate_action,
+        instruction=INSTRUCTION + "\n" + _format_instruction(context, contract),
+        validate=lambda raw, available: validate_contract_action(
+            raw, available, contract["tools"]
+        ),
         caps=CAPS,
         guard=guard,
         policy=policy,
@@ -143,5 +219,6 @@ def request_action(
         on_record=on_record,
         on_progress=on_progress,
         on_thinking=on_thinking,
-        tools=NATIVE_TOOLS if native else None,
+        tools=action_tools(contract["tools"]) if native else None,
+        protocol_repair=bool(context.get("formatFeedback")),
     )

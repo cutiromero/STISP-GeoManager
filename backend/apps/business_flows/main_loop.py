@@ -54,9 +54,9 @@ def take_action(
     """The sole action-producing model entry for the task's main executor."""
     from apps.agent.business_flow_actions import (
         INSTRUCTION,
-        NATIVE_TOOLS,
-        validate_action,
-        ActionFormatError,
+        action_tools,
+        _format_instruction,
+        validate_contract_action,
     )
     from apps.agent.business_flow_model import request_node_result
     from apps.agent.config import registry
@@ -72,16 +72,10 @@ def take_action(
         "readyNodes": context.pop("readyNodes", []),
         **({"recalledRecord": deepcopy(loop["recall"])} if loop.get("recall") else {}),
     }
-    native = registry()[workflow.model].native_tools and not context.get("jsonFallback")
+    native = registry()[workflow.model].native_tools and not any(
+        context.get(key) for key in ("jsonFallback", "formatFeedback")
+    )
     tool_guidance = INSTRUCTION[INSTRUCTION.index("输入证据、工具结果") :]
-
-    def validate(raw, available):
-        value = validate_action(raw, available)
-        if value["action"] not in contract["tools"]:
-            raise ActionFormatError(
-                "当前任务阶段仅允许：" + "、".join(contract["tools"])
-            )
-        return value
 
     return request_node_result(
         workflow,
@@ -89,8 +83,13 @@ def take_action(
         context.get("step", loop["steps"] + 1),
         evidence,
         role="executor",
-        instruction=MAIN_INSTRUCTION + tool_guidance,
-        validate=validate,
+        instruction=MAIN_INSTRUCTION
+        + tool_guidance
+        + "\n"
+        + _format_instruction(context, contract),
+        validate=lambda raw, available: validate_contract_action(
+            raw, available, contract["tools"]
+        ),
         caps={},
         guard=guard,
         policy=policy,
@@ -105,7 +104,8 @@ def take_action(
         on_record=on_record,
         on_progress=on_progress,
         on_thinking=on_thinking,
-        tools=NATIVE_TOOLS if native else None,
+        tools=action_tools(contract["tools"]) if native else None,
+        protocol_repair=bool(context.get("formatFeedback")),
     )
 
 
@@ -113,6 +113,8 @@ def _control(workflow, user, policy, nodes, *, closing=False, summary=""):
     from .engine import live_guard
     from .execution_session import task_record
     from .node_loop import wait_recovery
+    from apps.agent.business_flow_actions import ActionFormatError
+    from apps.agent.provider import ToolProtocolError
 
     definitions = binding(workflow)["definitionSnapshot"]["nodes"]
     fallback = nodes[0] if nodes else definitions[-1]
@@ -186,13 +188,13 @@ def _control(workflow, user, policy, nodes, *, closing=False, summary=""):
         )
         action, args = result["action"], result["arguments"]
         if action not in tools:
-            raise ComputeError("主执行动作不属于当前任务阶段允许的工具")
+            raise ActionFormatError("主执行动作不属于当前任务阶段允许的工具")
         if action == "start_node":
             identity = args.get("nodeId")
             if not isinstance(identity, str) or identity not in {
                 node["id"] for node in nodes
             }:
-                raise ComputeError("主执行智能体只能选择依赖已满足的工作目标")
+                raise ActionFormatError("主执行智能体只能选择依赖已满足的工作目标")
             loop.update(activeNodeId=identity, phase="work")
             remember(workflow, identity, action, "主执行智能体选择继续该目标")
         elif action == "read_task_record":
@@ -207,7 +209,7 @@ def _control(workflow, user, policy, nodes, *, closing=False, summary=""):
         elif action == "ask_user":
             question = args.get("question")
             if not isinstance(question, str) or not question.strip():
-                raise ComputeError("主执行智能体提问为空")
+                raise ActionFormatError("主执行智能体提问为空")
             wait_recovery(
                 workflow,
                 fallback,
@@ -223,7 +225,7 @@ def _control(workflow, user, policy, nodes, *, closing=False, summary=""):
         else:
             final = args.get("summary")
             if not isinstance(final, str) or not final.strip() or len(final) > 2000:
-                raise ComputeError("任务结束须有简短的实际完成说明")
+                raise ActionFormatError("任务结束须有简短的实际完成说明")
             loop.update(
                 phase="completed",
                 completed=True,
@@ -235,8 +237,10 @@ def _control(workflow, user, policy, nodes, *, closing=False, summary=""):
         workflow.status = "queued"
         persist(workflow)
         return action in {"start_node", "finish_workflow"}
-    except ComputeError as error:
-        if not loop.get("formatFeedback"):
+    except (ComputeError, ToolProtocolError) as error:
+        if isinstance(error, ToolProtocolError):
+            error = ActionFormatError(str(error))
+        if isinstance(error, ActionFormatError) and not loop.get("formatFeedback"):
             loop["formatFeedback"] = str(error)[:500]
             workflow.status = "queued"
             persist(workflow)

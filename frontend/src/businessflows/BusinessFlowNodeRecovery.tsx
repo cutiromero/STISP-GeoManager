@@ -31,7 +31,12 @@ export default function BusinessFlowNodeRecovery({
   const recovery = node.recovery;
   if (!recovery) return null;
   const importOnly = recovery.failure?.code === "PLATFORM_OUTPUT_IMPORT";
+  const formatOnly = recovery.failure?.code === "MODEL_ACTION_FORMAT";
   const retry = () => {
+    if (formatOnly) {
+      onDecide({ decision: "retry_recovery", feedback: answer });
+      return;
+    }
     try {
       const replacements: unknown = JSON.parse(inputs);
       const adjustments: unknown = JSON.parse(parameters);
@@ -86,7 +91,7 @@ export default function BusinessFlowNodeRecovery({
         placeholder="补充资料说明或填写调整原因"
         onChange={(event) => setAnswer(event.target.value)}
       />
-      {!legacy && !importOnly && (
+      {!legacy && !importOnly && !formatOnly && (
         <>
           <label>
             更换输入数据（角色 → 当前项目资源编号，JSON）
@@ -110,7 +115,11 @@ export default function BusinessFlowNodeRecovery({
           </label>
         </>
       )}
-      {legacy && <p>请在资料确认或处置审核中调整资料与参数。</p>}
+      {formatOnly ? (
+        <p>从本节点继续会重新获取动作，保留已确认资料、已批准范围和实际计算成果。</p>
+      ) : (
+        legacy && <p>请在资料确认或处置审核中调整资料与参数。</p>
+      )}
       <Space wrap>
         <Button
           disabled={busy || !recovery.options.includes("retry_recovery")}

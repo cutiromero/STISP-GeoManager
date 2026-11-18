@@ -168,6 +168,7 @@ export default function MultiElementWorkspace({
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [pageLoading, setPageLoading] = useState(false);
+  const latestPage = useRef(0);
   const [rasterLayers, setRasterLayers] = useState<
     { key: string; before?: ComputeMapPreview; after?: ComputeMapPreview }[]
   >([]);
@@ -268,15 +269,17 @@ export default function MultiElementWorkspace({
     };
   }, [rasterKey, rasterApplyCompleted]);
   const changePage = async (offset: number, element = chapter) => {
-    if (!onPage || pageLoading) return;
+    if (!onPage) return;
+    const request = ++latestPage.current;
     setPageLoading(true);
     setError("");
     try {
       await onPage(offset, element === "investigation" ? "all" : element);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "修改详情读取失败");
+      if (latestPage.current === request)
+        setError(reason instanceof Error ? reason.message : "修改详情读取失败");
     } finally {
-      setPageLoading(false);
+      if (latestPage.current === request) setPageLoading(false);
     }
   };
   const [progress, setProgress] = useState({ done: 0, total: 0 });
@@ -528,7 +531,9 @@ export default function MultiElementWorkspace({
         : null;
       setFocus(
         reviewBounds(
-          restoredZones
+          restoredOutcome && map.prospectProtocol === "after_only_v2"
+            ? after ?? before
+            : restoredZones
             ? featureCollection([
                 ...restoredZones.before.features,
                 ...restoredZones.after.features,
@@ -806,8 +811,16 @@ export default function MultiElementWorkspace({
   const showOutcome = (grade?: string) => {
     if (!outcome) return;
     setOutcomeGrade(grade ?? null);
+    setSelected(undefined);
+    setVisible((layers) =>
+      layers.includes("prospects") ? layers : [...layers, "prospects"],
+    );
     setViewMode("outcome");
     setChapter("investigation");
+    if (currentProspectsOnly && !grade && data) {
+      setFocus(reviewBounds(data.after ?? data.before));
+      return;
+    }
     setFocus(
       reviewBounds(
         featureCollection(
@@ -957,14 +970,18 @@ export default function MultiElementWorkspace({
           </Button>
           <Button
             icon={<AimOutlined />}
-            disabled={!selected}
+            disabled={viewMode === "outcome" ? !outcome : !selected}
             onClick={() =>
               viewMode === "outcome"
                 ? showOutcome(outcomeGrade ?? undefined)
                 : selected && inspect(selected)
             }
           >
-            {viewMode === "outcome" ? "定位核查区" : "定位当前对象"}
+            {viewMode === "outcome"
+              ? currentProspectsOnly
+                ? "查看全区远景"
+                : "定位核查区"
+              : "定位当前对象"}
           </Button>
         </div>
       </header>
@@ -1221,7 +1238,9 @@ export default function MultiElementWorkspace({
                     viewMode === "tour"
                       ? "改后"
                       : viewMode === "outcome"
-                        ? "更新后的核查区"
+                        ? currentProspectsOnly
+                          ? "修正后找矿远景区"
+                          : "更新后的核查区"
                         : "获批修正版本及综合分析"
                   }
                   previewLabel="当前输入与检查范围，尚无修正版本"

@@ -32,6 +32,12 @@ def retry_node(workflow, item, value):
             item["status"] = item.pop(
                 "contextResumeStatus", "executing" if item["attempt"] else "pending"
             )
+        if recovery.get("requestScope") == "workflow":
+            from .execution_session import session
+
+            value_session = session(workflow)
+            if value_session:
+                value_session["loop"].pop("formatFeedback", None)
         item.pop("contextRecovery")
         from .failure_handoff import restore_checkpoint
 

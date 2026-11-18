@@ -212,6 +212,7 @@ def review_node(
                 human_required=review["human"],
                 caps={},
                 required_evidence_ids=sorted(required),
+                protocol_repair=bool(feedback),
                 on_progress=on_progress,
                 on_thinking=on_thinking,
                 on_record=record,

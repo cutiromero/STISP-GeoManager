@@ -55,6 +55,15 @@ def decide_recovery(user, workflow, value):
             or not item.get("recovery")
         ):
             raise ComputeError("该节点不在当前恢复等待版本，请刷新", 409)
+        from apps.agent.business_flow_actions import ACTION_FORMAT
+
+        is_format_error = (
+            item["recovery"].get("failure", {}).get("code") == ACTION_FORMAT
+        )
+        if is_format_error and (
+            value.get("recoveryInputs") or value.get("recoveryParameters")
+        ):
+            raise ComputeError("格式恢复沿用已绑定资料和参数，请直接从本节点继续", 409)
         definition = binding(current)["definitionSnapshot"]
         answer_scope = (
             "workflow"
@@ -280,6 +289,11 @@ def decide_recovery(user, workflow, value):
             resumed = item["toolLoop"]
             if resumed.pop("failure", None):
                 resumed.pop("lastObservation", None)
+            failure = item["recovery"].get("failure", {})
+            if is_format_error or resumed.get("formatRetries"):
+                # Reset the per-reply repair allowance, never total calls or steps.
+                resumed.pop("formatRetries", None)
+                resumed["formatFeedback"] = failure.get("message", "")[:500]
             resumed["manualRecovery"] = True
         item.pop("recovery", None)
         require_compute_slot(user, current.pk)

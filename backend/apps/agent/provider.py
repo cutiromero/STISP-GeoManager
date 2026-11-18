@@ -10,6 +10,10 @@ class ModelError(Exception):
     pass
 
 
+class ToolProtocolError(ModelError):
+    """The model returned something other than the requested single native action."""
+
+
 def model_request(model, path, body=None, *, timeout=20):
     url = urlsplit(model.base_url)
     conn = http.client.HTTPConnection(url.hostname, url.port, timeout=timeout)
@@ -277,13 +281,13 @@ def stream(
             if tools and delta.get("tool_calls"):
                 for call in delta["tool_calls"]:
                     if call.get("index", 0) != 0:
-                        raise ModelError("节点每步只允许一个工具动作")
+                        raise ToolProtocolError("节点每步只允许一个工具动作")
                     tool_seen = True
                     function = call.get("function", {})
                     tool_name += function.get("name", "")
                     tool_arguments += function.get("arguments", "")
                     if len(tool_arguments.encode()) > 65536:
-                        raise ModelError("节点工具参数超过安全上限")
+                        raise ToolProtocolError("节点工具参数超过安全上限")
             reasoning = (
                 delta.get("reasoning_content")
                 or delta.get("reasoning")
@@ -298,7 +302,7 @@ def stream(
                 if not isinstance(content, str):
                     raise ModelError("模型文本响应格式错误")
                 if tools and content.strip():
-                    raise ModelError("原生工具协议混入正文，不能作为唯一动作")
+                    raise ToolProtocolError("原生工具协议混入正文，不能作为唯一动作")
                 emitted = emit_content(content)
                 if emitted:
                     yield emitted
@@ -306,7 +310,7 @@ def stream(
                 length_limited = True
         if tools:
             if not tool_seen or tool_name != "node_action":
-                raise ModelError("原生工具协议未返回唯一node_action")
+                raise ToolProtocolError("原生工具协议未返回唯一node_action")
             yield tool_arguments
         if inline_buffer:
             if in_thinking or (implicit_thinking and not saw_reasoning_field):

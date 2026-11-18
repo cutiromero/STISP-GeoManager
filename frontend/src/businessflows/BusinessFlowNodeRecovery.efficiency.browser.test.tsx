@@ -8,7 +8,7 @@ import BusinessFlowActivity, {
 } from "./BusinessFlowActivity";
 import { businessFlowRun } from "./businessFlow.testFixtures";
 
-function show(allowSkip = false) {
+function show(allowSkip = false, code = "MISSING_FIELD") {
   const flow = businessFlowRun();
   flow.nodes[0]!.status = "waiting_recovery";
   flow.nodes[0]!.recovery = {
@@ -17,7 +17,7 @@ function show(allowSkip = false) {
     attempts: ["补充映射：字段不存在"],
     allowSkip,
     options: ["retry_recovery", "cancel"],
-    failure: { code: "MISSING_FIELD", remedy: "complete_mapping" },
+    failure: { code, remedy: "complete_mapping" },
   };
   render(
     <App>
@@ -89,6 +89,23 @@ it("rejects invalid JSON locally and permits only explicit configured skip", asy
     expect.any(String),
     expect.objectContaining({ decision: "skip_node" }),
   );
+});
+
+it("resumes a model format error without rewriting inputs or parameters", async () => {
+  const flow = show(false, "MODEL_ACTION_FORMAT");
+  expect(screen.queryByLabelText("恢复输入数据")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("恢复算子参数")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "从本节点继续" }));
+  await waitFor(() => expect(businessFlowsApi.decide).toHaveBeenCalledOnce());
+  const call = vi.mocked(businessFlowsApi.decide).mock.calls[0]!;
+  expect(call[0]).toBe(flow.id);
+  expect(call[1]).toMatchObject({
+    nodeId: "analyse",
+    revision: flow.revision,
+    decision: "retry_recovery",
+  });
+  expect(call[1]).not.toHaveProperty("recoveryInputs");
+  expect(call[1]).not.toHaveProperty("recoveryParameters");
 });
 
 it("stops through cancel instead of an artificial approval", async () => {

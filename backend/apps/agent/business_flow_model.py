@@ -46,7 +46,7 @@ def _digest(value):
 
 def _structured_text(raw):
     """Remove one complete JSON presentation fence; never extract prose fragments."""
-    text = raw.strip()
+    text = raw.strip().removeprefix("\ufeff").lstrip()
     fenced = re.fullmatch(
         r"```(?:json)?[ \t]*\r?\n(.*?)\r?\n```[ \t]*", text, re.DOTALL | re.IGNORECASE
     )
@@ -193,6 +193,7 @@ def request_node_result(
     on_record=None,
     tools=None,
     required_evidence_ids=None,
+    protocol_repair=False,
 ):
     """Run a fresh request; persistence and all actual operations stay in the runtime."""
     if role not in {"executor", "reviewer"}:
@@ -219,6 +220,7 @@ def request_node_result(
         if type(ceiling) is not int or ceiling <= 0:
             raise ComputeError("业务流节点模型预算无效")
         effective[key] = min(live[key], chosen, ceiling)
+    thinking = effective["_thinking"] and not protocol_repair
     # Each role receives a separate bounded context, never a prior actor conversation.
     packet = {
         "node": {
@@ -342,7 +344,7 @@ def request_node_result(
         "requestSha256": _digest(_json(messages)),
         "usage": {},
         "humanApprovalRequired": human_required,
-        "thinkingEnabled": effective["_thinking"],
+        "thinkingEnabled": thinking,
         "reasoningEffort": effective["reasoningEffort"],
         "outputLimit": effective["maxOutputTokens"],
         "timeLimitSeconds": effective["maxRunSeconds"],
@@ -465,7 +467,7 @@ def request_node_result(
                 ],
                 measurements=TokenMeasurements(
                     model,
-                    thinking=effective["_thinking"],
+                    thinking=thinking,
                     effort=effective["reasoningEffort"],
                     counter=(
                         lambda model, messages, thinking, effort: provider.count_tokens(
@@ -515,7 +517,7 @@ def request_node_result(
                             "baseUrl": model.base_url,
                             "budget": management["inputBudgetTokens"],
                             "outputLimit": record["outputLimit"],
-                            "thinking": effective["_thinking"],
+                            "thinking": thinking,
                             "effort": effective["reasoningEffort"],
                         }
                     )
@@ -539,7 +541,7 @@ def request_node_result(
                             record["outputLimit"],
                             checked,
                             structured=True,
-                            thinking=effective["_thinking"],
+                            thinking=thinking,
                             temperature=0,
                             top_p=live["topP"],
                             reasoning_effort=effective["reasoningEffort"],
@@ -645,7 +647,7 @@ def request_node_result(
                 locked=bool(snapshot),
                 measurements=TokenMeasurements(
                     model,
-                    thinking=effective["_thinking"],
+                    thinking=thinking,
                     effort=effective["reasoningEffort"],
                     counter=lambda model, messages, thinking, effort: (
                         provider.count_tokens(
@@ -721,7 +723,7 @@ def request_node_result(
                     )
         else:
             tokens, truncated = prepare_context(
-                messages, messages[1], model, effective, window, effective["_thinking"]
+                messages, messages[1], model, effective, window, thinking
             )
             if truncated:
                 raise ComputeError("业务流节点模型不能丢弃实际证据，未发送请求")
@@ -740,7 +742,7 @@ def request_node_result(
                 effective["maxOutputTokens"],
                 checked,
                 structured=True,
-                thinking=effective["_thinking"],
+                thinking=thinking,
                 temperature=min(live["temperature"], 0.1),
                 top_p=live["topP"],
                 reasoning_effort=effective["reasoningEffort"],
