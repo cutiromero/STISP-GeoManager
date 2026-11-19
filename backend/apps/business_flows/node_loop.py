@@ -1183,8 +1183,23 @@ def execute_tool(
             workflow, user, policy, node, loop, arguments, source_state=sources
         )
         if action == "preflight_operator":
-            validated = validate_submission(user, body)
-            from .logic_nodes import submission_digest
+            from .logic_nodes import (
+                submission_digest,
+                without_missing_archive_confidence,
+            )
+
+            note = ""
+            try:
+                validated = validate_submission(user, body)
+            except ComputeError as error:
+                cleaned = without_missing_archive_confidence(
+                    workflow, version.manifest, body, error
+                )
+                if cleaned is None:
+                    raise
+                body = cleaned
+                validated = validate_submission(user, body)
+                note = "岩性资料没有可选置信度字段，已省略该映射。"
 
             loop["preflightDigest"] = submission_digest(body)
             loop["preflightSources"] = sources
@@ -1210,7 +1225,7 @@ def execute_tool(
             return {
                 "valid": True,
                 "gaps": [],
-                "message": "预检通过，尚未提交计算；若按原方案执行，请调用runAction。",
+                "message": f"{note}预检通过，尚未提交计算；若按预检方案执行，请调用runAction。",
                 "runAction": {
                     "action": "run_operator",
                     "arguments": {"usePreflight": True},

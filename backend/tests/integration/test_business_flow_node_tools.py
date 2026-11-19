@@ -969,6 +969,109 @@ def test_large_execution_catalog_has_usable_summary_without_paging_entire_manife
         assert loop["evidence"][preview["evidenceId"]]["result"] == result
 
 
+@pytest.mark.parametrize(
+    ("requested", "available", "outcome"),
+    [
+        ("conf", False, "omit"),
+        ("conf", True, "preserve"),
+        ("unverified", False, "reject"),
+    ],
+)
+def test_archive_optional_confidence_preflight_keeps_required_bindings(
+    monkeypatch, requested, available, outcome
+):
+    from apps.agent import policy
+    from apps.business_flows import node_loop
+    from apps.compute import services
+    from apps.compute.preflight import semantic_preflight
+
+    manifest = {
+        "identifier": "geology-multi-check",
+        "inputs": [
+            {
+                "key": "lithology",
+                "fields": [
+                    {
+                        "role": "stratum_code",
+                        "required": True,
+                        "legacyName": "geo_sym",
+                        "types": ["string"],
+                    },
+                    {
+                        "role": "confidence",
+                        "required": False,
+                        "legacyName": "conf",
+                        "types": ["number"],
+                    },
+                ],
+            }
+        ],
+    }
+    types = {"geo_sym": "string", "display_symbol": "string"}
+    if available:
+        types["conf"] = "number"
+    info = {"lithology": {"kind": "vector", "fields": list(types), "fieldTypes": types}}
+    body = {
+        "versionId": 112,
+        "inputs": {"lithology": 1984},
+        "parameters": {},
+        "fieldMappings": {
+            "lithology": {"stratum_code": "geo_sym", "confidence": requested}
+        },
+    }
+
+    def validate(user, payload):
+        semantic_preflight(
+            manifest, info, payload["fieldMappings"], payload["parameters"]
+        )
+        return {"digest": "checked"}
+
+    monkeypatch.setattr(policy, "fresh_user", lambda _: object())
+    monkeypatch.setattr(policy, "require_access", lambda *_: {})
+    monkeypatch.setattr(
+        node_loop,
+        "submission",
+        lambda *_, **__: (SimpleNamespace(manifest=manifest), body),
+    )
+    monkeypatch.setattr(services, "validate_submission", validate)
+    workflow = SimpleNamespace(
+        workflow_type="geology_generic",
+        owner_id=1,
+        model="test",
+        plan={"archivedClassification": {"resourceId": 1984}},
+        parameters={"_businessFlow": {"nodeExecution": "geology_node_tools_v1"}},
+    )
+    item = {}
+
+    def run():
+        return execute_tool(
+            workflow,
+            None,
+            {},
+            {"id": "check"},
+            item,
+            "preflight_operator",
+            {},
+            [],
+            {},
+            lambda: None,
+        )
+
+    if outcome == "reject":
+        with pytest.raises(ComputeError) as failure:
+            run()
+        assert failure.value.gaps[0]["field"] == requested
+        assert "validatedLaunch" not in item["toolLoop"]
+        return
+    assert run()["valid"]
+    frozen = item["toolLoop"]["validatedLaunch"]
+    assert frozen["inputs"] == body["inputs"]
+    expected = {"stratum_code": "geo_sym"}
+    if outcome == "preserve":
+        expected["confidence"] = "conf"
+    assert frozen["fieldMappings"]["lithology"] == expected
+
+
 def test_recovery_does_not_repeat_same_error_remedy():
     loop = {
         "failure": {"code": "BOUNDS", "remedy": "adjust_parameters"},

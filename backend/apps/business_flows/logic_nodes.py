@@ -114,6 +114,7 @@ def node_definition(workflow, stage):
             "本次使用已登记的归档岩性分类。岩性端口沿用已确认的工作副本或清洗产物；"
             "其geo_sym是算子连接分类编号的字段，display_symbol是图面地质符号。"
             "保留算子清单的字段映射，不把stratum_code改为display_symbol。"
+            "confidence是可选角色；资料没有conf时省略该映射，不能填写或生成置信度。"
         )
     return node
 
@@ -164,6 +165,54 @@ def check_protected_inputs(body, expected, *, archived=False):
         )
     ):
         raise ComputeError("归档对照须使用已确认的岩性资料及归档分类编号字段geo_sym")
+
+
+def without_missing_archive_confidence(workflow, manifest, body, error):
+    """Discard only an agent's guessed, optional legacy confidence name."""
+    if (
+        not enabled(workflow)
+        or not workflow.plan.get("archivedClassification")
+        or manifest.get("identifier")
+        not in {"geology-multi-check", "geology-multi-apply"}
+        or len(error.gaps or ()) != 1
+    ):
+        return None
+    missing = error.gaps[0]
+    if (
+        missing.get("code"),
+        missing.get("input"),
+        missing.get("role"),
+        missing.get("field"),
+    ) != ("MISSING_FIELD", "lithology", "confidence", "conf"):
+        return None
+    fields = next(
+        (
+            spec.get("fields", ())
+            for spec in manifest["inputs"]
+            if spec["key"] == "lithology"
+        ),
+        (),
+    )
+    if not any(
+        row["role"] == "confidence"
+        and row.get("required") is False
+        and row.get("legacyName") == "conf"
+        and not row.get("parameter")
+        for row in fields
+    ):
+        return None
+    mapping = body["fieldMappings"].get("lithology", {})
+    if mapping.get("confidence") != "conf":
+        return None
+    return {
+        **body,
+        "fieldMappings": {
+            **body["fieldMappings"],
+            "lithology": {
+                key: val for key, val in mapping.items() if key != "confidence"
+            },
+        },
+    }
 
 
 def ancestor_output_ids(workflow, node):
