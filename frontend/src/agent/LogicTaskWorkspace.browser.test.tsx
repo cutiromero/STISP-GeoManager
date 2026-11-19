@@ -387,6 +387,40 @@ it("拒绝过期审批响应，只允许读取匹配当前planHash的处置范�
   ).toBeNull();
 });
 
+it("手动审核可读取后续对象，仍使用同一冻结处置方案", async () => {
+  const request = task({
+    status: "waiting_approval",
+    plan: { phase: "review_modifications", reviewIndex: { total: 2 } },
+  });
+  const base = request.modificationReview!;
+  const entries = base.suggestions.map((entry, i) => ({
+    ...entry,
+    element: "lithology" as const,
+    ruleId: "L-08",
+    action: "reclassify",
+    status: "suggested" as const,
+    featureId: `AR-00${i + 1}`,
+  }));
+  const snapshot = (index: number) =>
+    task({
+      ...request,
+      view: "inspection",
+      modificationReview: { ...base, suggestions: [entries[index]!] },
+    });
+  vi.mocked(agentApi.workflow)
+    .mockResolvedValueOnce(snapshot(0))
+    .mockResolvedValueOnce(snapshot(1));
+  show(request, { onReview: vi.fn() });
+  fireEvent.click(await screen.findByRole("button", { name: "读取更多审批对象" }));
+  await waitFor(() => {
+    expect(agentApi.workflow).toHaveBeenLastCalledWith(
+      request.id,
+      expect.objectContaining({ part: "suggestions", offset: 1 }),
+    );
+    expect(screen.queryByRole("button", { name: "读取更多审批对象" })).toBeNull();
+  });
+});
+
 it("下载按需校验权限，拒绝时不请求文件", async () => {
   vi.mocked(agentApi.prepareWorkflowReport).mockResolvedValue(
     workflowReport({ canDownload: false }),

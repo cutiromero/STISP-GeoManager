@@ -256,13 +256,25 @@ export default function LogicTaskWorkspace(props: LogicTaskProps) {
                 )}
             </>
           ) : approvalReady ? (
-            <MultiElementStory
-              workflow={displayed}
-              focus="review"
-              busy={busy}
-              onReview={onReview}
-              reviewError={reviewError}
-            />
+            <>
+              <MultiElementStory
+                workflow={displayed}
+                focus="review"
+                busy={busy}
+                onReview={onReview}
+                reviewError={reviewError}
+              />
+              {displayed.modificationReview &&
+                displayed.modificationReview.suggestions.length <
+                  Number(record(displayed.plan.reviewIndex).total ?? 0) && (
+                  <Button
+                    loading={loading}
+                    onClick={() => void load("suggestions", true)}
+                  >
+                    读取更多审批对象
+                  </Button>
+                )}
+            </>
           ) : (
             <Button
               loading={loading}

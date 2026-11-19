@@ -1406,6 +1406,16 @@ def execute_tool(
             or len(question) > 2000
         ):
             raise ComputeError("问题须为1至2000字符")
+        if (
+            node.get("approvalRecorded") is True
+            and loop.get("successfulTaskId")
+            and not loop.get("failure")
+        ):
+            return {
+                "approvalRecorded": True,
+                "taskId": loop["successfulTaskId"],
+                "message": "本次冻结处置已获批且质量校验通过，无需重复人工确认。请基于实际统计完成本节点，剩余不确定性列入限制。",
+            }
         wait_recovery(
             workflow,
             node,

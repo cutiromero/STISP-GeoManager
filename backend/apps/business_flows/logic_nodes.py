@@ -109,6 +109,21 @@ def node_definition(workflow, stage):
         )
         node["contract"]["tools"] = [*TOOLS, "read_task_record"]
         node["contract"]["acceptance"][0] = "已查询登记版本并按真实输入和清单参数预检"
+    approval = stage.get("modificationsApproval") if stage["name"] == "apply" else None
+    if (
+        approval
+        and approval.get("proposalHash")
+        == workflow.plan.get("modificationReview", {}).get("proposalHash")
+        and approval.get("proposalHash")
+    ):
+        # The legacy apply gate already recorded this exact frozen approval.
+        # This execution-only copy must not tell the model a second approval is due.
+        node["review"]["human"] = False
+        node["approvalRecorded"] = True
+        node["instruction"] += (
+            "本次处置授权已记录，待裁定及例外已处理或保留。无需再次询问或批准同一处置。"
+            "真实清洗及质量校验成功后，读取统计并以finish_node交付，后续复查仍照常执行。"
+        )
     if workflow.plan.get("archivedClassification"):
         node["instruction"] += (
             "本次使用已登记的归档岩性分类。岩性端口沿用已确认的工作副本或清洗产物；"

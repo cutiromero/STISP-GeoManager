@@ -173,6 +173,14 @@ def test_uploaded_geology_business_flow_completes_all_seven_nodes(
             # The approved ports already belong to this frozen plan. The main
             # model may request validation by version without repeating IDs.
             value["arguments"] = {"versionId": value["arguments"]["versionId"]}
+        if node_id == "apply" and value.get("action") == "finish_node":
+            assert packet["humanApprovalRequired"] is False
+            history = packet["nodeContext"]["history"]
+            if not any(row["action"] == "ask_user" for row in history):
+                value = {
+                    "action": "ask_user",
+                    "arguments": {"question": "是否再批准已经完成计算的处置？"},
+                }
         yield json.dumps(value, ensure_ascii=False)
 
     monkeypatch.setattr(provider, "stream", streamed)
