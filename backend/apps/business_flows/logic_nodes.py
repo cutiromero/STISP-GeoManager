@@ -20,7 +20,7 @@ TOOLS = [
 
 
 def uses_fixed_nodes(workflow):
-    """Distinguish new confirmed recipes from already started tool-loop runs."""
+    """Recognize execution records started under the former direct dispatch mode."""
     return (
         workflow.workflow_type == "geology_generic"
         and getattr(workflow, "parameters", {})
@@ -31,11 +31,9 @@ def uses_fixed_nodes(workflow):
 
 
 def enabled(workflow):
-    return (
-        workflow.workflow_type == "geology_generic"
-        and workflow.parameters.get("_businessFlow", {}).get("nodeExecution")
-        == EXECUTION_MODE
-    )
+    return workflow.workflow_type == "geology_generic" and workflow.parameters.get(
+        "_businessFlow", {}
+    ).get("nodeExecution") in {EXECUTION_MODE, CONFIRMED_EXECUTION_MODE}
 
 
 def current_stage(workflow, node_id):

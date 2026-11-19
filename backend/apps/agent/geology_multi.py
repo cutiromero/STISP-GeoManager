@@ -339,7 +339,13 @@ def rule_parameters(workflow, rule_id, parameters):
     """Bind S-01 to the declared loose units without changing its criterion."""
     from apps.business_flows.logic_nodes import uses_fixed_nodes
 
-    if rule_id != "S-01" or not uses_fixed_nodes(workflow):
+    if rule_id != "S-01" or not (
+        uses_fixed_nodes(workflow)
+        or getattr(workflow, "parameters", {})
+        .get("_businessFlow", {})
+        .get("regionalRuleBinding")
+        is True
+    ):
         return parameters
     local_units = (workflow.plan.get("unitOverrides") or {}).get("units", {})
     groups = {code: unit.get("group") for code, unit in local_units.items()}

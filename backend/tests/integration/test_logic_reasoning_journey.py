@@ -242,10 +242,13 @@ def native_task(task):
     RuntimeLease.objects.filter(name="worker").update(heartbeat=timezone.now())
 
 
-@pytest.mark.parametrize("restore_origin", [False, True], ids=["fresh", "retry"])
-def test_published_fixed_nodes_dispatch_once_and_keep_human_boundary(
-    generic, tmp_path, monkeypatch, restore_origin
+@pytest.mark.parametrize("already_submitted", [False, True], ids=["new", "existing"])
+def test_published_geology_restores_model_tools_without_replaying_submitted_work(
+    generic, tmp_path, monkeypatch, already_submitted
 ):
+    from apps.agent.demo_workflow import _submit_stage
+    from apps.business_flows.logic_nodes import CONFIRMED_EXECUTION_MODE, EXECUTION_MODE
+
     generic["project"].code = "02"
     generic["project"].save(update_fields=["code"])
     monkeypatch.setattr("apps.compute.services.candidate", candidate)
@@ -254,10 +257,13 @@ def test_published_fixed_nodes_dispatch_once_and_keep_human_boundary(
     register_operators(generic)
     roles = system_references(generic, context)
     inputs = {key: roles[key] for key in ("lithology", "faults", "coverage")}
-    flow = geology_definition(main_agent=True)
     _, version = catalog.register_flow(
         generic["admin"],
-        {"code": "fixed-geology", "name": "地质复核", "definition": flow},
+        {
+            "code": "model-geology",
+            "name": "地质复核",
+            "definition": geology_definition(main_agent=True),
+        },
     )
     workflow = runtime.start_flow(
         generic["owner"],
@@ -270,12 +276,10 @@ def test_published_fixed_nodes_dispatch_once_and_keep_human_boundary(
             "idempotencyKey": uuid.uuid4().hex,
         },
     )
+    assert workflow.parameters["_businessFlow"]["nodeExecution"] == EXECUTION_MODE
     run_workflow(workflow.id)
     workflow.refresh_from_db()
-    assert workflow.plan.get("phase") == "review_mapping", (
-        workflow.status,
-        workflow.detail,
-    )
+    assert workflow.plan.get("phase") == "review_mapping", workflow.detail
     mapping = {
         item["role"]: {
             target["key"]: target["field"]
@@ -297,76 +301,35 @@ def test_published_fixed_nodes_dispatch_once_and_keep_human_boundary(
     run_workflow(workflow.id)
     workflow.refresh_from_db()
     assert workflow.plan["phase"] == "decide", workflow.detail
-
-    def unexpected(*args, **kwargs):
-        pytest.fail("已确认的算子不得重复请求模型动作")
-
-    monkeypatch.setattr("apps.business_flows.main_loop.professional_tick", unexpected)
-    monkeypatch.setattr("apps.agent.demo_workflow.decide", unexpected)
-    run_workflow(workflow.id)
-    workflow.refresh_from_db()
-    assert workflow.status == "waiting_compute", workflow.detail
-    check = workflow.plan["stages"][0]
-    assert check["executionMode"] == "automatic"
-    assert workflow.operator_steps == 1 and workflow.iteration == 0
-    run_workflow(workflow.id)
-    assert ComputeTask.objects.filter(owner=generic["owner"]).count() == 1
-    assert not workflow.plan["stages"][1].get("modificationsApproval")
-
-    def review(workflow, node, attempt, evidence, **kwargs):
-        assert node["id"] == "apply"
-        return {
-            "decision": "accept",
-            "reason": "核对当前检查的确切证据",
-            "issues": [],
-            "repairInstructions": "",
-            "evidenceIds": [row["id"] for row in evidence],
-        }
-
-    monkeypatch.setattr("apps.agent.business_flow_review.review_node", review)
-    native_task(ComputeTask.objects.get(pk=check["taskId"]))
-    resume_waiting()
-    for record in ComputeImport.objects.filter(status="queued"):
-        process_import(record)
-        record.refresh_from_db()
-        assert record.status == "ready", record.error
-    resume_waiting()
-    run_workflow(workflow.id)
-    workflow.refresh_from_db()
-    assert workflow.plan["phase"] == "review_modifications", workflow.detail
-    assert ComputeTask.objects.filter(owner=generic["owner"]).count() == 1
-    proposal = workflow.plan["modificationReview"]
-    selection = [
-        next(
-            row["id"] for row in proposal["suggestions"] if row["status"] == "suggested"
+    seen = []
+    monkeypatch.setattr(
+        "apps.business_flows.main_loop.professional_tick",
+        lambda wf, u, p, step: seen.append(step["name"]),
+    )
+    if already_submitted:
+        workflow.parameters["_businessFlow"]["nodeExecution"] = CONFIRMED_EXECUTION_MODE
+        workflow.save(update_fields=["parameters"])
+        _submit_stage(
+            workflow, generic["owner"], generic["policy"], workflow.plan["stages"][0]
         )
-    ]
-    response = post(
-        generic,
-        f"/api/agent/workflows/{workflow.id}/confirm/",
-        {"planHash": workflow.plan_hash, "selectedSuggestionIds": selection},
-    )
-    assert response.status_code == 200, response.content
+        run_workflow(workflow.id)
+        assert seen == []
+        assert ComputeTask.objects.filter(owner=generic["owner"]).count() == 1
+    else:
+        run_workflow(workflow.id)
+        assert seen == ["check"] and not ComputeTask.objects.exists()
     workflow.refresh_from_db()
-    if restore_origin:
-        # Reproduce the persisted faulty dispatch record from interrupted tasks.
-        workflow.plan["stages"][1]["executionMode"] = "automatic"
-        workflow.save(update_fields=["plan"])
-    run_workflow(workflow.id)
-    workflow.refresh_from_db()
-    assert workflow.status == "waiting_compute", workflow.detail
-    apply = workflow.plan["stages"][1]
-    assert (
-        apply["executionMode"] == "rule_verified"
-        and apply["dispatchMode"] == "automatic"
-    )
-    assert (
-        workflow.plan["modificationReview"]["proposalHash"] == proposal["proposalHash"]
-    )
-    assert apply["modificationsApproval"]["selectedSuggestionIds"] == selection
-    assert (
-        len(apply["approvedEdits"]) == 1
-        and ComputeTask.objects.filter(owner=generic["owner"]).count() == 2
+    # Downstream nodes that have not started use the original main agent in both modes.
+    for index, stage in enumerate(workflow.plan["stages"]):
+        if stage["name"] in {"recheck", "relations", "prospect"}:
+            workflow.plan["stageIndex"] = index
+            workflow.status = "queued"
+            workflow.save(update_fields=["plan", "status"])
+            run_workflow(workflow.id)
+            workflow.refresh_from_db()
+    assert seen[-3:] == ["recheck", "relations", "prospect"]
+    assert ComputeTask.objects.filter(owner=generic["owner"]).count() == int(
+        already_submitted
     )
 
 
