@@ -1189,6 +1189,19 @@ def execute_tool(
             loop["preflightDigest"] = submission_digest(body)
             loop["preflightSources"] = sources
             loop["preflightRequestHash"] = validated["digest"]
+            failure = loop.get("failure", {})
+            if (
+                failure.get("action") == "preflight_operator"
+                and not failure.get("taskId")
+                and not loop.get("taskIds")
+                and not item.get("computeTaskId")
+                and failure.get("remedy") not in NO_RETRY
+                and not str(failure.get("code", "")).startswith("PLATFORM_")
+            ):
+                # A newly validated plan resolves an earlier check rejection.
+                # It is not a retry of a compute task; the audit keeps the old error.
+                loop.pop("failure", None)
+                loop.pop("lastSubmission", None)
             loop["validatedLaunch"] = {
                 key: deepcopy(item)
                 for key, item in body.items()

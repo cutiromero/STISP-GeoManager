@@ -238,6 +238,54 @@ def test_failed_live_preflight_does_not_spend_recovery_or_leave_a_task(operators
     assert loop["failure"]["code"] == "BOUNDS" and not ComputeTask.objects.exists()
 
 
+def test_successful_preflight_supersedes_validation_failure_without_scientific_retry(
+    operators,
+):
+    env = operators
+    upgrade(env)
+    workflow = main_workflow(env)
+    item = state(workflow)["nodes"]["calculate"]
+    loop = loop_state(item)
+    attempted = submit_args(env, parameters={"threshold": 0.5})
+    loop["lastSubmission"] = attempted
+    loop["failure"] = {
+        "action": "preflight_operator",
+        "code": "MAPPING",
+        "remedy": "complete_mapping",
+    }
+    loop["history"] = [{"action": "preflight_operator", "summary": "旧字段预检失败"}]
+    launch = tool(env, workflow, "preflight_operator", attempted)
+    assert not loop.get("failure")
+    assert launch["runAction"]["arguments"] == {"usePreflight": True}
+    result = tool(env, workflow, "run_operator", launch["runAction"]["arguments"])
+    assert result is None and item["computeTaskId"]
+    assert ComputeTask.objects.count() == 1 and loop["recoveries"] == 0
+    assert loop["history"][0]["summary"] == "旧字段预检失败"
+
+
+def test_successful_preflight_does_not_turn_actual_failure_into_a_new_task(operators):
+    env = operators
+    upgrade(env)
+    workflow = main_workflow(env)
+    args = submit_args(env, parameters={"threshold": 0.5})
+    tool(env, workflow, "preflight_operator", args)
+    tool(env, workflow, "run_operator", {"usePreflight": True})
+    item = state(workflow)["nodes"]["calculate"]
+    loop = loop_state(item)
+    failure = {
+        "action": "run_operator",
+        "taskId": item["computeTaskId"],
+        "code": "BOUNDS",
+        "remedy": "adjust_parameters",
+    }
+    loop["failure"] = failure
+    tool(env, workflow, "preflight_operator", args)
+    assert loop["failure"] == failure
+    with pytest.raises(ComputeError, match="明确声明补救类别"):
+        tool(env, workflow, "run_operator", {"usePreflight": True})
+    assert ComputeTask.objects.count() == 1 and loop["recoveries"] == 0
+
+
 def test_recovery_can_replace_an_explicitly_bound_role(operators):
     from apps.business_flows.node_loop import wait_recovery
     from apps.catalog.models import DataResource
