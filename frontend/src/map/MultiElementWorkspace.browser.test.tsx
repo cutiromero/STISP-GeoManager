@@ -14,6 +14,7 @@ import type {
   GeoJsonFeatureCollection,
 } from "../api/generated/types.gen";
 import MultiElementWorkspace from "./MultiElementWorkspace";
+import MultiElementTourCard from "./MultiElementTourCard";
 import { projectReviewPosition } from "./localReviewGeometry";
 import { reviewBounds } from "./geologyReviewData";
 import workspaceStyles from "./geology-review-workspace.css?inline";
@@ -78,6 +79,64 @@ beforeEach(() => {
       headers: { "Content-Type": "application/json" },
     });
   });
+});
+
+it("在真实变更卡片区分地质符号、分区改类和图斑合并", () => {
+  const suggestion = {
+    ...reviewWorkflow(true).modificationReview!.suggestions[0]!,
+    action: "reclassify",
+    ruleId: "L-08",
+    element: "lithology" as const,
+    featureId: "AR-0049",
+    observations: {
+      scope: "anchored_cell_partition",
+      archive_conflict_fraction: 1,
+      archive_local_targets: [
+        { code: "U005", pixels: 16 },
+        { code: "U030", pixels: 254 },
+      ],
+    },
+  };
+  render(
+    <App>
+      <MultiElementTourCard
+        cleanResults
+        algorithm={{ name: "批操作执行", version: "1.7.1", taskId: "actual" }}
+        change={{
+          action: "reclassify",
+          key: suggestion.id,
+          suggestion,
+          resultRef: {
+            taskId: "actual",
+            outputId: 3399,
+            checksum: "0".repeat(64),
+            rowIndex: 49,
+          },
+          feature: {
+            ...beforeReviewMap.features[0]!,
+            properties: {
+              old_code: "U009",
+              new_code: "U005 / U030",
+              host_feature_id: "",
+              class_change_area_m2: 227070,
+              lithology_unit_labels: {
+                U009: { name: "八宝山组碎屑岩", display_symbol: "Tb" },
+                U005: { name: "全新世冲积物", display_symbol: "Qhᵃˡ" },
+                U030: { name: "贵德群砂砾岩", display_symbol: "NG₁" },
+              },
+            },
+          },
+        }}
+      />
+    </App>,
+  );
+  expect(
+    screen.getByText(
+      /全新世冲积物（Qhᵃˡ） 16 像元、贵德群砂砾岩（NG₁） 254 像元/,
+    ),
+  ).toBeVisible();
+  expect(screen.getByText(/与现图分类不一致的像元占 100%/)).toBeVisible();
+  expect(screen.queryByText(/最长的宿主|岩性由 U009/)).toBeNull();
 });
 
 function rasterWorkflow(mineral = "calcite") {

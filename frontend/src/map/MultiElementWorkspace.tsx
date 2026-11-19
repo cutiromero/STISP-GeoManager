@@ -36,6 +36,8 @@ import WorkflowValidationPanel from "./WorkflowValidationPanel";
 import {
   actualTourChanges,
   featureCollection,
+  isArchivePartition,
+  loadArchiveChangeGeometry,
   prospectChanges,
   tourAlgorithm,
   tourFeature,
@@ -59,6 +61,34 @@ function savedStory(id: string) {
   } catch {
     return {};
   }
+}
+
+function StructureRemovalGroups({ pagination }: { pagination: unknown }) {
+  const groups = record(pagination).groups;
+  if (!Array.isArray(groups)) return null;
+  const removals = groups
+    .map(record)
+    .filter(
+      (group) => group.element === "structure" && group.action === "exclude",
+    );
+  if (!removals.length) return null;
+  const titles: Record<string, string> = {
+    "S-01": "覆盖层内构造线",
+    "S-02": "沿岩性边界构造线",
+  };
+  return (
+    <p aria-label="构造实际剔除分组">
+      实际剔除{" "}
+      {removals.reduce((total, group) => total + Number(group.count), 0)} 条：
+      {removals
+        .map(
+          (group) =>
+            `${titles[String(group.ruleId)] ?? String(group.ruleId)} ${String(group.count)} 条`,
+        )
+        .join("；")}
+      。
+    </p>
+  );
 }
 type Feature = GeoJsonFeatureCollection["features"][number];
 type MultiMaps = {
@@ -399,10 +429,11 @@ export default function MultiElementWorkspace({
                 : faultsId),
           ),
         ),
-        Promise.resolve(
+        loadArchiveChangeGeometry(
           (workflow.plan.compareFeatures as
             | GeoJsonFeatureCollection
             | undefined) ?? empty,
+          (id) => counted(query(id)),
         ),
         counted(
           map.beforeIntersections
@@ -532,17 +563,17 @@ export default function MultiElementWorkspace({
       setFocus(
         reviewBounds(
           restoredOutcome && map.prospectProtocol === "after_only_v2"
-            ? after ?? before
+            ? (after ?? before)
             : restoredZones
-            ? featureCollection([
-                ...restoredZones.before.features,
-                ...restoredZones.after.features,
-              ])
-            : saved.viewMode === "overview" && !suggestionId
-              ? before
-              : feature
-                ? featureCollection([feature])
-                : before,
+              ? featureCollection([
+                  ...restoredZones.before.features,
+                  ...restoredZones.after.features,
+                ])
+              : saved.viewMode === "overview" && !suggestionId
+                ? before
+                : feature
+                  ? featureCollection([feature])
+                  : before,
         ),
       );
     };
@@ -887,6 +918,20 @@ export default function MultiElementWorkspace({
     }
     if (viewMode !== "tour" || !currentTour) return null;
     const currentLabels = tourLabels(currentTour, tourBefore, tourAfter);
+    if (isArchivePartition(currentTour)) {
+      const footprint =
+        currentTour.feature.properties.actual_geometry === true
+          ? featureCollection([currentTour.feature])
+          : empty;
+      return {
+        before: footprint,
+        after: footprint,
+        beforeLabel: currentLabels.before,
+        afterLabel: currentLabels.after,
+        dimBackground: false,
+        outlineOnly: true,
+      };
+    }
     return {
       before: featureCollection([tourBefore ?? currentTour.feature]),
       after: featureCollection(
@@ -1097,10 +1142,16 @@ export default function MultiElementWorkspace({
                       ? "组"
                       : "处"}
                     ，当前按要素分页
-                    {workflow.plan.multiElementMap?.alterationRasters?.length
+                    {(chapter === "alteration" || chapter === "all") &&
+                    workflow.plan.multiElementMap?.alterationRasters?.length
                       ? `；蚀变 ${Number(record(record(workflow.plan.pagination).counts).alteration ?? 0)} 组，${Number(record(workflow.plan.pagination).alterationPixels ?? 0).toLocaleString("zh-CN")} 像元 / ${(Number(record(workflow.plan.pagination).alterationAreaM2 ?? 0) / 10000).toFixed(2)} 公顷`
                       : ""}
                   </span>
+                  {chapter === "structure" && (
+                    <StructureRemovalGroups
+                      pagination={workflow.plan.pagination}
+                    />
+                  )}
                 </div>
               )}
               <div className="multi-tour-pager">

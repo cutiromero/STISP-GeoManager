@@ -12,6 +12,40 @@ from apps.agent.workflow_projection import page_options, project_workflow
 OBJECT_COUNT = 5200
 
 
+def test_compare_archive_change_exposes_only_affected_display_symbols():
+    workflow = large_workflow(1)
+    item = workflow.plan["modificationReview"]["suggestions"][0]
+    item.update(
+        ruleId="L-08",
+        action="reclassify",
+        observations={"scope": "anchored_cell_partition"},
+    )
+    stage = workflow.plan["stages"][0]
+    edit = stage["approvedEdits"][0]
+    edit.update(rule_id="L-08", action="reclassify", target_code="U005 / U030")
+    row = stage["results"][0]["rows"][0]
+    row.update(edit, old_code="U009", new_code="U005 / U030", host_feature_id="")
+    workflow.plan["unitOverrides"] = {
+        "units": {
+            "U009": {
+                "name": "八宝山组碎屑岩",
+                "display_symbol": "Tb",
+                "group": "clastic",
+            },
+            "U005": {"name": "全新世冲积物", "display_symbol": "Qhᵃˡ"},
+            "U030": {"name": "贵德群砂砾岩", "display_symbol": "NG₁"},
+            "U013": {"name": "另一个单元", "display_symbol": "Chxᵃ"},
+        }
+    }
+    plan = project_workflow(workflow, {}, "compare", "changes", 0, 25)["plan"]
+    props = plan["compareFeatures"]["features"][0]["properties"]
+    assert props["archive_partition"] is True and props["host_feature_id"] == ""
+    assert set(props["lithology_unit_labels"]) == {"U009", "U005", "U030"}
+    assert props["lithology_unit_labels"]["U005"]["display_symbol"] == "Qhᵃˡ"
+    assert "group" not in props["lithology_unit_labels"]["U009"]
+    assert "unitOverrides" not in plan and "archive_partition" not in row
+
+
 def test_element_pages_keep_global_counts_and_comparison_revision():
     workflow = large_workflow(150)
     for index, item in enumerate(workflow.plan["modificationReview"]["suggestions"]):

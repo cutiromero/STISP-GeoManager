@@ -6,6 +6,8 @@ import type {
 import { record, reviewBounds } from "./geologyReviewData";
 
 type Feature = GeoJsonFeatureCollection["features"][number];
+const sameId = (a: unknown, b: unknown) =>
+  a !== undefined && a !== null && String(a) === String(b);
 export type TourChange = {
   key: string;
   feature: Feature;
@@ -55,8 +57,6 @@ export function actualTourChanges(
     !/^[a-f0-9]{64}$/.test(String(result.checksum))
   )
     return [];
-  const sameId = (a: unknown, b: unknown) =>
-    a !== undefined && a !== null && String(a) === String(b);
   const changed = (value: unknown) =>
     value === true ||
     value === 1 ||
@@ -184,6 +184,98 @@ export function tourFeature(
   );
 }
 
+export function isArchivePartition(change: TourChange) {
+  return (
+    change.action === "reclassify" &&
+    change.suggestion.ruleId === "L-08" &&
+    (change.feature.properties.archive_partition === true ||
+      change.suggestion.observations?.scope === "anchored_cell_partition")
+  );
+}
+
+/** The approval preview can cover more than the actually changed cells. */
+export async function loadArchiveChangeGeometry(
+  collection: GeoJsonFeatureCollection,
+  load: (resourceId: number) => Promise<GeoJsonFeatureCollection>,
+) {
+  const requests = new Map<number, Promise<GeoJsonFeatureCollection>>();
+  const features = await Promise.all(
+    collection.features.map(async (feature) => {
+      const p = feature.properties;
+      if (p.archive_partition !== true) return feature;
+      const resourceId = Number(p.display_resource_id);
+      if (!Number.isSafeInteger(resourceId) || resourceId <= 0)
+        return {
+          ...feature,
+          properties: { ...p, actual_geometry_unavailable: true },
+        };
+      if (!requests.has(resourceId)) requests.set(resourceId, load(resourceId));
+      try {
+        const map = await requests.get(resourceId)!;
+        const approved = map.features.filter(
+          ({ properties: row }) =>
+            sameId(row.issue_id, p.issue_id) &&
+            sameId(row.feature_id, p.feature_id) &&
+            sameId(row.rule_id, p.rule_id),
+        );
+        if (approved.length === 1)
+          return {
+            ...feature,
+            geometry: approved[0]!.geometry,
+            properties: { ...p, actual_geometry: true },
+          };
+      } catch {
+        // The task remains readable if an old spatial output is no longer available.
+      }
+      return {
+        ...feature,
+        properties: { ...p, actual_geometry_unavailable: true },
+      };
+    }),
+  );
+  return featureCollection(features);
+}
+
+function archiveUnit(change: TourChange, code: string) {
+  const labels = record(change.feature.properties.lithology_unit_labels);
+  const unit = record(labels[code]);
+  const symbol =
+    typeof unit.display_symbol === "string" ? unit.display_symbol.trim() : "";
+  const name = typeof unit.name === "string" ? unit.name.trim() : "";
+  return {
+    code,
+    label:
+      name && symbol
+        ? `${name}（${symbol}）`
+        : name || symbol || `分类编号 ${code}`,
+    mapLabel: symbol || code,
+  };
+}
+
+export function archivePartitionDetails(change: TourChange) {
+  const p = change.feature.properties;
+  const observations = change.suggestion.observations ?? {};
+  const before = archiveUnit(
+    change,
+    String(p.old_code ?? observations.observed_code ?? ""),
+  );
+  const rows = Array.isArray(observations.archive_local_targets)
+    ? observations.archive_local_targets.map(record)
+    : [];
+  const targets = String(p.new_code ?? "")
+    .split("/")
+    .map((word) => word.trim())
+    .filter(Boolean)
+    .map((code) => {
+      const pixels = Number(rows.find((value) => value.code === code)?.pixels);
+      return {
+        ...archiveUnit(change, code),
+        pixels: Number.isSafeInteger(pixels) && pixels > 0 ? pixels : undefined,
+      };
+    });
+  return { before, targets };
+}
+
 export function tourLabels(
   change: TourChange,
   before?: Feature,
@@ -191,6 +283,15 @@ export function tourLabels(
   loading = false,
 ) {
   const p = change.feature.properties;
+  if (isArchivePartition(change)) {
+    const partition = archivePartitionDetails(change);
+    return {
+      title: "归档对照 · 局部岩性改类",
+      before: partition.before.mapLabel,
+      after: partition.targets.map((unit) => unit.mapLabel).join(" / "),
+      note: "归档分类是早期模型结果。对照用于发现分歧和核查局部接触关系，结论仍需结合原始影像和实地资料。",
+    };
+  }
   const weight = (feature: Feature | undefined, fallback?: unknown) => {
     const value = feature?.properties.weight ?? fallback;
     if (value !== undefined && value !== null && value !== "")
@@ -204,12 +305,14 @@ export function tourLabels(
       return {
         title: change.action === "merge" ? "同单元图斑整理" : "岩性类别修正",
         before: String(
-          before?.properties.geo_sym ??
+          before?.properties.display_symbol ??
+            before?.properties.geo_sym ??
             p.old_code ??
             change.suggestion.currentState,
         ),
         after: String(
-          after?.properties.geo_sym ??
+          after?.properties.display_symbol ??
+            after?.properties.geo_sym ??
             p.new_code ??
             change.suggestion.suggestedState,
         ),

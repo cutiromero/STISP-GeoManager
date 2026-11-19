@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import type {
   AgentModificationSuggestion,
   GeoJsonFeatureCollection,
@@ -7,12 +7,81 @@ import { beforeReviewMap, reviewWorkflow } from "./geologyReview.testFixtures";
 import {
   actualTourChanges,
   featureCollection,
+  archivePartitionDetails,
+  loadArchiveChangeGeometry,
   prospectChanges,
   prospectSignature,
   tourAlgorithm,
   tourFeature,
   tourLabels,
 } from "./multiElementTour";
+
+it("以正式变更输出代替归档候选轮廓，沿用相同图层读取", async () => {
+  const preview = (id: string) => ({
+    ...feature,
+    properties: {
+      archive_partition: true,
+      display_resource_id: 1976,
+      issue_id: `I-${id}`,
+      feature_id: id,
+      rule_id: "L-08",
+    },
+  });
+  const one = preview("AR-0050");
+  const two = preview("AR-0049");
+  const actual = { ...one, geometry: beforeReviewMap.features[1]!.geometry };
+  const load = vi.fn(async () =>
+    featureCollection([
+      actual,
+      { ...two, properties: { ...two.properties, issue_id: "another" } },
+    ]),
+  );
+  const result = await loadArchiveChangeGeometry(
+    featureCollection([one, two]),
+    load,
+  );
+  expect(load).toHaveBeenCalledExactlyOnceWith(1976);
+  expect(result.features[0]!.geometry).toEqual(actual.geometry);
+  expect(result.features[0]!.properties.actual_geometry).toBe(true);
+  expect(result.features[1]!.properties.actual_geometry_unavailable).toBe(true);
+});
+
+it("归档多单元改类按真实符号和像元数显示", () => {
+  const { workflow, differences } = fixture();
+  const change = actualTourChanges(workflow, differences)[0]!;
+  change.action = "reclassify";
+  change.suggestion.ruleId = "L-08";
+  change.suggestion.observations = {
+    scope: "anchored_cell_partition",
+    archive_local_targets: [
+      { code: "U005", pixels: 16 },
+      { code: "U030", pixels: 254 },
+    ],
+  };
+  change.feature.properties = {
+    old_code: "U009",
+    new_code: "U005 / U030",
+    host_feature_id: "",
+    lithology_unit_labels: {
+      U009: { name: "八宝山组碎屑岩", display_symbol: "Tb" },
+      U005: { name: "全新世冲积物", display_symbol: "Qhᵃˡ" },
+      U030: { name: "贵德群砂砾岩", display_symbol: "NG₁" },
+    },
+  };
+  expect(tourLabels(change)).toMatchObject({
+    before: "Tb",
+    after: "Qhᵃˡ / NG₁",
+  });
+  expect(
+    archivePartitionDetails(change).targets.map(({ label, pixels }) => [
+      label,
+      pixels,
+    ]),
+  ).toEqual([
+    ["全新世冲积物（Qhᵃˡ）", 16],
+    ["贵德群砂砾岩（NG₁）", 254],
+  ]);
+});
 
 const feature = beforeReviewMap.features[0]!;
 function fixture() {

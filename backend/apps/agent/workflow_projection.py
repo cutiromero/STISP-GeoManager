@@ -285,6 +285,25 @@ def _same_weight(left, right):
         return False
 
 
+def _lithology_review_properties(suggestion, row, units):
+    if suggestion.get("element") != "lithology":
+        return {}
+    observations = suggestion.get("observations") or {}
+    partition = (
+        row.get("action") == "reclassify"
+        and row.get("rule_id") == "L-08"
+        and observations.get("scope") == "anchored_cell_partition"
+    )
+    codes = [str(row.get("old_code", ""))] + str(row.get("new_code", "")).split("/")
+    labels = {}
+    for code in map(str.strip, codes):
+        unit = units.get(code) or {}
+        info = {key: unit[key] for key in ("name", "display_symbol") if unit.get(key)}
+        if code and info:
+            labels[code] = info
+    return {"archive_partition": partition, "lithology_unit_labels": labels}
+
+
 def project_workflow(
     workflow, data, view, part, offset, limit, suggestion_id="", element="all"
 ):
@@ -493,6 +512,7 @@ def project_workflow(
             "structure": "changes_fault_issues",
             "alteration": "changes_alteration_issues",
         }
+        units = (source.get("unitOverrides") or {}).get("units", {})
         if review:
             data["modificationReview"] = {
                 **{
@@ -519,6 +539,7 @@ def project_workflow(
                     "geometry": item["preview"],
                     "properties": {
                         **row,
+                        **_lithology_review_properties(item, row, units),
                         "display_resource_id": change_outputs.get(
                             resource_keys.get(item.get("element"))
                         ),

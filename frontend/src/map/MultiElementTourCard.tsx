@@ -1,7 +1,12 @@
 import { Tag } from "antd";
 import { MultiElementEvidence } from "../agent/MultiElementStory";
 import type { GeoJsonFeatureCollection } from "../api/generated/types.gen";
-import { tourLabels, type TourChange } from "./multiElementTour";
+import {
+  archivePartitionDetails,
+  isArchivePartition,
+  tourLabels,
+  type TourChange,
+} from "./multiElementTour";
 import { formatArea } from "../utils/area";
 
 type Feature = GeoJsonFeatureCollection["features"][number];
@@ -23,6 +28,18 @@ export default function MultiElementTourCard({
   const labels = tourLabels(change, before, after, loading);
   const refs = change.suggestion.ruleRefs ?? [];
   const p = change.feature.properties;
+  const partition = isArchivePartition(change)
+    ? archivePartitionDetails(change)
+    : null;
+  const observedConflict = Number(
+    change.suggestion.observations?.archive_conflict_fraction,
+  );
+  const reportConflict =
+    Number.isFinite(observedConflict) &&
+    observedConflict >= 0 &&
+    observedConflict <= 1;
+  const host =
+    typeof p.host_feature_id === "string" ? p.host_feature_id.trim() : "";
   const recorded = (key: string) =>
     p[key] !== undefined && Number.isFinite(Number(p[key]));
   const metric = (key: string) =>
@@ -31,8 +48,9 @@ export default function MultiElementTourCard({
     recorded(key)
       ? `${Number(p[key]).toLocaleString("zh-CN", { maximumFractionDigits: 1 })} 米`
       : "本次结果未记录";
-  const operation =
-    change.action === "set_code"
+  const operation = partition
+    ? `在获批范围内实际改类 ${metric("class_change_area_m2")}。原为${partition.before.label}；改为${partition.targets.map((unit) => `${unit.label}${unit.pixels ? ` ${unit.pixels.toLocaleString("zh-CN")} 像元` : ""}`).join("、") || "变更表所列分类"}。此处没有并入宿主图斑。`
+    : change.action === "set_code"
       ? `地质代号由 ${labels.before} 更新为 ${labels.after}。${cleanResults && p.host_feature_id ? `已并入相邻同单元宿主 ${p.host_feature_id}，原编号记入修正记录。` : ""}`
       : change.action === "exclude"
         ? cleanResults
@@ -43,7 +61,7 @@ export default function MultiElementTourCard({
           : change.action === "merge"
             ? `按获批范围合并为 ${labels.after}，去除内部接边 ${length("removed_internal_boundary_m")}。`
             : change.action === "reclassify"
-              ? `岩性由 ${labels.before} 调整为 ${labels.after}，${cleanResults ? `并入共享边界最长的宿主 ${p.host_feature_id ?? ""}，保留宿主属性和编号。` : "更新类别及对应属性。"}`
+              ? `岩性由 ${labels.before} 调整为 ${labels.after}。${cleanResults && host ? `实际接收图斑编号 ${host}，并入情况以变更记录为准。` : "更新类别及对应属性。"}`
               : `${labels.before} → ${labels.after}。`;
   return (
     <section className="multi-tour-card" aria-label="当前修改故事">
@@ -56,7 +74,9 @@ export default function MultiElementTourCard({
           <span>01</span>
           <p>
             <strong>发现了什么</strong>
-            {change.suggestion.title}
+            {partition
+              ? `现图标为${partition.before.label}。${reportConflict ? `核查范围内，早期模型与现图分类不一致的像元占 ${(observedConflict * 100).toLocaleString("zh-CN", { maximumFractionDigits: 1 })}%。` : "早期模型与现图分类存在分歧。"}这说明两版分类有分歧，需要核对接触关系。`
+              : change.suggestion.title}
           </p>
         </div>
         <div>
@@ -80,6 +100,9 @@ export default function MultiElementTourCard({
         </div>
       </div>
       <p className="multi-tour-interpretation">{labels.note}</p>
+      {partition && p.actual_geometry_unavailable === true && (
+        <p role="status">实际变更轮廓暂不可用；地图未标为实际改类范围。</p>
+      )}
       <details className="multi-tour-evidence">
         <summary>展开知识来源、实际测量与任务依据</summary>
         <p>
