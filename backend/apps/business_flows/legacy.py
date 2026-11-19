@@ -540,6 +540,67 @@ def review_decision(
     raise ComputeError("独立审核未形成可接受结论")
 
 
+def _resume_interrupted_analysis(workflow, stage, recovery):
+    """Retire failed response chains only after an explicit recovery decision."""
+    from .model_recovery import archive_model_attempts
+
+    if not stage or stage.get("decision") or stage.get("taskId"):
+        return False
+    kind = recovery.get("kind")
+    if recovery.get("actor") != "executor" or not (
+        kind == "model_request_error"
+        or kind == "execution_error"
+        and str(recovery.get("reason", "")).startswith("本步已有模型请求记录")
+    ):
+        return False
+    model_batches = stage.get("modelBatches") or {}
+    rows = model_batches.get("batches", [])
+
+    def interrupted(candidate):
+        attempts = candidate.get("modelAttempts") or []
+        last = attempts[-1] if attempts else {}
+        return last.get("accepted") is not True and (
+            last.get("status") == "failed"
+            or last.get("status") == "requesting"
+            and not last.get("response")
+        )
+
+    # The earlier rule-review callback counted requests but omitted their
+    # dispatched flag. Do not infer trust in those responses: archive that
+    # generation and re-review the measured rule proposal through the real gate.
+    if (
+        workflow.plan.get("executionPolicy") == "rule_geology_v2"
+        and stage.get("name") == "apply"
+        and any(
+            row.get("status") == "complete"
+            and any(
+                a.get("requested") is not True
+                for a in row["stage"].get("modelAttempts", [])
+            )
+            for row in rows
+        )
+        and any(
+            row.get("status") != "complete" and interrupted(row["stage"])
+            for row in rows
+        )
+    ):
+        stage.setdefault("modelBudgetHistory", []).append(
+            {"modelBatches": stage.pop("modelBatches")}
+        )
+        stage.pop("executionMode", None)
+        return True
+    candidates = [
+        stage,
+        *(row["stage"] for row in rows if row.get("status") != "complete"),
+    ]
+    found = False
+    for candidate in candidates:
+        if interrupted(candidate):
+            archive_model_attempts(candidate)
+            found = True
+    return found
+
+
 def retry_context(user, workflow, value):
     from django.core.exceptions import ValidationError
     from .runtime import authorize, canonical_current_node
@@ -606,12 +667,22 @@ def retry_context(user, workflow, value):
         from .failure_handoff import restore_checkpoint
 
         restored = restore_checkpoint(current, recovery)
+        retry_incomplete = restored and _resume_interrupted_analysis(
+            current, stage, recovery
+        )
+        target = values["nodes"][node_id]
+        if retry_incomplete:
+            # An earlier empty retry was only a diagnostic, not a user fact.
+            if not target.get("recoveryGuidance", {}).get("evidenceId"):
+                target.pop("recoveryGuidance", None)
         if recovery.get("kind") in MODEL_WAIT_KINDS:
             reuse_platform_response = (
                 recovery.get("kind") == "platform_error"
                 and not value.get("feedback", "").strip()
             )
-            if not reuse_platform_response:
+            if not reuse_platform_response and not (
+                retry_incomplete and not value.get("feedback", "").strip()
+            ):
                 save_guidance(current, node_id, value, recovery)
             if (
                 (
@@ -818,6 +889,7 @@ def review_rule_proposal(workflow, user, policy, stage, initial):
                     }
                 )
             workflow.plan["actualModelCallCount"] = calls + 1
+            attempt["requested"] = True
         save_workflow_state(workflow)
 
     def produce():

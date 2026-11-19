@@ -150,7 +150,8 @@ def build_rule_proposal(workflow):
     grouped = defaultdict(list)
     for row in rows:
         grouped[(row["element"], row["feature_id"])].append(row)
-    held, edits, bindings = Counter(), [], {}
+    held, no_change_rules, duplicate_rules = Counter(), Counter(), Counter()
+    edits, bindings = [], {}
     for members in grouped.values():
         if any(row.get("status") != "suggested" for row in members):
             held["review_or_exception"] += len(members)
@@ -171,6 +172,10 @@ def build_rule_proposal(workflow):
             held["unbound_knowledge"] += len(members)
             continue
         action = row.get("suggested_action")
+        if action == "keep":
+            held["rule_keep"] += len(members)
+            no_change_rules.update(member["rule_id"] for member in members)
+            continue
         if action not in ACTIONS:
             held["unsupported_action"] += len(members)
             continue
@@ -191,19 +196,34 @@ def build_rule_proposal(workflow):
                 "reason": row["reason"],
             }
         )
+        if len(members) > 1:
+            duplicate_rules.update(member["rule_id"] for member in members[1:])
+            held["same_target_duplicate"] += len(members) - 1
         bindings[entry["id"]] = entry
     summary = {
         "issueCount": len(rows),
         "eligibleCount": len(edits),
         "retainedIssueCount": len(rows) - len(edits),
         "retainedReasons": dict(held),
+        "keepByRule": dict(sorted(no_change_rules.items())),
+        "duplicateByRule": dict(sorted(duplicate_rules.items())),
         "actions": dict(Counter(edit["action"] for edit in edits)),
         "sourceTaskId": check["taskId"],
         "policy": POLICY,
     }
-    text = (
-        f"已核验{len(rows)}条实际问题，形成{len(edits)}项规则处置；其余问题保留供复核"
-    )
+    kept, duplicates = sum(no_change_rules.values()), sum(duplicate_rules.values())
+    text = f"已核验{len(rows)}条实际问题，形成{len(edits)}项规则处置"
+    if duplicates:
+        counts = "、".join(
+            f"{rule} {count}条" for rule, count in sorted(duplicate_rules.items())
+        )
+        text += f"；{duplicates}条为同一对象的相同处置建议（{counts}），并入已有处置，不重复执行"
+    if kept:
+        counts = "、".join(
+            f"{rule} {count}条" for rule, count in sorted(no_change_rules.items())
+        )
+        text += f"；{kept}条建议保留原样（{counts}），不纳入处置提案"
+    text += f"；其余{len(rows) - len(edits) - kept - duplicates}条保留供复核"
     refs = [
         {
             "kind": "knowledge",

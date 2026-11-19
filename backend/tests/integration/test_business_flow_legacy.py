@@ -1162,3 +1162,82 @@ def test_approval_statistics_preserves_all_dimensions_areas_pixels_and_approval_
     assert value["groups"][0]["areaM2"] == 20 and value["groups"][0]["pixelCount"] == 8
     assert sum(row["pixelCount"] for row in value["groups"]) == 12
     assert "suggestions" not in value
+
+
+@pytest.mark.parametrize("legacy_unmarked", [False, True])
+def test_explicit_retry_archives_incomplete_model_attempt_after_checkpoint(
+    legacy_flow, legacy_unmarked
+):
+    from apps.business_flows import runtime
+
+    env = legacy_flow
+    workflow = env["create"]()
+    with project_scope(env["scope"]):
+        stage = workflow.plan["stages"][0]
+        stage.pop("decision")
+        if legacy_unmarked:
+            stage["executionMode"] = "model_reviewed"
+        workflow.plan.update(
+            phase="decide", executionPolicy="rule_geology_v2", actualModelCallCount=9
+        )
+        accepted = {
+            "status": "accepted",
+            "accepted": True,
+            "requested": not legacy_unmarked,
+            "response": "verified response",
+        }
+        failed = {
+            "status": "failed",
+            "accepted": False,
+            "requested": not legacy_unmarked,
+            "response": "partial",
+        }
+        stage["modelBatches"] = {
+            "cursor": 1,
+            "batches": [
+                {"status": "complete", "stage": {"modelAttempts": [accepted]}},
+                {"status": "pending", "stage": {"modelAttempts": [failed]}},
+            ],
+        }
+        item = state(workflow)["nodes"]["apply"]
+        item["contextRecovery"] = {
+            "actor": "executor",
+            "kind": "execution_error" if legacy_unmarked else "model_request_error",
+            "reason": "本步已有模型请求记录，已保留审计"
+            if legacy_unmarked
+            else "达到本步时限",
+            "resumeCheckpoint": {"step": "apply", "phase": "decide"},
+            "evidence": [],
+            "level": 0,
+        }
+        item["status"] = "waiting_context"
+        workflow.status = "waiting_approval"
+        workflow.save(update_fields=["plan", "parameters", "status"])
+        resumed = runtime.decide_flow(
+            env["user"],
+            workflow,
+            {
+                "nodeId": "apply",
+                "decision": "retry_context",
+                "revision": state(workflow)["revision"],
+                "idempotencyKey": uuid4().hex,
+            },
+        )
+    current = resumed.plan["stages"][0]
+    assert resumed.status == "queued" and resumed.plan["actualModelCallCount"] == 9
+    assert resumed.plan["phase"] == "decide"
+    if legacy_unmarked:
+        assert "modelBatches" not in current and "executionMode" not in current
+        assert current["modelBudgetHistory"][0]["modelBatches"]["batches"][1]["stage"][
+            "modelAttempts"
+        ] == [failed]
+    else:
+        batches = current["modelBatches"]
+        assert batches["cursor"] == 1 and batches["batches"][0]["stage"][
+            "modelAttempts"
+        ] == [accepted]
+        assert "modelAttempts" not in batches["batches"][1]["stage"]
+        assert batches["batches"][1]["stage"]["modelBudgetHistory"] == [
+            {"modelAttempts": [failed]}
+        ]
+    assert_no_human_approval(resumed)

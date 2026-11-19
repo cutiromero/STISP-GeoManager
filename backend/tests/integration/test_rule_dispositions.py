@@ -42,6 +42,19 @@ def test_complete_241_rule_members_do_not_need_a_model_and_keep_exceptions():
     assert decision["modelMode"] == "rules"
 
 
+def test_two_rules_same_object_same_action_explain_one_executed_disposition():
+    workflow, _, results = measured(3)
+    first, duplicate, proposed_keep = results[0]["rows"]
+    duplicate.update(feature_id=first["feature_id"])
+    proposed_keep["suggested_action"] = "keep"
+    decision, edits, summary = build_rule_proposal(workflow)
+    assert [row["issue_id"] for row in edits] == [first["issue_id"]]
+    assert summary["retainedReasons"] == {"rule_keep": 1, "same_target_duplicate": 1}
+    assert summary["duplicateByRule"] == {duplicate["rule_id"]: 1}
+    assert "并入已有处置，不重复执行" in decision["resultSummary"]
+    assert "建议保留原样" in decision["resultSummary"]
+
+
 @pytest.mark.parametrize(
     "change", ["revision", "missing_knowledge", "exception", "conflicting_target"]
 )
