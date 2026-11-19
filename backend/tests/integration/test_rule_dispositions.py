@@ -382,3 +382,89 @@ def test_report_facts_distinguish_dispositions_from_remaining_issues():
         facts["executedActions"]["reclassify"] == 38
         and facts["executedActions"]["set_code"] == 5
     )
+
+
+def test_report_facts_resolve_minerals_for_each_corrected_zone_and_keep_rule_scope():
+    from apps.agent.rule_dispositions import report_payload
+
+    workflow, stage, _ = measured(241)
+    stage["taskId"] = "apply-task"
+    workflow.plan["stages"].append({"name": "prospect", "taskId": "prospect-task"})
+    first = ["方解石化", "绢云母", "白云石化"]
+    second = ["方解石化", "绢云母"]
+    report = report_payload(
+        {
+            "actualResults": [
+                {
+                    "kind": "table",
+                    "key": "evidence",
+                    "taskId": "prospect-task",
+                    "outputId": 12,
+                    "rows": [
+                        dict(
+                            zoneId="R01",
+                            phase="after",
+                            schemaVersion=2,
+                            areaKm2=12,
+                            mineralsRef="minerals6",
+                        ),
+                        dict(
+                            zoneId="R02",
+                            phase="after",
+                            schemaVersion=2,
+                            areaKm2=8,
+                            mineralsRef="minerals8",
+                        ),
+                    ],
+                    "aggregate": {
+                        "definitions": {"minerals6": first, "minerals8": second}
+                    },
+                },
+                {
+                    "kind": "table",
+                    "key": "changes",
+                    "taskId": "apply-task",
+                    "outputId": 13,
+                    "rows": [
+                        dict(
+                            element="lithology",
+                            rule_id="L-08",
+                            action="reclassify",
+                            count=107,
+                            actualChanged=107,
+                        ),
+                        dict(
+                            element="structure",
+                            rule_id="S-04",
+                            action="exclude",
+                            count=8,
+                            actualChanged=7,
+                        ),
+                    ],
+                },
+            ],
+            "availableEvidence": [],
+        },
+        workflow,
+    )
+    facts = report["verifiedReportFacts"]
+    assert facts["correctedProspectExamples"] == [
+        {"zoneId": "R01", "areaKm2": 12, "minerals": first, "outputId": 12},
+        {"zoneId": "R02", "areaKm2": 8, "minerals": second, "outputId": 12},
+    ]
+    assert facts["executedDispositionsByElementAndRule"] == [
+        dict(
+            element="lithology",
+            ruleId="L-08",
+            action="reclassify",
+            recordedCount=107,
+            actualChangedCount=107,
+        ),
+        dict(
+            element="structure",
+            ruleId="S-04",
+            action="exclude",
+            recordedCount=8,
+            actualChangedCount=7,
+        ),
+    ]

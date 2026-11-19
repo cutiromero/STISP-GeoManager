@@ -9,6 +9,33 @@ POLICY = "rule_geology_v2"
 ACTIONS = {"set_code", "merge", "reclassify", "exclude", "downweight"}
 
 
+def _report_prospect_examples(results, task_id):
+    if not task_id:
+        return []
+    examples = []
+    for item in results:
+        if item["key"] != "evidence" or item.get("taskId") != task_id:
+            continue
+        definitions = item.get("aggregate", {}).get("definitions", {})
+        for row in item.get("rows", []):
+            if row.get("schemaVersion") != 2 or row.get("phase") != "after":
+                continue
+            minerals = row.get("minerals", definitions.get(row.get("mineralsRef")))
+            if not isinstance(minerals, list) or not all(
+                isinstance(name, str) for name in minerals
+            ):
+                continue
+            examples.append(
+                {
+                    "zoneId": row["zoneId"],
+                    "areaKm2": row["areaKm2"],
+                    "minerals": minerals,
+                    "outputId": item["outputId"],
+                }
+            )
+    return examples
+
+
 def report_payload(payload, workflow):
     """A report reads real totals and evidence; it does not review edits again."""
     from .geology_multi_results import public_knowledge
@@ -104,6 +131,22 @@ def report_payload(payload, workflow):
                 }
             )
         ),
+        "correctedProspectExamples": _report_prospect_examples(
+            projected, stage_tasks.get("prospect")
+        ),
+        "prospectExamplesScope": "面积较大的修正后代表区；矿物名称逐区直接列出，不代表未列出的区。",
+        "executedDispositionsByElementAndRule": [
+            {
+                "element": row["element"],
+                "ruleId": row["rule_id"],
+                "action": row["action"],
+                "recordedCount": row["count"],
+                "actualChangedCount": row["actualChanged"],
+            }
+            for item in changes
+            for row in item.get("rows", [])
+            if row.get("element") and row.get("rule_id") and "actualChanged" in row
+        ],
         "note": "问题记录、执行处置、复查剩余和保留项是不同口径；降权不表示该问题记录消失。",
     }
     review = payload.get("modificationReview")
