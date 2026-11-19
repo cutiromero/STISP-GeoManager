@@ -8,8 +8,19 @@ POINT_LIMIT = 2000
 GRID_SIZE = 16
 
 
+def automatic_suggestion_ids(plan):
+    scope = plan.get("retainedReview", {})
+    if "automaticSuggestionIds" in scope:
+        return scope["automaticSuggestionIds"]
+    apply = next((s for s in plan.get("stages", []) if s.get("name") == "apply"), {})
+    approval = apply.get("modificationsApproval", {})
+    if approval.get("mode") == "rule_authorized":
+        return approval.get("selectedSuggestionIds", [])
+    return []
+
+
 def automatic_positions(plan):
-    ids = set(plan.get("retainedReview", {}).get("automaticSuggestionIds", []))
+    ids = set(automatic_suggestion_ids(plan))
     suggestions = plan.get("modificationReview", {}).get("suggestions", [])
     points = []
     for item in suggestions:

@@ -282,3 +282,52 @@ def test_large_automatic_map_is_bounded_without_losing_count():
     assert result["locatedCount"] == OBJECT_COUNT
     assert len(result["points"]) <= 256
     assert sum(point["count"] for point in result["points"]) == OBJECT_COUNT
+
+
+@pytest.mark.parametrize("apply_in_progress", [True, False])
+def test_auto_only_run_can_inspect_authorized_extent_and_nonactionable_findings(
+    apply_in_progress,
+):
+    workflow = large_workflow(1)
+    plan = workflow.plan
+    auto = plan["modificationReview"]["suggestions"][0]
+    apply = plan["stages"][0]
+    apply["modificationsApproval"] = {
+        "mode": "rule_authorized",
+        "selectedSuggestionIds": [auto["id"]],
+    }
+    if apply_in_progress:
+        plan["phase"] = "wait_compute"
+        apply.pop("results")
+
+    # These checks never created any executable approval suggestions.
+    def issue(issue_id, feature, status):
+        return {
+            "issue_id": issue_id,
+            "feature_id": feature,
+            "rule_id": "L-01",
+            "status": status,
+            "reason": "缺少接触带证据",
+            "element": "lithology",
+            "geometry_json": json.dumps(auto["preview"]),
+        }
+
+    rows = [issue("held", "held-patch", "review"), issue("edited", "0", "exception")]
+    plan["stages"].insert(
+        0,
+        {
+            "name": "check",
+            "results": [{"key": "issues", "scope": "all", "rowCount": 2, "rows": rows}],
+        },
+    )
+    page = project_workflow(workflow, {}, "inspection", "retained", 0, 25)
+    projected = page["modificationReview"]["suggestions"]
+    assert projected[0]["featureId"] == "held-patch"
+    assert projected[0]["action"] == "keep" and projected[0]["preview"]["coordinates"]
+    assert [item["featureId"] for item in projected] == (
+        ["held-patch", "0"] if apply_in_progress else ["held-patch"]
+    )
+    assert all("candidateAction" not in item for item in projected)
+    assert page["plan"]["reviewIndex"]["candidateIds"] == []
+    assert page["plan"]["reviewIndex"]["automaticMap"]["locatedCount"] == 1
+    assert plan["modificationReview"]["suggestions"] == [auto]

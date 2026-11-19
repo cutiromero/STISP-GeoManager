@@ -86,8 +86,16 @@ export default function RetainedIssueReview({
       )}
       <Alert
         type="info"
-        title={`共 ${total} 条保留对象，已读取 ${items.length} 条`}
-        description="地图展示已读取对象的实际位置，蚀变组以定位范围表示。可缩放、平移并点击查看依据。候选动作仅在您明确选择后执行；没有有效候选的对象只能保留核查。"
+        title={
+          total > 0
+            ? `共 ${total} 条保留对象，已读取 ${items.length} 条`
+            : "本次没有待裁定与例外对象"
+        }
+        description={
+          readonly
+            ? "地图展示已授权的处置位置和待核查范围。标记表示授权或核查范围，实际修改请查看清洗成果。"
+            : "地图展示已读取对象的实际位置，蚀变组以定位范围表示。可缩放、平移并点击查看依据。候选动作仅在您明确选择后执行；没有有效候选的对象只能保留核查。"
+        }
       />
       {workflow.plan.reviewIndex?.automaticMap &&
         workflow.plan.reviewIndex.automaticMap.total > 0 && (
@@ -125,74 +133,76 @@ export default function RetainedIssueReview({
           选择全部有效候选（{candidateIds.length} 项）
         </Checkbox>
       )}
-      <Table
-        size="small"
-        rowKey="id"
-        dataSource={items}
-        pagination={{
-          pageSize: 10,
-          showSizeChanger: false,
-          showTotal: (n) => `已读取 ${n} 条`,
-        }}
-        scroll={{ x: 600 }}
-        rowSelection={
-          readonly
-            ? undefined
-            : {
-                selectedRowKeys: selected,
-                preserveSelectedRowKeys: true,
-                onChange: (keys) => setSelected(keys.map(String)),
-                getCheckboxProps: (item) => ({
-                  disabled: busy || !item.candidateAction,
-                  "aria-label": `处置${item.featureId}`,
-                }),
-              }
-        }
-        columns={[
-          {
-            title: "对象",
-            dataIndex: "featureId",
-            width: 150,
-            render: (value, item) => (
-              <Button
-                type="link"
-                size="small"
-                onClick={() => setFocused(item.id)}
-              >
-                {value}
-              </Button>
-            ),
-          },
-          {
-            title: "要素",
-            dataIndex: "element",
-            width: 70,
-            render: (value) => elements[String(value)] ?? value,
-          },
-          {
-            title: "规则与原因",
-            key: "reason",
-            render: (_, item) => (
-              <>
-                <Tag color={item.status === "exception" ? "orange" : "gold"}>
-                  {item.ruleId} ·{" "}
-                  {item.status === "exception" ? "规则例外" : "待裁定"}
-                </Tag>
-                <p>{item.reason}</p>
-              </>
-            ),
-          },
-          {
-            title: "候选处置",
-            key: "action",
-            width: 110,
-            render: (_, item) =>
-              item.candidateAction
-                ? (labels[item.candidateAction] ?? item.candidateAction)
-                : "保留核查",
-          },
-        ]}
-      />
+      {items.length > 0 && (
+        <Table
+          size="small"
+          rowKey="id"
+          dataSource={items}
+          pagination={{
+            pageSize: 10,
+            showSizeChanger: false,
+            showTotal: (n) => `已读取 ${n} 条`,
+          }}
+          scroll={{ x: 600 }}
+          rowSelection={
+            readonly
+              ? undefined
+              : {
+                  selectedRowKeys: selected,
+                  preserveSelectedRowKeys: true,
+                  onChange: (keys) => setSelected(keys.map(String)),
+                  getCheckboxProps: (item) => ({
+                    disabled: busy || !item.candidateAction,
+                    "aria-label": `处置${item.featureId}`,
+                  }),
+                }
+          }
+          columns={[
+            {
+              title: "对象",
+              dataIndex: "featureId",
+              width: 150,
+              render: (value, item) => (
+                <Button
+                  type="link"
+                  size="small"
+                  onClick={() => setFocused(item.id)}
+                >
+                  {value}
+                </Button>
+              ),
+            },
+            {
+              title: "要素",
+              dataIndex: "element",
+              width: 70,
+              render: (value) => elements[String(value)] ?? value,
+            },
+            {
+              title: "规则与原因",
+              key: "reason",
+              render: (_, item) => (
+                <>
+                  <Tag color={item.status === "exception" ? "orange" : "gold"}>
+                    {item.ruleId} ·{" "}
+                    {item.status === "exception" ? "规则例外" : "待裁定"}
+                  </Tag>
+                  <p>{item.reason}</p>
+                </>
+              ),
+            },
+            {
+              title: "候选处置",
+              key: "action",
+              width: 110,
+              render: (_, item) =>
+                item.candidateAction
+                  ? (labels[item.candidateAction] ?? item.candidateAction)
+                  : "保留核查",
+            },
+          ]}
+        />
+      )}
       {active && (
         <article className="logic-retained-evidence" aria-label="当前对象依据">
           <h4>

@@ -1,28 +1,38 @@
 """Explicit human review of held evidence, retaining previous calculation rounds."""
 
 from copy import deepcopy
+import json
+import math
+
 from django.core.exceptions import PermissionDenied
+
 from apps.compute.packages import ComputeError
+from apps.knowledge.trial_rules import digest
+from .workflow_task_summary import full_rows, output
 
 
-def held_suggestions(plan):
-    review = plan.get("modificationReview") or {}
-    stages = plan.get("stages", [])
-    apply = next((stage for stage in stages if stage.get("name") == "apply"), {})
+def _edited_pairs(plan, *, require_complete):
+    apply = next((s for s in plan.get("stages", []) if s.get("name") == "apply"), {})
+    if not apply.get("taskId"):
+        return set()
     results = [r for r in apply.get("results", []) if r.get("key") == "changes"]
-    edited = set()
-    if apply.get("taskId"):
-        if (
-            len(results) != 1
-            or results[0].get("scope") != "all"
-            or results[0].get("rowCount") != len(results[0].get("rows", []))
-        ):
+    if (
+        len(results) != 1
+        or results[0].get("scope") != "all"
+        or results[0].get("rowCount") != len(results[0].get("rows", []))
+    ):
+        if require_complete:
             raise ComputeError("实际处置范围不完整，请先完成或核对计算结果", 409)
-        edited = {
-            (str(row.get("feature_id")), str(row.get("rule_id")))
-            for row in results[0]["rows"]
-            if str(row.get("actual_changed")).lower() in {"true", "1", "1.0"}
-        }
+        return set()
+    return {
+        (str(row.get("feature_id")), str(row.get("rule_id")))
+        for row in results[0]["rows"]
+        if str(row.get("actual_changed")).lower() in {"true", "1", "1.0"}
+    }
+
+
+def _held_suggestions(plan, edited):
+    review = plan.get("modificationReview") or {}
     scope = plan.get("retainedReview", {}).get("retainedSuggestionIds")
     return [
         item
@@ -31,6 +41,66 @@ def held_suggestions(plan):
         and item.get("status") in {"review", "exception"}
         and (str(item.get("featureId")), str(item.get("ruleId"))) not in edited
     ]
+
+
+def held_suggestions(plan):
+    return _held_suggestions(plan, _edited_pairs(plan, require_complete=True))
+
+
+def _json_record(value):
+    try:
+        parsed = json.loads(value or "{}")
+    except (TypeError, ValueError):
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def inspection_held_suggestions(plan):
+    """Include located findings that never had an executable candidate.
+
+    These rows are strictly for inspection. Keep the frozen approval hash, IDs,
+    candidate actions and applied results unchanged, including while apply runs.
+    """
+    edited = _edited_pairs(plan, require_complete=False)
+    held = _held_suggestions(plan, edited)
+    seen = {(str(item["featureId"]), str(item["ruleId"])) for item in held} | edited
+    check = next((s for s in plan.get("stages", []) if s.get("name") == "check"), {})
+    for row in full_rows(output(check, "issues")) or []:
+        feature = str(row.get("feature_id") or "")
+        rule = str(row.get("rule_id") or "")
+        identity = (feature, rule)
+        if (
+            row.get("status") not in {"review", "exception"}
+            or not (feature and rule and row.get("issue_id"))
+            or identity in seen
+        ):
+            continue
+        measurements = _json_record(row.get("measurements_json"))
+        try:
+            area = float(row.get("area_m2") or measurements.get("area_m2") or 0)
+        except (TypeError, ValueError, OverflowError):
+            area = 0
+        reason = str(row.get("reason") or "证据不足，保留核查。")
+        held.append(
+            {
+                "id": digest({"inspectionIssue": row["issue_id"]})[:24],
+                "kind": "multi_element",
+                "element": row.get("element"),
+                "featureId": feature,
+                "ruleId": rule,
+                "title": reason[:100],
+                "currentState": row.get("current_state") or "当前识别结果",
+                "suggestedState": "保留核查",
+                "reason": reason,
+                "action": "keep",
+                "status": row["status"],
+                "areaM2": area if math.isfinite(area) else 0,
+                "observations": measurements,
+                "preview": row.get("geometry_json"),
+            }
+        )
+        seen.add(identity)
+    return held
 
 
 def open_initial_review(workflow, stage, automatic_ids):

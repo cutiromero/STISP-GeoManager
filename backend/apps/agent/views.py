@@ -1015,6 +1015,7 @@ def workflow_json(workflow, include_steps=True, view="full"):
         "runtime": "durable_state_machine",
     }
     if workflow.workflow_type in {"geology_generic", "geology_multi_element_reasoning"}:
+        from .review_positions import automatic_suggestion_ids
         from .workflow_task_summary import task_summary
 
         data["taskSummary"] = task_summary(workflow)
@@ -1043,6 +1044,7 @@ def workflow_json(workflow, include_steps=True, view="full"):
                 for snapshot in workflow.plan.get("retainedReviewHistory", [])
             ],
             "inputNames": display_input_names(workflow),
+            "hasAuthorizedExtent": bool(automatic_suggestion_ids(workflow.plan)),
         }
     from .model_activity import latest_model_activity
 

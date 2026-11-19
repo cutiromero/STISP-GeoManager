@@ -82,6 +82,46 @@ it("排队时不把已确认资料误报为正在生成工作副本", () => {
   expect(screen.queryByText("已确认字段含义，正在生成工作副本")).toBeNull();
 });
 
+it("默认处置计算期间可以查看授权范围，没有人工审批表单", async () => {
+  const workflow = task({
+    status: "waiting_compute",
+    plan: { phase: "wait_compute", stages: [], hasAuthorizedExtent: true },
+  });
+  vi.mocked(agentApi.workflow).mockResolvedValueOnce({
+    ...workflow,
+    view: "inspection",
+    modificationReview: undefined,
+    plan: {
+      ...workflow.plan,
+      reviewIndex: {
+        total: 0,
+        suggestedIds: [],
+        candidateIds: [],
+        groups: [],
+        automaticMap: {
+          total: 1,
+          locatedCount: 1,
+          points: [{ id: "verified-1", coordinates: [98, 35], count: 1 }],
+        },
+      },
+    },
+  });
+  show(workflow);
+  expect(agentApi.workflow).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "查看处理范围" }));
+  const drawer = await screen.findByRole("dialog", { name: "本次处理范围" });
+  await within(drawer).findByText(/已授权处置\s*1\s*项/);
+  expect(within(drawer).getByLabelText("地质底图与待核查对象")).toBeVisible();
+  expect(within(drawer).queryByRole("checkbox")).toBeNull();
+  expect(agentApi.workflow).toHaveBeenCalledExactlyOnceWith(
+    workflow.id,
+    expect.objectContaining({
+      view: "inspection",
+      part: "retained",
+    }),
+  );
+});
+
 it.each([1440, 1920])(
   "业务流运行卡片在%s宽屏中保持与对话一致的居中宽度",
   async (width) => {
@@ -411,13 +451,17 @@ it("手动审核可读取后续对象，仍使用同一冻结处置方案", asyn
     .mockResolvedValueOnce(snapshot(0))
     .mockResolvedValueOnce(snapshot(1));
   show(request, { onReview: vi.fn() });
-  fireEvent.click(await screen.findByRole("button", { name: "读取更多审批对象" }));
+  fireEvent.click(
+    await screen.findByRole("button", { name: "读取更多审批对象" }),
+  );
   await waitFor(() => {
     expect(agentApi.workflow).toHaveBeenLastCalledWith(
       request.id,
       expect.objectContaining({ part: "suggestions", offset: 1 }),
     );
-    expect(screen.queryByRole("button", { name: "读取更多审批对象" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "读取更多审批对象" }),
+    ).toBeNull();
   });
 });
 

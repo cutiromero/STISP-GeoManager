@@ -133,6 +133,14 @@ export default function LogicTaskWorkspace(props: LogicTaskProps) {
   const canMap =
     !deleted.length &&
     (workflow.resultResourceIds.length > 0 || taskIds.length > 0);
+  const canScope =
+    !deleted.length && workflow.plan.hasAuthorizedExtent === true;
+  const retainedCount = summary?.retainedIssueCount ?? 0;
+  const scopeLink = (
+    <Button type="link" onClick={() => setDrawer("retained")}>
+      查看处理范围
+    </Button>
+  );
   const canStop = Boolean(
     onCancel &&
     [
@@ -213,9 +221,10 @@ export default function LogicTaskWorkspace(props: LogicTaskProps) {
           description="任务与分析记录保留，重新处理时请另选资料。"
         />
       )}
-      {canMap && !done && (
+      {!done && (canMap || (canScope && !needsApproval)) && (
         <div className="logic-primary-actions">
-          {compare}
+          {canMap && compare}
+          {canScope && !needsApproval && scopeLink}
           <span className="logic-description">
             {compact
               ? "可先查看当前资料与阶段成果。"
@@ -342,6 +351,7 @@ export default function LogicTaskWorkspace(props: LogicTaskProps) {
           </p>
           <div className="logic-primary-actions">
             {canMap && compare}
+            {canScope && retainedCount === 0 && scopeLink}
             <LogicReportAction
               workflowId={workflow.id}
               projectId={workflow.projectId}
@@ -350,30 +360,18 @@ export default function LogicTaskWorkspace(props: LogicTaskProps) {
               查看全部成果
             </Button>
           </div>
-          {summary?.retainedIssueCount != null &&
-            summary.retainedIssueCount > 0 && (
-              <div className="logic-retained-summary">
-                <QuestionCircleOutlined />
-                <div>
-                  <strong>
-                    {summary.retainedIssueCount} 条待裁定与例外已保留
-                  </strong>
-                  <p>查看具体对象和依据，再决定后续核查。</p>
-                </div>
-                <Button type="link" onClick={() => setDrawer("retained")}>
-                  查看对象 <RightOutlined />
-                </Button>
-                {onReviewRetained && (
-                  <Button
-                    type="primary"
-                    loading={busy}
-                    onClick={onReviewRetained}
-                  >
-                    核查并选择处置
-                  </Button>
-                )}
+          {retainedCount > 0 && (
+            <div className="logic-retained-summary">
+              <QuestionCircleOutlined />
+              <div>
+                <strong>{retainedCount} 条待裁定与例外已保留</strong>
+                <p>查看具体对象和依据，再决定后续核查。</p>
               </div>
-            )}
+              <Button type="link" onClick={() => setDrawer("retained")}>
+                查看对象 <RightOutlined />
+              </Button>
+            </div>
+          )}
           {workflow.detail && (
             <details className="logic-result-explanation">
               <summary>结论说明</summary>
@@ -629,7 +627,8 @@ export default function LogicTaskWorkspace(props: LogicTaskProps) {
           {
             data: "本次资料与设置",
             records: "完整运行记录",
-            retained: "待裁定与例外依据",
+            retained:
+              done && retainedCount > 0 ? "待裁定与例外依据" : "本次处理范围",
             thinking: "分析过程",
             calculations: "实际计算记录",
           }[drawer ?? "data"]
@@ -716,6 +715,20 @@ export default function LogicTaskWorkspace(props: LogicTaskProps) {
                   workflow={detail}
                   readonly
                 />
+                {done &&
+                  onReviewRetained &&
+                  (detail.plan.reviewIndex?.candidateIds?.length ?? 0) > 0 && (
+                    <Button
+                      type="primary"
+                      loading={busy}
+                      onClick={() => {
+                        setDrawer(undefined);
+                        onReviewRetained();
+                      }}
+                    >
+                      核查并选择处置
+                    </Button>
+                  )}
                 {detail.modificationReview &&
                   detail.modificationReview.suggestions.length <
                     Number(record(detail.plan.reviewIndex).total ?? 0) && (

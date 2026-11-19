@@ -6,6 +6,7 @@ import json
 import math
 import re
 
+from shapely.errors import GEOSException
 from shapely.geometry import mapping, shape
 
 PAGE_LIMIT = 50
@@ -71,9 +72,21 @@ def bounded(value, depth=0):
 
 
 def display_preview(preview):
+    empty = {"type": "Polygon", "coordinates": []}
     if not preview:
-        return {"type": "Polygon", "coordinates": []}
-    geometry = mapping(shape(preview).simplify(0.0001, preserve_topology=True))
+        return empty
+    try:
+        parsed = shape(json.loads(preview) if isinstance(preview, str) else preview)
+        if parsed.is_empty or not parsed.is_valid:
+            return empty
+        west, south, east, north = parsed.bounds
+        if not (-180 <= west <= east <= 180 and -90 <= south <= north <= 90):
+            return empty
+        geometry = mapping(parsed.simplify(0.0001, preserve_topology=True))
+    except (AttributeError, KeyError, TypeError, ValueError, GEOSException):
+        return empty
+    if "coordinates" not in geometry:
+        return empty
 
     def quantize(value):
         if isinstance(value, (list, tuple)):
@@ -315,6 +328,8 @@ def project_workflow(
     }
     if data.get("plan", {}).get("inputNames"):
         plan["inputNames"] = data["plan"]["inputNames"]
+    if data.get("plan", {}).get("hasAuthorizedExtent"):
+        plan["hasAuthorizedExtent"] = True
     plan["previousRounds"] = data.get("plan", {}).get("previousRounds", [])
     plan["algorithms"] = {
         key: {
@@ -579,9 +594,14 @@ def project_workflow(
     if review:
         suggestions = review.get("suggestions", [])
         if part == "retained":
-            from .retained_review import held_suggestions
+            from .retained_review import held_suggestions, inspection_held_suggestions
 
-            suggestions = held_suggestions(source)
+            suggestions = (
+                held_suggestions(source)
+                if source.get("phase") == "review_modifications"
+                and source.get("retainedReview", {}).get("active")
+                else inspection_held_suggestions(source)
+            )
         position = next(
             (
                 position
