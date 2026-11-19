@@ -353,7 +353,13 @@ def test_seven_nodes_match_original_science_with_real_operators(
             ]
             if mapping_failure and node_id == "check":
                 expected_actions.insert(2, "preflight_operator")
-                assert loop["recoveries"] == 1
+                first, verified = loop["history"][1:3]
+                assert loop["evidence"][first["evidenceId"]]["result"]["failure"]
+                assert (
+                    loop["evidence"][verified["evidenceId"]]["result"]["valid"] is True
+                )
+                # Only repairing a computation failure spends the compute-recovery budget.
+                assert loop["recoveries"] == 0
             assert [row["action"] for row in loop["history"]] == expected_actions
             assert loop["modelCalls"] == len(expected_actions)
         tool_calls = [
