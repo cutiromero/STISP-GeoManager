@@ -8,7 +8,8 @@ import uuid
 from pathlib import Path
 from typing import Any, Callable
 
-from django.db import OperationalError, ProgrammingError, transaction
+from django.db import OperationalError, ProgrammingError, connection, transaction
+from django.db.models import F
 from django.utils import timezone
 
 from apps.core.runtime_config import (
@@ -395,24 +396,32 @@ def import_raster_file(
         raise RasterImportError(f"不支持的栅格重采样方式：{resampling}")
     resampling = normalize_import_resampling(raster_kind, resampling)
 
-    dataset, _ = RasterDataset.objects.update_or_create(
-        source_relative_path=source_relative,
-        defaults={
-            "name": name.strip() or input_path.stem,
-            "code": stable_code("raster", source_relative),
-            "source_file_name": input_path.name,
-            "source_manifest": manifest,
-            "source_checksum_sha256": source_checksum_sha256,
-            "raster_kind": raster_kind,
-            "resampling": resampling,
-            "processed_relative_path": processed_relative,
-            "source_metadata_relative_path": source_metadata_relative,
-            "processed_metadata_relative_path": processed_metadata_relative,
-            "status": RasterDataset.Status.PROCESSING,
-            "error_message": "",
-            "source_file_size": source_total_size or source_path.stat().st_size,
-        },
-    )
+    defaults = {
+        "name": name.strip() or input_path.stem,
+        "code": stable_code("raster", source_relative),
+        "source_file_name": input_path.name,
+        "source_manifest": manifest,
+        "source_checksum_sha256": source_checksum_sha256,
+        "raster_kind": raster_kind,
+        "resampling": resampling,
+        "processed_relative_path": processed_relative,
+        "source_metadata_relative_path": source_metadata_relative,
+        "processed_metadata_relative_path": processed_metadata_relative,
+        "status": RasterDataset.Status.PROCESSING,
+        "error_message": "",
+        "source_file_size": source_total_size or source_path.stat().st_size,
+    }
+    with transaction.atomic():
+        if connection.vendor == "sqlite":
+            # Wait for the writer before update_or_create reads its snapshot.
+            # SQLite cannot upgrade a read after another worker commits.
+            RasterDataset.objects.filter(source_relative_path=source_relative).update(
+                status=F("status")
+            )
+        dataset, _ = RasterDataset.objects.update_or_create(
+            source_relative_path=source_relative,
+            defaults=defaults,
+        )
     try:
         if progress:
             progress("gdalinfo -json 源文件")
@@ -492,6 +501,9 @@ def import_raster_file(
         image_coordinates = image_coordinates_from_gdalinfo(processed_info)
         dataset.processed_file_size = processed_path.stat().st_size
         with transaction.atomic():
+            if connection.vendor == "sqlite":
+                # The catalogue upserts also read before they write.
+                RasterDataset.objects.filter(pk=dataset.pk).update(status=F("status"))
             data_resource, map_layer = upsert_catalog_records(
                 dataset=dataset,
                 source_info=source_info,
