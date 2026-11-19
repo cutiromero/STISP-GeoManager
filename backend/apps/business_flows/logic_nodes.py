@@ -8,6 +8,7 @@ from .execution_session import session
 
 # Configuration: preserve the approved scientific recipe and bound each actor.
 EXECUTION_MODE = "geology_node_tools_v1"
+CONFIRMED_EXECUTION_MODE = "geology_confirmed_nodes_v1"
 TOOLS = [
     "operator_catalog",
     "read_evidence",
@@ -16,6 +17,17 @@ TOOLS = [
     "ask_user",
     "finish_node",
 ]
+
+
+def uses_fixed_nodes(workflow):
+    """Distinguish new confirmed recipes from already started tool-loop runs."""
+    return (
+        workflow.workflow_type == "geology_generic"
+        and getattr(workflow, "parameters", {})
+        .get("_businessFlow", {})
+        .get("nodeExecution")
+        == CONFIRMED_EXECUTION_MODE
+    )
 
 
 def enabled(workflow):

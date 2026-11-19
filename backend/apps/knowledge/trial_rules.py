@@ -28,9 +28,9 @@ def read_bound_rules(
 ):
     """No search or draft enumeration: every requested ID and revision is explicit."""
     if require_project(user) != project_id or scenario != SCENARIO:
-        raise PermissionDenied("试用规则只允许在其绑定的项目和演示场景读取")
+        raise PermissionDenied("规则只允许在绑定的项目和场景读取")
     if not isinstance(bindings, list) or not 1 <= len(bindings) <= 40:
-        raise ComputeError("请显式绑定本案例试用规则及其版本")
+        raise ComputeError("请绑定本项目规则及其版本")
     entries, seen, seen_rules = [], set(), set()
     for binding in bindings:
         if not isinstance(binding, dict) or set(binding) != {
@@ -39,10 +39,10 @@ def read_bound_rules(
             "ruleId",
             "ruleVersion",
         }:
-            raise ComputeError("试用知识绑定须包含条目、修订、规则编号和版本")
+            raise ComputeError("知识绑定须包含条目、修订、规则编号和版本")
         identity, revision = binding["id"], binding["revision"]
         if type(identity) is not int or type(revision) is not int or identity in seen:
-            raise ComputeError("试用知识编号或修订无效、重复")
+            raise ComputeError("知识编号或修订无效、重复")
         if (
             any(
                 not isinstance(binding[key], str) or not 1 <= len(binding[key]) <= 80
@@ -50,7 +50,7 @@ def read_bound_rules(
             )
             or binding["ruleId"] in seen_rules
         ):
-            raise ComputeError("试用规则编号或版本无效、重复")
+            raise ComputeError("规则编号或版本无效、重复")
         seen.add(identity)
         seen_rules.add(binding["ruleId"])
         query = KnowledgeEntry._base_manager.filter(
@@ -60,7 +60,7 @@ def read_bound_rules(
         )
         entry = query.first()
         if entry is None:
-            raise PermissionDenied("绑定的本案例试用知识已变化、停用或不属于当前项目")
+            raise PermissionDenied("绑定的项目规则已变化、停用或不属于当前项目")
         value = serialize(entry)
         if not history:
             if value.get("revision") != revision:
@@ -87,7 +87,7 @@ def read_bound_rules(
                 raise PermissionDenied("已保存的本案例知识修订不属于当前历史记录")
         config = value.get("ruleConfig")
         if not isinstance(config, dict):
-            raise ComputeError("试用知识缺少有效场景绑定")
+            raise ComputeError("绑定规则缺少有效场景绑定")
         scope = config.get("trialScope", {})
         if scope != {
             "scenario": scenario,
@@ -95,11 +95,11 @@ def read_bound_rules(
             "ruleId": binding["ruleId"],
             "ruleVersion": binding["ruleVersion"],
         }:
-            raise PermissionDenied("试用知识的项目、场景或规则版本绑定不一致")
+            raise PermissionDenied("绑定规则的项目、场景或规则版本绑定不一致")
         parameters = config.get("parameters")
         rule = config.get("rule")
         if not isinstance(parameters, dict) or not isinstance(rule, dict):
-            raise ComputeError("试用知识缺少可执行参数或规则条件")
+            raise ComputeError("绑定规则缺少可执行参数或规则条件")
         value["trialBinding"] = {
             **binding,
             "scope": "项目正式规则"
@@ -108,7 +108,7 @@ def read_bound_rules(
         }
         entries.append(value)
     if expected is not None and digest(entries) != expected:
-        raise PermissionDenied("试用知识正文、适用条件或参数已变化，请重新生成计划")
+        raise PermissionDenied("规则正文、适用条件或参数已变化，请重新生成计划")
     return entries
 
 
@@ -135,5 +135,5 @@ def authorize_trial_evidence(workflow, user, *, history=False):
         item["id"]: item for item in workflow.evidence if item.get("trialBinding")
     }
     if recorded != {item["id"]: item for item in entries}:
-        raise PermissionDenied("已保存的试用知识引用与当前绑定不一致")
+        raise PermissionDenied("已保存的知识引用与当前绑定不一致")
     return set(recorded)

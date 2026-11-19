@@ -333,6 +333,34 @@ def model_results(results, *, stage_name):
     return values
 
 
+def regional_wording(value):
+    """Project display text for old bound rule snapshots; leave the audit intact."""
+    if isinstance(value, dict):
+        return {key: regional_wording(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [regional_wording(item) for item in value]
+    if isinstance(value, str):
+        for before, after in (
+            ("（本案例试用）", ""),
+            ("本演示案例试用：", ""),
+            ("本案例试用，", ""),
+            ("本案例试用", "本项目判读"),
+            ("试用规则", "判读规则"),
+            ("试用知识", "规则依据"),
+            ("试用判据", "判读条件"),
+            ("试用口径", "判读口径"),
+        ):
+            value = value.replace(before, after)
+    return value
+
+
+def public_knowledge(knowledge):
+    return [
+        regional_wording(entry) if entry.get("trialBinding") else entry
+        for entry in knowledge
+    ]
+
+
 def public_plan(plan):
     """Keep display facts, not internal full-resolution checks or model requests."""
 
@@ -376,6 +404,9 @@ def public_plan(plan):
     }
     if isinstance(public.get("finalStage"), dict):
         public["finalStage"] = public_stage(public["finalStage"])
+    for key in ("algorithms", "trialRuleBindings"):
+        if key in public:
+            public[key] = regional_wording(public[key])
     return public
 
 
@@ -522,7 +553,8 @@ def model_knowledge(knowledge):
         return value
 
     return [
-        project(item, f"knowledge[{index}]") for index, item in enumerate(knowledge)
+        project(item, f"knowledge[{index}]")
+        for index, item in enumerate(public_knowledge(knowledge))
     ]
 
 

@@ -11,6 +11,8 @@ ACTIONS = {"set_code", "merge", "reclassify", "exclude", "downweight"}
 
 def report_payload(payload, workflow):
     """A report reads real totals and evidence; it does not review edits again."""
+    from .geology_multi_results import public_knowledge
+
     payload["reportTemplate"] = {
         "summaryField": "resultSummary",
         "analysisField": "findings",
@@ -37,7 +39,7 @@ def report_payload(payload, workflow):
             )
             if key in entry and (key != "statement" or not entry.get("trialBinding"))
         }
-        for entry in workflow.evidence
+        for entry in public_knowledge(workflow.evidence)
     ]
     projected = []
     for result in payload["actualResults"]:

@@ -1284,7 +1284,7 @@ def _decide_once(
             "uncertainties(数组),nextAction,algorithmReason,evidenceRefs[{kind,id}],resultSummary。"
             "中文说明简短；nextAction只能为allowedAction或request_review。引用只选availableEvidence，"
             "至少引用一条适用知识和本轮最新statistics；采纳每条规则须引用该规则对应knowledge编号。"
-            "trialBinding知识仅本案例试用，不能称为国家标准；不能补造野外过程、测量或引用。"
+            "绑定的地质知识按已确认资料和适用条件使用；不得把区域判读规则称为国家标准，不得补造野外过程、测量或引用。"
             "groups.samples是全部本批成员，非代表样本；成员由memberCommon与sample合并还原，"
             "若有measurementColumns，则sample.measurements按该列顺序与measurementCommon合并为原测量。"
             "measurementAbsentColumns是从0起的缺失列索引，须跳过，不能当null；"
@@ -2271,9 +2271,9 @@ def _mock_decision(model, stage, refs, results, workflow) -> tuple[dict, list]:
     if workflow.workflow_type in MULTI_FAMILY:
         decision.update(
             judgement=(
-                "模拟分析：依据实际检查与本案例试用规则形成建议，等待逐项批准；结果仍需专业核查。"
+                "模拟分析：依据实际检查与已绑定规则形成建议，等待逐项批准；结果仍需专业核查。"
                 if stage["name"] == "apply" and not stage.get("modificationsApproval")
-                else "模拟分析：依据本轮实际计算、已保存批准范围和本案例试用规则继续核查；地质解释仍待专业核对。"
+                else "模拟分析：依据本轮实际计算、已保存批准范围和已绑定规则继续核查；地质解释仍待专业核对。"
             ),
             evidenceRefs=[*knowledge_refs, *selected],
         )
@@ -2318,7 +2318,7 @@ def _mock_decision(model, stage, refs, results, workflow) -> tuple[dict, list]:
                             else 0
                             if action == "exclude"
                             else 1,
-                            "reason": "模拟分析依据实际测量及试用规则："
+                            "reason": "模拟分析依据实际测量及已绑定规则："
                             + row.get("reason", "需核查适用前提与例外"),
                         }
                     )

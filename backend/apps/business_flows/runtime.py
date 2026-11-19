@@ -747,12 +747,16 @@ def start_flow(user, version, value, *, source_run=None):
         from .execution_session import initialize
 
         initialize(workflow)
+        from .logic_nodes import CONFIRMED_EXECUTION_MODE, EXECUTION_MODE
+
         if workflow.workflow_type == "geology_generic" and value.get(
             "agentEnabled", True
         ):
-            from .logic_nodes import EXECUTION_MODE
-
-            workflow.parameters["_businessFlow"]["nodeExecution"] = EXECUTION_MODE
+            workflow.parameters["_businessFlow"]["nodeExecution"] = (
+                CONFIRMED_EXECUTION_MODE
+                if definition.get("executionMode") == "main_agent"
+                else EXECUTION_MODE
+            )
             workflow.max_iterations = request_limit(policy, definition)
         workflow.plan["inputAdaptations"] = [
             {

@@ -128,7 +128,7 @@ export const demoRoles: Record<DemoWorkflowType, Role[]> = {
 
 export const demoGoals: Record<DemoWorkflowType, string> = {
   geology_multi_element_reasoning:
-    "检查海德乌拉岩性、构造及遥感矿物识别成果，检索本案例试用专家规则，解释实测疑点并形成建议；经我逐项批准后执行修正和复核，重建交汇关系，圈定修正后找矿远景区并生成报告。",
+    "检查海德乌拉岩性、构造及遥感矿物识别成果，按绑定的地质规则解释疑点并形成建议；经我逐项批准后执行修正和复核，重建交汇关系，圈定修正后找矿远景区并生成报告。",
   ecology_investigation:
     "分析两期植被变化，结合生态背景和观测证据确定调查优先区，说明依据与待补资料。",
   geology_correction:
@@ -362,7 +362,7 @@ export default function DemoWorkflowForm({
             type="info"
             showIcon
             title="海德乌拉地质综合推理 / 演示案例"
-            description="岩性和构造为模拟识别输入（演示）；五类矿物为遥感矿物识别结果（演示案例）。规则仅在本案例试用。每次按当前输入检查，批准后才修改；未批准及待裁定对象保留。"
+            description="岩性和构造为模拟识别输入；五类矿物为遥感矿物识别结果。按当前输入和规则适用条件检查，批准后才修改；未批准及待裁定对象保留。"
           />
           <label className="agent-multi-segment">
             <span>本次演示环节</span>

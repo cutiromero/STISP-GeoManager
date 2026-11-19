@@ -204,7 +204,7 @@ def wait_recovery(workflow, node, item, failure, *, question=""):
         ],
     }
     if code == ACTION_FORMAT and loop.get("formatRetries"):
-        item["recovery"]["attempts"].append("已尝试用严格 JSON 重新获取同一步动作")
+        item["recovery"]["attempts"].append("已按严格 JSON 再请求一次该动作")
     contract = node.get("contract")
     if contract and (
         loop["steps"] >= contract["maxSteps"]

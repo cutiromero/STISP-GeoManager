@@ -18,6 +18,8 @@ from apps.agent.models import AgentRun, AgentWorkflow, Conversation, LogicConfig
 from apps.agent.research_intents import process
 from apps.agent.workflow import run_workflow, resume_waiting
 from apps.agent.workflow_uploads import store_upload
+from apps.business_flows import catalog, runtime
+from apps.business_flows.builtins import geology_definition
 from apps.catalog.models import DataResource
 from apps.compute.data import candidate, freeze_input, inspect_output
 from apps.compute.models import (
@@ -238,6 +240,77 @@ def native_task(task):
     task.status = "succeeded"
     task.save(update_fields=["status"])
     RuntimeLease.objects.filter(name="worker").update(heartbeat=timezone.now())
+
+
+def test_published_fixed_nodes_dispatch_once_and_keep_human_boundary(
+    generic, tmp_path, monkeypatch
+):
+    generic["project"].code = "02"
+    generic["project"].save(update_fields=["code"])
+    monkeypatch.setattr("apps.compute.services.candidate", candidate)
+    context, _ = fixture(tmp_path)
+    register_rules(generic, context)
+    register_operators(generic)
+    roles = system_references(generic, context)
+    inputs = {key: roles[key] for key in ("lithology", "faults", "coverage")}
+    flow = geology_definition(main_agent=True)
+    _, version = catalog.register_flow(
+        generic["admin"],
+        {"code": "fixed-geology", "name": "地质复核", "definition": flow},
+    )
+    workflow = runtime.start_flow(
+        generic["owner"],
+        version,
+        {
+            "model": "mock",
+            "goal": "检查确认后的地质资料",
+            "inputs": inputs,
+            "parameters": {"uploadBatchId": generic["batch"]},
+            "idempotencyKey": uuid.uuid4().hex,
+        },
+    )
+    run_workflow(workflow.id)
+    workflow.refresh_from_db()
+    assert workflow.plan.get("phase") == "review_mapping", (
+        workflow.status,
+        workflow.detail,
+    )
+    mapping = {
+        item["role"]: {
+            target["key"]: target["field"]
+            for target in item["targets"]
+            if target["field"]
+        }
+        for item in workflow.plan["fieldMappingReview"]["roles"]
+    }
+    response = post(
+        generic,
+        f"/api/agent/workflows/{workflow.id}/confirm/",
+        {
+            "planHash": workflow.plan_hash,
+            "fieldMapping": mapping,
+            "executeAfterMapping": True,
+        },
+    )
+    assert response.status_code == 200, response.content
+    run_workflow(workflow.id)
+    workflow.refresh_from_db()
+    assert workflow.plan["phase"] == "decide", workflow.detail
+
+    def unexpected(*args, **kwargs):
+        pytest.fail("已确认的算子不得重复请求模型动作")
+
+    monkeypatch.setattr("apps.business_flows.main_loop.professional_tick", unexpected)
+    monkeypatch.setattr("apps.agent.demo_workflow.decide", unexpected)
+    run_workflow(workflow.id)
+    workflow.refresh_from_db()
+    assert workflow.status == "waiting_compute", workflow.detail
+    check = workflow.plan["stages"][0]
+    assert check["executionMode"] == "automatic"
+    assert workflow.operator_steps == 1 and workflow.iteration == 0
+    run_workflow(workflow.id)
+    assert ComputeTask.objects.filter(owner=generic["owner"]).count() == 1
+    assert not workflow.plan["stages"][1].get("modificationsApproval")
 
 
 def test_system_data_to_clean_results_and_new_conversation_reuse(

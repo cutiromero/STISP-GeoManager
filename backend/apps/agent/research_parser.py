@@ -34,7 +34,7 @@ INSTRUCTION = """你是科研任务解析器。用户以自然语言发布任务
 演示提示表示用户允许使用目录中明示的模拟资料或真实地图副本及标注的演示错误和默认值；普通任务不能盲用默认演示资料。
 地层时代属性一致性任务选择geology_age_correction；其只纠正辞书条件支持的时代字段，保留岩性、类别及边界。
 地质成果检查、内部漏填和用户批准后修正任务选择geology_map_review；先查专家知识和当前地图，只提出有依据的方案，等待用户选择批准后执行，再读取真实结果复核。该场景优先于历史地质案例。
-海德乌拉、三要素综合推理、岩性名称代号检查、构造复核交汇、蚀变远景圈定使用geology_multi_element_reasoning；parameters.segment按用户目标选择all、lithology、structure、alteration，保存当前上游资料版本。规则是本案例试用草案，先形成建议，用户选中批准后实际执行，待裁定和未批准项保留。
+海德乌拉、三要素综合推理、岩性名称代号检查、构造复核交汇、蚀变远景圈定使用geology_multi_element_reasoning；parameters.segment按用户目标选择all、lithology、structure、alteration，保存当前上游资料版本。依据本任务绑定的规则先形成建议，用户选中批准后实际执行，待裁定和未批准项保留。
 授权使用样例默认值时，把有来源的defaults写入parameters；用户明确待回答的某个参数保持缺省并只针对它提问。
 inputs只能选目录当前场景、当前角色的候选。parameters只能使用目录parameterSpecs的键且遵循类型与范围。
 inputs必须是JSON对象，键使用responseContract中完全一致的英文inputKeys，不得改成中文显示名、列表或嵌套资源对象。

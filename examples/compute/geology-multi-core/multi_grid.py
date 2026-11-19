@@ -46,6 +46,8 @@ class LithologyGrids:
         unions = {
             code: shapely.union_all(geometries) for code, geometries in groups.items()
         }
+        for geometry in unions.values():
+            shapely.prepare(geometry)
         self._projection = key
         self._prepared = codes, identities, entries, by_code, unions, area
         return self._prepared
@@ -109,11 +111,17 @@ class LithologyGrids:
                         np.maximum(top, top + transform.e),
                     )
                     intersected = np.zeros(len(pixels), dtype="uint32")
-                    for code in codes:
-                        intersected += (
-                            shapely.area(shapely.intersection(pixels, unions[code]))
-                            > pixel_area * 1e-10
-                        )
+                    for geometry in unions.values():
+                        # The prepared predicate only removes empty overlays.
+                        # Keep the original positive-area test for all hits.
+                        hits = shapely.intersects(geometry, pixels)
+                        if hits.any():
+                            intersected[hits] += (
+                                shapely.area(
+                                    shapely.intersection(pixels[hits], geometry)
+                                )
+                                > pixel_area * 1e-10
+                            )
                     boundary[rows, columns] = intersected > 1
                 mask = rasterize(
                     [(area.__geo_interface__, 1)], dtype="uint8", **options

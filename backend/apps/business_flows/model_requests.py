@@ -49,10 +49,10 @@ def check_start_budget(policy, definition, input_plan, *, agent_enabled=True):
     operators = calculations + len(conversions)
     reviews = sum(node["review"]["ai"] for node in nodes)
     if agent_enabled and definition.get("executionMode") == "main_agent":
-        # Scientific mapping may be reused; its five calculations and final
-        # analysis still require the task's own actions, routing and review.
+        # The confirmed science recipe knows all five operator steps exactly.
+        # The main agent still interprets the results and closes the task.
         models = (
-            calculations * 4 + calculations + 1 + 1 + reviews
+            2 + reviews
             if scientific
             else (
                 len(nodes)

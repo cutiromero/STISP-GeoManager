@@ -170,7 +170,14 @@ def projected_state(workflow):
                 if workflow.status in {"failed", "interrupted"}
                 else "executing"
             )
-        if stage.get("decision"):
+        if stage.get("taskId") and stage.get("executionMode") == "automatic":
+            item["executor"].pop("model", None)
+            item["executor"].update(
+                status="succeeded" if identity in completed else "running",
+                reason="平台按已确认的版本、参数和资料执行算子",
+                taskId=stage["taskId"],
+            )
+        elif stage.get("decision"):
             item["executor"].update(
                 status="succeeded",
                 model=workflow.model,

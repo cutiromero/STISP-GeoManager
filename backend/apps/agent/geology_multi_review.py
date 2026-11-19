@@ -79,11 +79,9 @@ def _required_knowledge(workflow, decision, issue):
         str(ref["id"]) for ref in decision["evidenceRefs"] if ref["kind"] == "knowledge"
     }
     if entry is None or str(entry["id"]) not in cited:
-        required = (
-            f"{entry['id']}@{entry['revision']}" if entry else "未检索到对应试用知识"
-        )
+        required = f"{entry['id']}@{entry['revision']}" if entry else "未检索到对应知识"
         error = ComputeError(
-            f"缺少该规则 {issue['rule_id']}@{issue['rule_version']} 对应的实际试用知识及修订引用：{required}；不能只引用其他规则"
+            f"缺少该规则 {issue['rule_id']}@{issue['rule_version']} 对应的知识条目及修订引用：{required}；不能只引用其他规则"
         )
         error.required_knowledge_refs = refs
         raise error

@@ -71,6 +71,9 @@ AUTOMATIC_GEOLOGY_STAGES = {
 
 
 def _automatic_stage(workflow, stage):
+    from apps.business_flows.logic_nodes import uses_fixed_nodes
+
+    approved = stage.get("modificationsApproval") or {}
     return (
         workflow.workflow_type in MULTI_FAMILY
         and workflow.plan.get("executionPolicy")
@@ -85,7 +88,13 @@ def _automatic_stage(workflow, stage):
             or (
                 stage.get("name") == "apply"
                 and stage.get("identifier") == "geology-multi-apply"
-                and stage.get("modificationsApproval", {}).get("mode") == "unchanged"
+                and (
+                    approved.get("mode") == "unchanged"
+                    or (
+                        uses_fixed_nodes(workflow)
+                        and bool(approved.get("executionHash"))
+                    )
+                )
             )
         )
     )
@@ -465,7 +474,15 @@ def prepare_demo(workflow, user, p) -> None:
         )
     from apps.business_flows import logic_nodes
 
-    if logic_nodes.enabled(workflow):
+    if logic_nodes.uses_fixed_nodes(workflow):
+        workflow.plan["modelPlanning"] = False
+        decisions_required = 2 + sum(
+            bool(node["review"]["ai"])
+            for node in workflow.parameters["_businessFlow"]["definitionSnapshot"][
+                "nodes"
+            ]
+        )
+    elif logic_nodes.enabled(workflow):
         workflow.plan["modelPlanning"] = False
         decisions_required = (
             4 * required_steps
@@ -1520,7 +1537,13 @@ def advance_demo(workflow_id) -> None:
                 return
             if (
                 _automatic_stage(workflow, stage)
-                and not stage.get("decision")
+                and (
+                    not stage.get("decision")
+                    or (
+                        logic_nodes.uses_fixed_nodes(workflow)
+                        and stage["name"] == "apply"
+                    )
+                )
                 and not _has_model_progress(stage)
                 and not stage.get("contextBudgetReview")
             ):

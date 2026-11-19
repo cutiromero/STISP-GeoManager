@@ -335,6 +335,21 @@ def effective_units(workflow, units, aliases):
     )
 
 
+def rule_parameters(workflow, rule_id, parameters):
+    """Bind S-01 to the declared loose units without changing its criterion."""
+    from apps.business_flows.logic_nodes import uses_fixed_nodes
+
+    if rule_id != "S-01" or not uses_fixed_nodes(workflow):
+        return parameters
+    local_units = (workflow.plan.get("unitOverrides") or {}).get("units", {})
+    groups = {code: unit.get("group") for code, unit in local_units.items()}
+    if "cover_units" not in parameters or not any(groups.values()):
+        return parameters
+    loose = {code for code, group in groups.items() if group == "loose"}
+    configured = {code for code in parameters["cover_units"] if not groups.get(code)}
+    return {**parameters, "cover_units": sorted(configured | loose)}
+
+
 def _binding_integer(value):
     if type(value) not in {str, int, float} or (
         isinstance(value, str) and not value.strip().isdecimal()
@@ -349,7 +364,7 @@ def _binding_integer(value):
 def prepare(workflow, user, policy):
     require_actor(user, workflow.project_tag_id, "catalog.add_dataresource")
     if workflow.plan.get("knowledgeSelection", {}).get("mode") == "none":
-        raise ComputeError("本案例需要读取显式绑定的试用知识，请启用地质知识依据")
+        raise ComputeError("本任务需要读取已绑定的项目规则，请启用地质知识依据")
     # The business-flow binding is server orchestration state, not an operator
     # parameter. All other keys still pass the strict scientific allowlist.
     parameters = {
@@ -373,13 +388,14 @@ def prepare(workflow, user, policy):
     for index, entry in enumerate(entries):
         bound = entry["trialBinding"]
         config = entry["ruleConfig"]
+        params = rule_parameters(workflow, bound["ruleId"], config["parameters"])
         writer.writerow(
             {
                 "rule_id": bound["ruleId"],
                 "rule_version": bound["ruleVersion"],
                 "knowledge_id": entry["id"],
                 "knowledge_revision": entry["revision"],
-                "params_json": json.dumps(config["parameters"], ensure_ascii=False),
+                "params_json": json.dumps(params, ensure_ascii=False),
                 "rule_json": json.dumps(config["rule"], ensure_ascii=False),
                 "units_json": json.dumps(units, ensure_ascii=False)
                 if index == 0
@@ -393,7 +409,7 @@ def prepare(workflow, user, policy):
             {key: bound[key] for key in ("id", "revision", "ruleId", "ruleVersion")}
             | {
                 "title": entry["title"],
-                "parameters": config["parameters"],
+                "parameters": params,
             }
         )
     raw = stream.getvalue().encode("utf-8")

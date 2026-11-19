@@ -16,7 +16,7 @@ type TrialRule = {
   basis?: RuleBasis;
 };
 
-function trialRules(workflow: AgentWorkflow) {
+function boundRules(workflow: AgentWorkflow) {
   return workflow.evidence
     .map((entry) => {
       const config = (entry as { ruleConfig?: { rule?: TrialRule } })
@@ -24,12 +24,10 @@ function trialRules(workflow: AgentWorkflow) {
       const binding = (entry as { trialBinding?: { ruleVersion?: string } })
         .trialBinding;
       return binding && config?.rule
-        ? { rule: config.rule, version: binding.ruleVersion ?? "" }
+        ? { rule: config.rule, version: binding.ruleVersion ?? "", status: entry.status }
         : null;
     })
-    .filter((item): item is { rule: TrialRule; version: string } =>
-      Boolean(item),
-    )
+    .filter((item) => item !== null)
     .sort((left, right) =>
       String(left.rule.id).localeCompare(String(right.rule.id), "zh-CN", {
         numeric: true,
@@ -45,24 +43,26 @@ function supportStatus(basis: RuleBasis | undefined) {
   return basis?.type === "经验假设" ? "尚无文献，待专家确认" : "未列出文献";
 }
 
-/** Which draft rules this task applies, and how well each is supported. */
+/** The applied rule revisions and their evidence. */
 export default function RuleCards({ workflow }: { workflow: AgentWorkflow }) {
-  const rules = trialRules(workflow);
+  const rules = boundRules(workflow);
   if (!rules.length) return null;
   return (
     <details className="agent-rule-cards">
       <summary>
-        本次启用的规则（{rules.length} 条，均为试用规则，不是规范或定论）
+        本次采用的地质规则（{rules.length} 条）
       </summary>
       <ul>
-        {rules.map(({ rule, version }) => (
+        {rules.map(({ rule, version, status }) => (
           <li key={rule.id}>
             <div className="agent-rule-card-heading">
               <strong>
                 {rule.id} {rule.name}
               </strong>
               <Tag>{version || "未标版本"}</Tag>
-              <Tag color="orange">{rule.status ?? "草拟"} · 试用</Tag>
+              <Tag color={status === "published" ? "blue" : "orange"}>
+                {status === "published" ? "项目已发布" : "待专业核查"}
+              </Tag>
             </div>
             <Typography.Text type="secondary">
               {[rule.element, rule.relation].filter(Boolean).join(" · ")}

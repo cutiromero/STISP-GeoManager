@@ -365,7 +365,7 @@ export default function MultiElementStory({
             )}
           </div>
           <details className="geology-story-history">
-            <summary>本次上游版本、试用知识与真实工具</summary>
+            <summary>资料版本、规则依据与所用算子</summary>
             <div className="multi-element-evidence">
               <strong>实际采用的上游资料</strong>
               <ul>
@@ -376,11 +376,11 @@ export default function MultiElementStory({
                   </li>
                 ))}
               </ul>
-              <strong>{generic ? "试用知识" : "项目地质规则"}</strong>
+              <strong>项目地质规则</strong>
               <ul>
                 {workflow.plan.trialRuleBindings?.map((rule) => (
                   <li key={`${rule.id}:${rule.revision}`}>
-                    {rule.ruleId} / {rule.title} / 版本 {rule.ruleVersion} /
+                    {rule.ruleId} / {rule.title.replace("（本案例试用）", "")} / 版本 {rule.ruleVersion} /
                     修订 {rule.revision}
                   </li>
                 ))}

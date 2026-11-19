@@ -953,13 +953,15 @@ def research_demos(request):
 def workflow_json(workflow, include_steps=True, view="full"):
     card = view == "card"
     plan = workflow.plan
+    evidence = [] if card else workflow.evidence
     if not card and workflow.workflow_type in {
         "geology_generic",
         "geology_multi_element_reasoning",
     }:
-        from .geology_multi_results import public_plan
+        from .geology_multi_results import public_knowledge, public_plan
 
         plan = public_plan(plan)
+        evidence = public_knowledge(evidence)
     data = {
         "id": str(workflow.id),
         "projectId": workflow.project_tag_id,
@@ -1007,7 +1009,7 @@ def workflow_json(workflow, include_steps=True, view="full"):
         "importResults": workflow.import_results,
         "resultResourceIds": workflow.result_resource_ids,
         "resultIds": workflow.result_ids,
-        "evidence": [] if card else workflow.evidence,
+        "evidence": evidence,
         "createdAt": workflow.created_at.isoformat(),
         "updatedAt": workflow.updated_at.isoformat(),
         "runtime": "durable_state_machine",

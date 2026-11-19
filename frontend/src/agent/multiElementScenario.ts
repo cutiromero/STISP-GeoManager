@@ -39,7 +39,7 @@ export const multiElementRoles = [
   },
   {
     key: "rules",
-    label: "本案例试用规则",
+    label: "绑定的地质规则",
     kind: "table",
     match: /海德乌拉.*规则|综合.*规则/i,
   },
@@ -111,7 +111,7 @@ export function multiElementInputIssues(role: string, input: ComputeCandidate) {
       "aliases_json",
     ].every((field) => input.fields.includes(field))
   )
-    return ["规则表缺少试用知识版本绑定或名称代号映射"];
+    return ["规则表缺少知识版本绑定或名称代号映射"];
   if (
     ["inj_id", "inj_type", "fake_type"].some((field) =>
       input.fields.includes(field),
