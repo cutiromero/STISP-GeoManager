@@ -339,9 +339,11 @@ it("冰川成果切换同区原始影像并链接项目参考资料，不触发�
     '[81,true,"style-81"]',
   );
   fireEvent.click(screen.getByRole("button", { name: "查看 1 项" }));
-  expect(
-    screen.getByRole("link", { name: "冰川图集" }).getAttribute("href"),
-  ).toContain("resourceId=91&projectTagId=8");
+  const reference = screen.getByRole("link", { name: "冰川图集" });
+  const href = new URL(reference.getAttribute("href")!, window.location.origin);
+  expect(href.pathname).toBe("/resources/catalog");
+  expect(href.searchParams.get("resourceId")).toBe("91");
+  expect(href.searchParams.get("projectTagId")).toBe("8");
   expect(
     within(screen.getByRole("region", { name: "正式成果地图" })).getByText(
       "观测期未登记",

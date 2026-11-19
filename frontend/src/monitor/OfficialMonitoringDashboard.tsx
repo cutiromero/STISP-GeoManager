@@ -393,7 +393,7 @@ export default function OfficialMonitoringDashboard({
                     {references.map((reference) => (
                       <li key={reference.id}>
                         <Link
-                          to={`/resources/data/inventory?${new URLSearchParams({ q: reference.name, resourceId: String(reference.id), projectTagId: String(reference.projectTagId) })}`}
+                          to={`/resources/catalog?${new URLSearchParams({ q: reference.name, resourceId: String(reference.id), projectTagId: String(reference.projectTagId) })}`}
                           target="_blank"
                           rel="noopener noreferrer"
                         >
