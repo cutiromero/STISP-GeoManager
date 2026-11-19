@@ -1650,6 +1650,8 @@ def advance_demo(workflow_id) -> None:
                         )
                     blocked = False
                     with transaction.atomic():
+                        # Reserve the writer before step() reads the audit sequence.
+                        locked_workflow(workflow.id)
                         if attempt["status"] == "requesting":
                             calls = workflow.plan.get("actualModelCallCount", 0)
                             # A repair still needs this unfinished batch plus all
