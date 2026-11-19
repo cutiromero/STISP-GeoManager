@@ -23,7 +23,7 @@ import {
   RightOutlined,
 } from "@ant-design/icons";
 import { useEffect, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import WorkspaceHeader from "../components/WorkspaceHeader";
 import { useAppContext } from "../contexts/AppContext";
 import { useProjectContext } from "../projects/ProjectContext";
@@ -57,11 +57,11 @@ function ComputeWorkspace({ admin }: { admin: boolean }) {
   const ui = useComputeText();
   const { user } = useAppContext();
   const project = useProjectContext();
-  const navigate = useNavigate();
   const { message } = App.useApp();
   const [params, setParams] = useSearchParams();
   const sharedInvitation = params.get("sharedInvitation");
   const [tab, setTab] = useState(admin ? "manage" : "algorithms");
+  const [openOperatorCreate, setOpenOperatorCreate] = useState(false);
   const [runtime, setRuntime] = useState<ComputeRuntimeStatus | null>(null);
   const [algorithms, setAlgorithms] = useState<ComputeAlgorithm[]>([]);
   const [tasks, setTasks] = useState<ComputeTask[]>([]);
@@ -147,9 +147,13 @@ function ComputeWorkspace({ admin }: { admin: boolean }) {
     setCreating(null);
     setSelectedTask(task.id);
     setTab("tasks");
+    setOpenOperatorCreate(false);
     setRevision((r) => r + 1);
   };
   const permissions = runtime?.permissions ?? {};
+  const canAuthorAlgorithms = Boolean(
+    permissions.author_algorithms || permissions.manage_algorithms,
+  );
   const algorithmsView = (
     <>
       <div className="compute-toolbar">
@@ -490,8 +494,8 @@ function ComputeWorkspace({ admin }: { admin: boolean }) {
       </Typography.Paragraph>
       <Typography.Paragraph>
         {ui(
-          "管理员通过后台登记算法并上传 ZIP。包内需有 operator.yaml、main.py、README.md；使用模板中的 run(context) 接口。每个新版本先试运行，核对结果后发布。代码和参数声明一经上传不能改写，修改需上传新版本。",
-          "Administrators register algorithms and upload ZIP packages containing operator.yaml, main.py and README.md. Use the run(context) template interface. Trial and review each immutable version before publishing.",
+          "科研用户可在当前项目新建和编辑算子登记。算子包由版本维护者上传、试运行和核对，具备发布权限后才能上线。包内需有 operator.yaml、main.py、README.md，并使用模板中的 run(context) 接口；修改代码或参数声明需上传新版本。",
+          "Researchers can create and edit operator registrations in the current project. Maintainers upload and trial ZIP packages; publishing requires separate permission. Packages use the run(context) template interface in operator.yaml, main.py and README.md. Changes require a new version.",
         )}
       </Typography.Paragraph>
       <Typography.Paragraph type="secondary">
@@ -503,14 +507,27 @@ function ComputeWorkspace({ admin }: { admin: boolean }) {
     </Space>
   );
   const tabs = [
-    ...(admin
+    ...(!admin
+      ? [
+          {
+            key: "algorithms",
+            label: ui("算法资源", "Algorithms"),
+            children: algorithmsView,
+          },
+        ]
+      : []),
+    ...(admin || canAuthorAlgorithms
       ? [
           {
             key: "manage",
-            label: ui("算法管理", "Algorithm management"),
+            label: admin
+              ? ui("算法管理", "Algorithm management")
+              : ui("算子维护", "Operator authoring"),
             children: (
               <AlgorithmManager
-                openCreate={params.get("newOperator") === "1"}
+                openCreate={
+                  admin ? params.get("newOperator") === "1" : openOperatorCreate
+                }
                 runtime={runtime}
                 refreshKey={revision}
                 onTrial={(version) => setCreating({ version, trial: true })}
@@ -518,13 +535,7 @@ function ComputeWorkspace({ admin }: { admin: boolean }) {
             ),
           },
         ]
-      : [
-          {
-            key: "algorithms",
-            label: ui("算法资源", "Algorithms"),
-            children: algorithmsView,
-          },
-        ]),
+      : []),
     {
       key: "tasks",
       label: admin
@@ -618,29 +629,28 @@ function ComputeWorkspace({ admin }: { admin: boolean }) {
         />
       )}
       <Tabs
-        activeKey={tab}
+        activeKey={
+          !admin && !canAuthorAlgorithms && tab === "manage"
+            ? "algorithms"
+            : tab
+        }
         onChange={(key) => {
           setTab(key);
+          setOpenOperatorCreate(false);
           if (key === "manage") setRevision((r) => r + 1);
         }}
         items={tabs}
         tabBarExtraContent={
           <Space>
-            {!admin && permissions.manage_algorithms && (
+            {!admin && canAuthorAlgorithms && tab !== "manage" && (
               <Button
                 type="primary"
-                onClick={() =>
-                  navigate(
-                    `/admin/compute?newOperator=1&projectTagId=${project?.current ?? "1"}`,
-                  )
-                }
+                onClick={() => {
+                  setOpenOperatorCreate(true);
+                  setTab("manage");
+                }}
               >
                 {ui("新建算子", "New operator")}
-              </Button>
-            )}
-            {!admin && permissions.manage_algorithms && (
-              <Button onClick={() => navigate("/admin/compute")}>
-                {ui("管理算法", "Manage algorithms")}
               </Button>
             )}
             <Button

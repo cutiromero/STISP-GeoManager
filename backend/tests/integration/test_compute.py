@@ -159,6 +159,69 @@ def test_submit_legacy_manifest_without_runtime(setup_compute):
     assert task.input_records.get().resource_id == env["resource"].id
 
 
+def test_research_can_author_operator_registrations_without_version_privileges(
+    setup_compute,
+):
+    from apps.core.initialization import ensure_research_user_group
+    from apps.core.permissions import can_access_admin
+
+    env = setup_compute
+    client, owner, project = env["client"], env["owner"], env["project"]
+    header = {"HTTP_X_PROJECT_ID": str(project.pk)}
+    body = {"identifier": env["version"].algorithm.identifier, "name": "项目算子"}
+    assert post(env, "algorithms/", body).status_code == 403
+    group = ensure_research_user_group()
+    owner.groups.add(group)
+    assert not can_access_admin(owner)
+    permissions = client.get("/api/compute/runtime/", **header).json()["permissions"]
+    assert permissions["author_algorithms"] is True
+    assert permissions["manage_algorithms"] is False
+    assert permissions["publish_algorithm"] is False
+
+    response = post(env, "algorithms/", body)
+    assert response.status_code == 200, response.content
+    algorithm = AlgorithmResource.objects.get(pk=response.json()["id"])
+    assert algorithm.project_tag_id == project.pk
+    assert algorithm.created_by_id == owner.pk
+    assert response.json()["canManage"] is True
+    detail_path = f"algorithms/{algorithm.pk}/"
+    edit = {**body, "description": "以当前项目表格为输入"}
+    assert post(env, detail_path, edit).json()["description"] == edit["description"]
+    assert post(env, detail_path, {**edit, "enabled": False}).status_code == 403
+    assert client.get("/api/compute/templates/3/", **header).status_code == 200
+
+    archive_package, _ = build_package(3)
+    draft = store_version(
+        algorithm,
+        UploadedFile(
+            io.BytesIO(archive_package), name="draft.zip", size=len(archive_package)
+        ),
+    )
+    listing = client.get("/api/compute/algorithms/?manage=1", **header).json()["items"]
+    assert [item["id"] for item in listing] == [algorithm.pk]
+    assert listing[0]["versions"] == []
+    assert client.delete(f"/api/compute/{detail_path}", **header).status_code == 403
+    assert (
+        client.post(f"/api/compute/{detail_path}versions/", **header).status_code == 403
+    )
+    assert post(env, "categories/", {"name": "分类"}).status_code == 403
+    for action in ("publish", "archive"):
+        assert post(env, f"versions/{draft.pk}/", {"action": action}).status_code == 403
+    trial = {**env["body"], "versionId": draft.pk, "trial": True}
+    assert post(env, "tasks/", trial).status_code == 403
+    assert not ComputeTask.objects.exists()
+
+    public_path = f"algorithms/{env['version'].algorithm_id}/"
+    assert post(env, public_path, edit).status_code == 404
+    ProjectMembership.objects.create(project=env["other_project"], user=owner)
+    assert (
+        post(env, detail_path, edit, project=env["other_project"].pk).status_code == 404
+    )
+
+    owner.groups.remove(group)
+    assert post(env, detail_path, edit).status_code == 403
+
+
 def test_algorithm_catalog_orders_categories_before_names(setup_compute):
     from apps.compute.models import AlgorithmCategory
 

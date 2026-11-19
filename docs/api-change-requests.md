@@ -1,5 +1,18 @@
 # API Change Requests
 
+## API-20261119-001 - 科研用户新建和编辑业务流及算子登记
+
+- Status: BackendReady
+- Owner: codex/xintao。
+- Endpoints: GET/POST /api/business-flows/；GET/PATCH /api/business-flows/{flowId}/；POST /api/business-flows/{flowId}/versions/；GET /api/compute/runtime/；GET/POST /api/compute/algorithms/；POST /api/compute/algorithms/{algorithmId}/；GET /api/compute/templates/{templateId}/。
+- Change type: 科研用户默认获得两项定义维护权限；写入仍限定在当前已授权的所属项目。
+- OpenAPI change: 更新 `canManage` 和运行权限表说明，新增权限键 `author_algorithms`，无响应结构变更。
+- Mock examples: 沿用已有响应结构。
+- Frontend reason: 业务流按目录和单条记录授权显示新建与编辑；计算中心按运行权限显示项目内的算子登记，不跳转管理后台。
+- Backend implementation notes: 初始化为已有科研组增量授权，保持其他授权和后续撤权。算子包上传、试运行、发布、停用和删除不随新权限开放；业务流旧版本及执行权限保持不变。
+- Verification: 科研用户保存新业务流、新版本及算子登记，未授权和跨项目写入、未授权算子包上传与试运行、删除均被拒绝。
+- Result: 角色权限按当前项目实时校验。
+
 ## API-20261118-001 - 主 Agent 监测执行、任务成果组织与正式登记
 
 - Status: BackendReady
@@ -887,6 +900,7 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| API-20261119-001 | BackendReady | 科研用户维护业务流与算子登记 |
 | API-20261118-001 | BackendReady | 主 Agent 监测执行与成果正式登记 |
 | API-20261117-004 | Verified | agent/operations | 新增真实确认与操作面板 | AgentOperation系列 | 183 | 已实现 | 并发、版本、权限及CSRF | 不注册模型确认能力 |
 | API-20261117-003 | Verified | 工程/导出/科研任务控制 | 新增10项工具与取消 | AgentTool系列、ExportCancellation | 182 | 已实现 | 幂等、撤权、取消及续接 | 复用原业务与队列 |

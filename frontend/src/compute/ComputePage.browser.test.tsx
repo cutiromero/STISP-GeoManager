@@ -292,6 +292,68 @@ describe("计算任务排布", () => {
 });
 
 describe("通用计算界面", () => {
+  it("科研用户在计算中心新建和编辑算子，不进入后台或获得版本管理能力", async () => {
+    const registration = { ...algorithm, canManage: true, versions: [] };
+    api.runtime.mockResolvedValue({
+      ...runtime,
+      permissions: { ...runtime.permissions, author_algorithms: true },
+    });
+    api.algorithms.mockImplementation(async (params) =>
+      params.manage
+        ? { items: [registration], total: 1 }
+        : { items: [algorithm], total: 1 },
+    );
+    api.saveAlgorithm.mockResolvedValue(registration);
+    show();
+
+    fireEvent.click(await screen.findByRole("button", { name: "新建算子" }));
+    const createModal = await screen.findByRole("dialog");
+    const create = within(createModal);
+    await waitFor(() => expect(create.getByText("新建算子")).toBeVisible());
+    fireEvent.change(create.getByRole("textbox", { name: /算法名称/ }), {
+      target: { value: "自定义样地统计" },
+    });
+    fireEvent.change(create.getByRole("textbox", { name: /稳定标识/ }), {
+      target: { value: "plot-statistics" },
+    });
+    fireEvent.click(create.getByRole("button", { name: /OK|确\s*定/ }));
+    await waitFor(() =>
+      expect(api.saveAlgorithm).toHaveBeenCalledWith(
+        null,
+        expect.objectContaining({
+          name: "自定义样地统计",
+          identifier: "plot-statistics",
+        }),
+      ),
+    );
+    await waitFor(() => expect(createModal).not.toBeVisible());
+    expect(screen.getByRole("tab", { name: "算子维护" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(
+      screen.queryByRole("button", { name: "管理版本" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "删除" }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(await screen.findByRole("button", { name: /^编\s*辑$/ }));
+    const edit = within(await screen.findByRole("dialog"));
+    await waitFor(() => expect(edit.getByText("编辑算法")).toBeVisible());
+    expect(edit.getByRole("switch", { name: "启用算法" })).toBeDisabled();
+    fireEvent.change(edit.getByRole("textbox", { name: /算法名称/ }), {
+      target: { value: "修改项目算子名称" },
+    });
+    fireEvent.click(edit.getByRole("button", { name: /OK|确\s*定/ }));
+    await waitFor(() =>
+      expect(api.saveAlgorithm).toHaveBeenCalledWith(
+        registration.id,
+        expect.objectContaining({ name: "修改项目算子名称" }),
+      ),
+    );
+  });
+
   it("用黄色标签高亮项目算法，不高亮公开算法", async () => {
     scope.current = "2";
     api.algorithms.mockResolvedValue({

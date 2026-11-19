@@ -1,4 +1,4 @@
-from .access import permission, project_id
+from .access import can_author_algorithms, permission, project_id
 from .models import ComputeTask, ComputeImport
 
 
@@ -21,11 +21,9 @@ def version_data(version):
 
 
 def algorithm_data(algorithm, user):
-    manage = algorithm.project_tag_id == project_id() and permission(
-        user, "manage_algorithms"
-    )
+    local = algorithm.project_tag_id == project_id()
     versions = algorithm.versions.all()
-    if not manage:
+    if not (local and permission(user, "manage_algorithms")):
         versions = versions.filter(status="published")
     return {
         "id": algorithm.id,
@@ -37,7 +35,7 @@ def algorithm_data(algorithm, user):
         "author": algorithm.author,
         "enabled": algorithm.enabled,
         "versions": [version_data(v) for v in versions],
-        "canManage": manage,
+        "canManage": local and can_author_algorithms(user),
     }
 
 

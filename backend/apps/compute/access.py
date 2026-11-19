@@ -9,6 +9,7 @@ PERMISSIONS = (
     "submit_task",
     "view_own_task",
     "cancel_own_task",
+    "author_algorithms",
     "manage_algorithms",
     "publish_algorithm",
     "download_algorithm",
@@ -33,6 +34,18 @@ def require_actor(user, project_id, *perms):
     for name in perms:
         if not permission(user, name):
             raise ComputeError("没有执行该操作的权限：" + name, 403)
+
+
+def can_author_algorithms(user):
+    return permission(user, "manage_algorithms") or permission(
+        user, "author_algorithms"
+    )
+
+
+def require_algorithm_author(user):
+    require_actor(user, project_id())
+    if not can_author_algorithms(user):
+        raise ComputeError("没有在当前项目新建或编辑算子登记的权限", 403)
 
 
 def project_id():

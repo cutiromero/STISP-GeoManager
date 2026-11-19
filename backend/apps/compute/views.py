@@ -18,7 +18,13 @@ from apps.audit.service import log_operation
 from apps.catalog.models import DataResource, task_resource_q
 from apps.catalog.permissions import filter_accessible
 from apps.core.storage import app_path
-from .access import permission, project_id, require_actor, task_access
+from .access import (
+    permission,
+    project_id,
+    require_actor,
+    require_algorithm_author,
+    task_access,
+)
 from apps.raster.models import RasterDataset
 from .data import list_candidate, preview
 from .models import (
@@ -169,7 +175,7 @@ def algorithm_values(body):
 @endpoint(["GET", "POST"], public=True)
 def algorithms(request):
     if request.method == "POST":
-        require_actor(request.user, project_id(), "manage_algorithms")
+        require_algorithm_author(request.user)
         algorithm = AlgorithmResource.objects.create(
             **algorithm_values(payload(request)), created_by=request.user
         )
@@ -177,7 +183,7 @@ def algorithms(request):
         return JsonResponse(algorithm_data(algorithm, request.user))
     query = allowed_algorithms()
     if request.GET.get("manage") == "1":
-        require_actor(request.user, project_id(), "manage_algorithms")
+        require_algorithm_author(request.user)
         query = query.filter(project_tag_id=project_id())
     else:
         query = query.filter(enabled=True, versions__status="published").distinct()
@@ -222,8 +228,8 @@ def remove_algorithm_packages(paths):
 
 @endpoint(["POST", "DELETE"])
 def algorithm_detail(request, algorithm_id):
-    algorithm = managed_algorithm(request.user, algorithm_id)
     if request.method == "DELETE":
+        algorithm = managed_algorithm(request.user, algorithm_id)
         try:
             with transaction.atomic():
                 if ComputeTask._base_manager.filter(
@@ -239,12 +245,19 @@ def algorithm_detail(request, algorithm_id):
         except ProtectedError as exc:
             raise ComputeError("已有任务记录的算法不能删除，请归档停用", 409) from exc
         return JsonResponse({"detail": "算法已删除"})
-    values = algorithm_values(payload(request))
+    require_algorithm_author(request.user)
+    algorithm = get_object_or_404(AlgorithmResource.objects, pk=algorithm_id)
+    body = payload(request)
+    body.setdefault("enabled", algorithm.enabled)
+    values = algorithm_values(body)
+    if not permission(request.user, "manage_algorithms"):
+        if values.pop("enabled") != algorithm.enabled:
+            raise ComputeError("启用或停用算子需要版本维护权限", 403)
     if algorithm.versions.exists() and values["identifier"] != algorithm.identifier:
         raise ComputeError("已有版本的算法不能修改稳定标识")
     for key, value in values.items():
         setattr(algorithm, key, value)
-    algorithm.save()
+    algorithm.save(update_fields=values)
     audit(request, "更新算法", algorithm.name)
     return JsonResponse(algorithm_data(algorithm, request.user))
 
@@ -357,7 +370,7 @@ def package_file(request, version_id):
 
 @endpoint(["GET"])
 def template_file(request, template_id):
-    require_actor(request.user, project_id(), "manage_algorithms")
+    require_algorithm_author(request.user)
     from .templates import build_package
 
     package, name = build_package(template_id)

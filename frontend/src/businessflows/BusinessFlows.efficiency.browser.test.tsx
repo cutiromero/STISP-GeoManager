@@ -609,6 +609,53 @@ it("preserves a human-only node's revision limit while independent review is tog
   });
 });
 
+it("lets a researcher create and edit definitions when the server grants authoring", async () => {
+  const localDetail = { ...researchDetail, canManage: true };
+  vi.mocked(businessFlowsApi.list).mockResolvedValue({
+    items: [summary(researchFlow, researchVersion)],
+    canManage: true,
+  });
+  vi.mocked(businessFlowsApi.detail).mockResolvedValue(localDetail);
+  vi.spyOn(computeApi, "algorithms").mockResolvedValue({ items: [], total: 0 });
+  const create = vi
+    .spyOn(businessFlowsApi, "create")
+    .mockResolvedValue(localDetail);
+  const publish = vi
+    .spyOn(businessFlowsApi, "publish")
+    .mockResolvedValue(localDetail);
+  show();
+  fireEvent.click(await screen.findByRole("button", { name: /新建业务流/ }));
+  const createDialog = await screen.findByRole("dialog");
+  const fields = within(createDialog);
+  fireEvent.change(fields.getByRole("textbox", { name: /流程名称/ }), {
+    target: { value: "科研流程" },
+  });
+  fireEvent.change(fields.getByRole("textbox", { name: /流程编码/ }), {
+    target: { value: "research-example" },
+  });
+  fireEvent.click(fields.getByRole("button", { name: "保存并发布" }));
+  await waitFor(() => expect(create).toHaveBeenCalledOnce());
+  expect(create.mock.calls[0]?.[0].definition.executionMode).toBe("main_agent");
+  await waitFor(() => expect(createDialog).not.toBeVisible());
+
+  fireEvent.click(
+    await screen.findByRole("button", { name: "编辑业务流", exact: true }),
+  );
+  const editor = within(await screen.findByRole("dialog"));
+  const instruction = "核对输入资料，依据实际结果说明适用范围。";
+  fireEvent.change(
+    editor.getAllByRole("textbox", { name: "处理要求与通过依据" })[0]!,
+    {
+      target: { value: instruction },
+    },
+  );
+  fireEvent.click(editor.getByRole("button", { name: "保存并发布" }));
+  await waitFor(() => expect(publish).toHaveBeenCalledOnce());
+  expect(publish.mock.calls[0]?.[1].definition.nodes[0]?.instruction).toBe(
+    instruction,
+  );
+});
+
 it("shows shared availability and keeps shared definitions readonly in a private project", async () => {
   const shared = { ...researchFlow, projectId: 1 };
   vi.mocked(businessFlowsApi.list).mockResolvedValue({
@@ -624,7 +671,7 @@ it("shows shared availability and keeps shared definitions readonly in a private
   await screen.findByRole("heading", { name: shared.name });
   expect(screen.getByText("所有项目可用")).toBeVisible();
   expect(
-    screen.queryByRole("button", { name: "发布新版本" }),
+    screen.queryByRole("button", { name: "编辑业务流" }),
   ).not.toBeInTheDocument();
   fireEvent.click(
     screen.getByRole("button", { name: "开始业务流", exact: true }),

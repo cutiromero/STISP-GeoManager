@@ -11,11 +11,7 @@ from django.shortcuts import get_object_or_404
 
 from apps.core.api import api_login_required
 from apps.compute.packages import ComputeError
-from apps.projects.context import (
-    is_superadmin,
-    require_live_membership,
-    selected_project_id,
-)
+from apps.projects.context import require_live_membership
 from . import catalog
 from .models import BusinessFlowDefinition
 from .scopes import available_flows, catalog_flows
@@ -81,8 +77,7 @@ def detail_value(flow, user):
         "flow": catalog.serialize_flow(flow),
         "version": catalog.serialize_version(current) if current else None,
         "versions": [catalog.serialize_version(item) for item in versions],
-        "canManage": is_superadmin(user)
-        and flow.project_tag_id == selected_project_id(),
+        "canManage": catalog.can_author(user, flow),
     }
 
 
@@ -99,7 +94,7 @@ def flows(request):
         raise ValidationError("目录分页参数必须为整数") from error
     if not 0 <= offset <= MAX_LIST_OFFSET or not 1 <= limit <= PAGE_LIMIT:
         raise ValidationError("目录offset须为0至1000000，limit须为1至50")
-    can_manage = is_superadmin(request.user)
+    can_manage = catalog.can_author(request.user)
     query = catalog_flows(manage=can_manage).select_related("current_version")
     text = request.GET.get("q", "")[:120].strip()
     if text:
@@ -143,7 +138,7 @@ def flow_detail(request, flow_id):
 def versions(request, flow_id):
     flow = get_object_or_404(BusinessFlowDefinition.objects, pk=flow_id)
     value = body(request, {"definition", "updatedAt", "name", "description"})
-    if "updatedAt" not in value:
+    if not isinstance(value.get("updatedAt"), str):
         raise ValidationError("发布版本需要最后读取的updatedAt")
     flow, _ = catalog.publish_version(
         request.user,

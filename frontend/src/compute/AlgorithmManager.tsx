@@ -46,7 +46,9 @@ export default function AlgorithmManager({
   const [revision, setRevision] = useState(0);
   const [error, setError] = useState("");
   const [keyword, setKeyword] = useState("");
-  const [detail, setDetail] = useState<ComputeAlgorithm | null>(null);
+  const [selectedAlgorithm, setDetail] = useState<ComputeAlgorithm | null>(
+    null,
+  );
   const [editing, setEditing] = useState<ComputeAlgorithm | null | undefined>(
     undefined,
   );
@@ -62,6 +64,10 @@ export default function AlgorithmManager({
   const runtimeDetail =
     runtime?.detail ?? ui("正在检查计算执行环境", "Checking compute runtime");
   const runtimePermissions = runtime?.permissions ?? {};
+  const manageVersions = Boolean(runtimePermissions.manage_algorithms);
+  const canAuthor =
+    manageVersions || Boolean(runtimePermissions.author_algorithms);
+  const detail = manageVersions ? selectedAlgorithm : null;
   useEffect(() => {
     alive.current = true;
     return () => {
@@ -69,6 +75,7 @@ export default function AlgorithmManager({
     };
   }, []);
   useEffect(() => {
+    if (!canAuthor) return;
     let live = true;
     computeApi
       .algorithms({ manage: 1, page, q: keyword })
@@ -93,7 +100,7 @@ export default function AlgorithmManager({
     return () => {
       live = false;
     };
-  }, [page, keyword, revision, refreshKey]);
+  }, [canAuthor, manageVersions, page, keyword, revision, refreshKey]);
   const perform = async (fn: () => Promise<unknown>) => {
     setBusy(true);
     setError("");
@@ -115,17 +122,16 @@ export default function AlgorithmManager({
     form.setFieldsValue(value ?? { enabled: true });
   };
   useEffect(() => {
-    if (
-      !openCreate ||
-      !runtimePermissions.manage_algorithms ||
-      openedCreate.current
-    )
+    if (!openCreate) {
+      openedCreate.current = false;
       return;
+    }
+    if (!canAuthor || openedCreate.current) return;
     openedCreate.current = true;
     setEditing(null);
     form.resetFields();
     form.setFieldsValue({ enabled: true });
-  }, [openCreate, runtimePermissions.manage_algorithms, form]);
+  }, [openCreate, canAuthor, form]);
   const remove = (algorithm: ComputeAlgorithm) => {
     modal.confirm({
       title: ui("删除算法登记", "Delete algorithm registration"),
@@ -143,12 +149,12 @@ export default function AlgorithmManager({
         }),
     });
   };
-  if (!runtimePermissions.manage_algorithms)
+  if (!canAuthor)
     return (
       <Empty
         description={ui(
-          "没有算法维护权限",
-          "Algorithm management permission is required",
+          "没有算子新建或编辑权限",
+          "Operator authoring permission is required",
         )}
       />
     );
@@ -157,13 +163,24 @@ export default function AlgorithmManager({
       <Alert
         type="info"
         showIcon
-        title={ui(
-          "登记 → 上传版本 → 试运行并核对结果 → 发布",
-          "Register → Upload a version → Trial and review → Publish",
-        )}
+        title={
+          manageVersions
+            ? ui(
+                "登记 → 上传版本 → 试运行并核对结果 → 发布",
+                "Register → Upload a version → Trial and review → Publish",
+              )
+            : ui(
+                "新建或编辑本项目算子登记",
+                "Create or edit project operator registrations",
+              )
+        }
         description={ui(
-          "算法归属当前项目。“公开”项目的已发布算法可在其他项目调用，输入和结果保留在任务所属项目。",
-          "Algorithms belong to the current project. Published public algorithms can be used elsewhere; inputs and results stay in the task project.",
+          manageVersions
+            ? "算法归属当前项目。“公开”项目的已发布算法可在其他项目调用，输入和结果保留在任务所属项目。"
+            : "登记后，请将准备好的算子 ZIP 提交给版本维护者。上传、试运行和发布继续走原有审核权限。",
+          manageVersions
+            ? "Algorithms belong to the current project. Published public algorithms can be used elsewhere; inputs and results stay in the task project."
+            : "After registration, send the operator ZIP to a maintainer. Upload, trial and publication keep their existing permission checks.",
         )}
       />
       {error && (
@@ -178,9 +195,11 @@ export default function AlgorithmManager({
         <Button type="primary" onClick={() => edit(null)}>
           {ui("新建算子", "New operator")}
         </Button>
-        <Button onClick={() => setCategoryOpen(true)}>
-          {ui("新增分类", "New category")}
-        </Button>
+        {manageVersions && (
+          <Button onClick={() => setCategoryOpen(true)}>
+            {ui("新增分类", "New category")}
+          </Button>
+        )}
         <Input.Search
           placeholder={ui("搜索算法", "Search algorithms")}
           allowClear
@@ -235,24 +254,29 @@ export default function AlgorithmManager({
           {
             title: ui("操作", "Actions"),
             key: "actions",
-            render: (_, algorithm) => (
-              <Space>
-                <Button onClick={() => setDetail(algorithm)}>
-                  {ui("管理版本", "Versions")}
-                </Button>
-                <Button onClick={() => edit(algorithm)}>
-                  {ui("编辑", "Edit")}
-                </Button>
-                <Button
-                  danger
-                  disabled={busy}
-                  icon={<DeleteOutlined />}
-                  onClick={() => remove(algorithm)}
-                >
-                  {ui("删除", "Delete")}
-                </Button>
-              </Space>
-            ),
+            render: (_, algorithm) =>
+              algorithm.canManage && (
+                <Space>
+                  {manageVersions && (
+                    <Button onClick={() => setDetail(algorithm)}>
+                      {ui("管理版本", "Versions")}
+                    </Button>
+                  )}
+                  <Button onClick={() => edit(algorithm)}>
+                    {ui("编辑", "Edit")}
+                  </Button>
+                  {manageVersions && (
+                    <Button
+                      danger
+                      disabled={busy}
+                      icon={<DeleteOutlined />}
+                      onClick={() => remove(algorithm)}
+                    >
+                      {ui("删除", "Delete")}
+                    </Button>
+                  )}
+                </Space>
+              ),
           },
         ]}
       />
@@ -338,12 +362,12 @@ export default function AlgorithmManager({
             label={ui("启用算法", "Enabled")}
             valuePropName="checked"
           >
-            <Switch />
+            <Switch disabled={Boolean(editing && !manageVersions)} />
           </Form.Item>
         </Form>
       </Modal>
       <Modal
-        open={categoryOpen}
+        open={manageVersions && categoryOpen}
         title={ui("新增算法分类", "New algorithm category")}
         onCancel={() => setCategoryOpen(false)}
         confirmLoading={busy}

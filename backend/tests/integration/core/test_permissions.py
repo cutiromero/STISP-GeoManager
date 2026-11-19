@@ -196,6 +196,31 @@ class SuperadminInitializationTests(TestCase):
         self.assertNotIn("catalog.delete_dataresource", group_permissions)
         self.assertNotIn("core.manage_auth", group_permissions)
 
+    def test_research_authoring_upgrade_preserves_existing_group_customizations(self):
+        group = Group.objects.get(name=RESEARCH_USER_GROUP_NAME)
+        removed_permission = Permission.objects.get(
+            content_type__app_label="catalog", codename="publish_mapcomposition"
+        )
+        group.permissions.remove(removed_permission)
+        Permission.objects.filter(
+            codename__in=("author_business_flows", "author_algorithms")
+        ).delete()
+        before = _group_feature_permissions(group)
+
+        ensure_superadmin_defaults(create_account=False)
+
+        self.assertEqual(
+            _group_feature_permissions(group) - before,
+            {"business_flows.author_business_flows", "compute.author_algorithms"},
+        )
+        self.assertTrue(before.issubset(_group_feature_permissions(group)))
+        authoring = Permission.objects.get(
+            content_type__app_label="compute", codename="author_algorithms"
+        )
+        group.permissions.remove(authoring)
+        ensure_superadmin_defaults(create_account=False)
+        self.assertNotIn("compute.author_algorithms", _group_feature_permissions(group))
+
     def test_previous_builtin_role_defaults_are_migrated_to_stable_defaults(self):
         migrations = (
             (
@@ -438,7 +463,8 @@ class FeaturePermissionQuerysetTests(TestCase):
         self.assertGreater(queryset.count(), 0)
         for perm in queryset:
             self.assertIn(
-                perm.content_type.app_label, {"core", "catalog", "raster", "compute"}
+                perm.content_type.app_label,
+                {"core", "catalog", "raster", "compute", "business_flows"},
             )
 
 

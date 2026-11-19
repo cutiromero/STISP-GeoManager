@@ -19,6 +19,7 @@ from apps.core.permissions import (
     feature_permission_queryset,
 )
 from apps.core.configuration import BUILTIN_ACCOUNTS, BUILTIN_GROUPS
+from apps.core.configuration.builtins import RESEARCH_AUTHORING_PERMISSIONS
 
 SUPERADMIN_GROUP_NAME = BUILTIN_GROUPS.superadmin_name
 PLATFORM_ADMIN_GROUP_NAME = BUILTIN_GROUPS.platform_admin_name
@@ -54,9 +55,18 @@ def ensure_superadmin_defaults(
     *, create_account: bool = True, attach_existing_superusers: bool = True
 ) -> tuple[Any | None, Group]:
     with transaction.atomic():
-        ensure_feature_permissions()
+        created_permissions = ensure_feature_permissions()
         ensure_platform_admin_group()
-        ensure_research_user_group()
+        research_group = ensure_research_user_group()
+        # Upgrade existing/customized research groups once, without undoing a
+        # later administrator revocation on every restart.
+        authoring_grants = tuple(
+            name
+            for name in RESEARCH_AUTHORING_PERMISSIONS
+            if name in created_permissions
+        )
+        if authoring_grants:
+            _add_group_permissions(research_group, authoring_grants)
         ensure_default_user_group()
         ensure_guest_group()
         ensure_guest_user()

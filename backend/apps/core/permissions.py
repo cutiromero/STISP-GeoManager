@@ -45,6 +45,8 @@ class FeaturePermissionDef:
 _CUSTOM_PERMISSION_ENGLISH = {
     "use_local_model": "Chat with local models",
     "use_data_agent": "Use the data agent",
+    "author_algorithms": "Create and edit algorithm registrations",
+    "author_business_flows": "Create and edit business flows",
     "manage_algorithms": "Register and maintain algorithms",
     "publish_algorithm": "Publish algorithm versions",
     "download_algorithm": "Download algorithm source packages",
@@ -110,6 +112,13 @@ FEATURE_PERMISSIONS: tuple[FeaturePermissionDef, ...] = (
     ),
     FeaturePermissionDef(
         "core", "FeaturePermission", "use_data_agent", "科研智能体", "数据权限"
+    ),
+    FeaturePermissionDef(
+        "business_flows",
+        "BusinessFlowDefinition",
+        "author_business_flows",
+        "新建和编辑业务流",
+        "计算权限",
     ),
     FeaturePermissionDef(
         "core",
@@ -353,15 +362,16 @@ FEATURE_PERMISSIONS: tuple[FeaturePermissionDef, ...] = (
 )
 
 FEATURE_PERMISSIONS += tuple(
-    FeaturePermissionDef('compute', model, code, name, '计算权限')
+    FeaturePermissionDef("compute", model, code, name, "计算权限")
     for model, code, name in (
-        ('AlgorithmResource', 'manage_algorithms', '登记和维护算法'),
-        ('AlgorithmResource', 'publish_algorithm', '发布算法版本'),
-        ('AlgorithmResource', 'download_algorithm', '下载算法源码包'),
-        ('ComputeTask', 'submit_task', '提交计算任务'),
-        ('ComputeTask', 'view_own_task', '查看本人计算'),
-        ('ComputeTask', 'cancel_own_task', '取消本人计算'),
-        ('ComputeTask', 'manage_tasks', '管理项目计算任务'),
+        ("AlgorithmResource", "author_algorithms", "新建和编辑算子登记"),
+        ("AlgorithmResource", "manage_algorithms", "登记和维护算法"),
+        ("AlgorithmResource", "publish_algorithm", "发布算法版本"),
+        ("AlgorithmResource", "download_algorithm", "下载算法源码包"),
+        ("ComputeTask", "submit_task", "提交计算任务"),
+        ("ComputeTask", "view_own_task", "查看本人计算"),
+        ("ComputeTask", "cancel_own_task", "取消本人计算"),
+        ("ComputeTask", "manage_tasks", "管理项目计算任务"),
     )
 )
 FEATURE_PERMISSION_NAMES = tuple(item.perm_name for item in FEATURE_PERMISSIONS)
@@ -375,8 +385,8 @@ GUEST_DENIED_FEATURE_PERMISSIONS = frozenset(
     }
 )
 ADMIN_ACCESS_PERMISSIONS = (
-    'compute.manage_algorithms',
-    'compute.manage_tasks',
+    "compute.manage_algorithms",
+    "compute.manage_tasks",
     "core.manage_feature_permissions",
     "core.create_user",
     "core.view_operation_logs",
@@ -546,15 +556,19 @@ def feature_permission_queryset():
     return Permission.objects.select_related("content_type").filter(query)
 
 
-def ensure_feature_permissions() -> None:
+def ensure_feature_permissions() -> set[str]:
+    created_permissions = set()
     for item in FEATURE_PERMISSIONS:
         model = apps.get_model(item.app_label, item.model_name)
         content_type = ContentType.objects.get_for_model(model)
-        Permission.objects.update_or_create(
+        _, created = Permission.objects.update_or_create(
             content_type=content_type,
             codename=item.codename,
             defaults={"name": item.name},
         )
+        if created:
+            created_permissions.add(item.perm_name)
+    return created_permissions
 
 
 def feature_permission_ids_for(group) -> set[int]:

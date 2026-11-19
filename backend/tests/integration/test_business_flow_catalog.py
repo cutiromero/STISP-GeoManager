@@ -20,7 +20,8 @@ from apps.business_flows.builtins import (
 )
 from apps.business_flows.definitions import normalize_definition
 from apps.business_flows.models import BusinessFlowDefinition, BusinessFlowVersion
-from apps.projects.models import Project
+from apps.core.initialization import ensure_research_user_group
+from apps.projects.models import Project, ProjectMembership
 from tests.integration.test_agent import setup_agent  # noqa: F401
 
 # ruff: noqa: F811
@@ -100,6 +101,111 @@ def test_flow_versions_publish_new_snapshots_and_require_current_revision(setup_
         env["client"].get("/api/business-flows/", **env["header"]).json()["items"] == []
     )
     assert len(client.get("/api/business-flows/", **env["header"]).json()["items"]) == 1
+
+
+def test_research_role_can_create_and_edit_flow_definitions_in_its_project(setup_agent):
+    env = setup_agent
+    group = ensure_research_user_group()
+    env["user"].groups.add(group)
+    client = env["client"]
+    manager = manager_client(env)
+    first = create(manager, env).json()
+    public = create(manager, {"header": {"HTTP_X_PROJECT_ID": "1"}}).json()
+    private_url = f"/api/business-flows/{first['flow']['id']}/"
+    shared_url = f"/api/business-flows/{public['flow']['id']}/"
+
+    listing = client.get("/api/business-flows/", **env["header"]).json()
+    assert listing["canManage"] is True
+    assert client.get(private_url, **env["header"]).json()["canManage"] is True
+    assert client.get(shared_url, **env["header"]).json()["canManage"] is False
+    own = create(client, env, code="researcher-example")
+    assert own.status_code == 201, own.content
+    assert (
+        BusinessFlowDefinition.objects.get(pk=own.json()["flow"]["id"]).owner
+        == env["user"]
+    )
+
+    spec = deepcopy(first["version"]["definition"])
+    spec["nodes"][0]["instruction"] = "核对本批次实际输入，引用可读的原始资料。"
+    update = {"definition": spec, "updatedAt": first["flow"]["updatedAt"]}
+    response = client.post(
+        private_url + "versions/",
+        update,
+        content_type="application/json",
+        **env["header"],
+    )
+    assert response.status_code == 201, response.content
+    assert (
+        response.json()["version"]["definition"]["nodes"][0]["instruction"]
+        == spec["nodes"][0]["instruction"]
+    )
+    assert (
+        BusinessFlowVersion.objects.get(pk=first["version"]["id"]).definition
+        == first["version"]["definition"]
+    )
+    assert (
+        client.post(
+            private_url + "versions/",
+            {**update, "updatedAt": None},
+            content_type="application/json",
+            **env["header"],
+        ).status_code
+        == 400
+    )
+    revision = {"updatedAt": response.json()["flow"]["updatedAt"]}
+    assert (
+        client.patch(
+            private_url,
+            {**revision, "isActive": False},
+            content_type="application/json",
+            **env["header"],
+        ).status_code
+        == 403
+    )
+    assert (
+        client.patch(
+            private_url,
+            {**revision, "description": "本项目资料核验"},
+            content_type="application/json",
+            **env["header"],
+        ).status_code
+        == 200
+    )
+    assert (
+        client.post(
+            shared_url + "versions/",
+            update,
+            content_type="application/json",
+            **env["header"],
+        ).status_code
+        == 404
+    )
+
+    other_project = Project.objects.create(
+        name="另一个科研项目", code="another-flow-project"
+    )
+    ProjectMembership.objects.create(project=other_project, user=env["user"])
+    assert (
+        client.post(
+            private_url + "versions/",
+            update,
+            content_type="application/json",
+            HTTP_X_PROJECT_ID=str(other_project.pk),
+        ).status_code
+        == 404
+    )
+
+    env["user"].groups.remove(group)
+    assert client.get(private_url, **env["header"]).json()["canManage"] is False
+    assert (
+        client.post(
+            private_url + "versions/",
+            update,
+            content_type="application/json",
+            **env["header"],
+        ).status_code
+        == 403
+    )
 
 
 def test_catalog_and_versions_do_not_cross_projects(setup_agent):

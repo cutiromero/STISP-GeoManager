@@ -18930,7 +18930,7 @@
           "Compute"
         ],
         "summary": "getComputeRuntime",
-        "description": "计算中心。服务端重新检查项目及功能权限；任务文件仅本人和有权管理员访问。写入必须显式传当前项目。",
+        "description": "计算运行状态与功能权限。author_algorithms 可新建和编辑当前项目算子登记；manage_algorithms 保持版本及删除等维护权限。",
         "security": [
           {
             "sessionAuth": []
@@ -19277,7 +19277,7 @@
             "name": "manage",
             "in": "query",
             "required": false,
-            "description": "manage 筛选/分页",
+            "description": "manage=1 需当前项目的算子登记或维护权限，仅返回当前项目登记；未发布版本仅对版本维护者可见",
             "schema": {
               "type": "string",
               "description": "文字"
@@ -19377,7 +19377,7 @@
           "Compute"
         ],
         "summary": "createComputeAlgorithm",
-        "description": "计算中心。服务端重新检查项目及功能权限；任务文件仅本人和有权管理员访问。写入必须显式传当前项目。",
+        "description": "具有算子新建编辑或维护权限的用户可在当前项目登记算子元信息，不上传或执行算子代码。",
         "security": [
           {
             "sessionAuth": []
@@ -19487,7 +19487,7 @@
           "Compute"
         ],
         "summary": "updateComputeAlgorithm",
-        "description": "计算中心。服务端重新检查项目及功能权限；任务文件仅本人和有权管理员访问。写入必须显式传当前项目。",
+        "description": "具有算子新建编辑或维护权限的用户可编辑当前项目登记；变更启用状态仍须具有版本维护权限。",
         "security": [
           {
             "sessionAuth": []
@@ -20066,7 +20066,7 @@
           "Compute"
         ],
         "summary": "downloadComputeTemplate",
-        "description": "计算中心。服务端重新检查项目及功能权限；任务文件仅本人和有权管理员访问。写入必须显式传当前项目。",
+        "description": "具有算子新建编辑或维护权限的用户可下载内置算子模板。",
         "security": [
           {
             "sessionAuth": []
@@ -28969,7 +28969,7 @@
         ],
         "operationId": "registerBusinessFlow",
         "summary": "登记业务流并发布第一版",
-        "description": "登记业务流并发布第一版。当前项目、真实用户、策略和数据访问权由服务端检查；定义发布不授予执行或数据修改权限。",
+        "description": "具有业务流新建编辑权限的用户可在当前项目登记业务流并发布第一版。当前项目、真实用户、策略和数据访问权由服务端检查；定义发布不授予执行或数据修改权限。",
         "security": [
           {
             "sessionAuth": []
@@ -29090,7 +29090,7 @@
         ],
         "operationId": "updateBusinessFlow",
         "summary": "修改业务流元信息",
-        "description": "修改业务流元信息。当前项目、真实用户、策略和数据访问权由服务端检查；定义发布不授予执行或数据修改权限。",
+        "description": "具有业务流新建编辑权限的用户可修改当前项目业务流的名称和说明；启用状态仍由超级管理员管理。当前项目、真实用户、策略和数据访问权由服务端检查；定义发布不授予执行或数据修改权限。",
         "security": [
           {
             "sessionAuth": []
@@ -29168,7 +29168,7 @@
         ],
         "operationId": "publishBusinessFlowVersion",
         "summary": "发布业务流新版本",
-        "description": "发布业务流新版本。当前项目、真实用户、策略和数据访问权由服务端检查；定义发布不授予执行或数据修改权限。",
+        "description": "具有业务流新建编辑权限的用户可为当前项目业务流发布不可变新版本。当前项目、真实用户、策略和数据访问权由服务端检查；定义发布不授予执行或数据修改权限。",
         "security": [
           {
             "sessionAuth": []
@@ -51908,7 +51908,7 @@
           },
           "canManage": {
             "type": "boolean",
-            "description": "当前用户在当前项目可维护"
+            "description": "当前用户可编辑本项目算子登记，不表示具有版本维护权限"
           }
         },
         "required": [
@@ -54180,7 +54180,7 @@
           },
           "canManage": {
             "type": "boolean",
-            "description": "是否可登记和发布版本"
+            "description": "是否可编辑本项目的业务流定义并发布新版本"
           }
         },
         "required": [
@@ -54204,7 +54204,7 @@
           },
           "canManage": {
             "type": "boolean",
-            "description": "是否可维护目录"
+            "description": "是否可在当前项目新建业务流"
           },
           "nextOffset": {
             "type": "integer",

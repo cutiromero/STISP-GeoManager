@@ -12407,7 +12407,7 @@ export type ComputeAlgorithm = {
      */
     versions: Array<ComputeVersion>;
     /**
-     * 当前用户在当前项目可维护
+     * 当前用户可编辑本项目算子登记，不表示具有版本维护权限
      */
     canManage: boolean;
 };
@@ -13816,7 +13816,7 @@ export type BusinessFlowDetail = {
      */
     versions: Array<BusinessFlowVersion>;
     /**
-     * 是否可登记和发布版本
+     * 是否可编辑本项目的业务流定义并发布新版本
      */
     canManage: boolean;
 };
@@ -13830,7 +13830,7 @@ export type BusinessFlowList = {
      */
     items: Array<BusinessFlowSummary>;
     /**
-     * 是否可维护目录
+     * 是否可在当前项目新建业务流
      */
     canManage: boolean;
     /**

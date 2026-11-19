@@ -37,6 +37,12 @@ class BuiltinAccountConfig:
     initial_password_file: str
 
 
+RESEARCH_AUTHORING_PERMISSIONS = (
+    "business_flows.author_business_flows",
+    "compute.author_algorithms",
+)
+
+
 BUILTIN_GROUPS = BuiltinGroupConfig(
     superadmin_name="超级管理员",
     platform_admin_name="平台管理员",
@@ -140,6 +146,7 @@ BUILTIN_GROUPS = BuiltinGroupConfig(
     research_user_permissions=(
         "core.use_local_model",
         "core.use_data_agent",
+        *RESEARCH_AUTHORING_PERMISSIONS,
         "compute.submit_task",
         "compute.view_own_task",
         "compute.cancel_own_task",

@@ -2127,7 +2127,7 @@ export const downloadContentAsset = <ThrowOnError extends boolean = false>(optio
 /**
  * getComputeRuntime
  *
- * 计算中心。服务端重新检查项目及功能权限；任务文件仅本人和有权管理员访问。写入必须显式传当前项目。
+ * 计算运行状态与功能权限。author_algorithms 可新建和编辑当前项目算子登记；manage_algorithms 保持版本及删除等维护权限。
  */
 export const getComputeRuntime = <ThrowOnError extends boolean = false>(options?: Options<GetComputeRuntimeData, ThrowOnError>): RequestResult<GetComputeRuntimeResponses, GetComputeRuntimeErrors, ThrowOnError> => (options?.client ?? client).get<GetComputeRuntimeResponses, GetComputeRuntimeErrors, ThrowOnError>({
     security: [{
@@ -2175,7 +2175,7 @@ export const listComputeAlgorithms = <ThrowOnError extends boolean = false>(opti
 /**
  * createComputeAlgorithm
  *
- * 计算中心。服务端重新检查项目及功能权限；任务文件仅本人和有权管理员访问。写入必须显式传当前项目。
+ * 具有算子新建编辑或维护权限的用户可在当前项目登记算子元信息，不上传或执行算子代码。
  */
 export const createComputeAlgorithm = <ThrowOnError extends boolean = false>(options: Options<CreateComputeAlgorithmData, ThrowOnError>): RequestResult<CreateComputeAlgorithmResponses, CreateComputeAlgorithmErrors, ThrowOnError> => (options.client ?? client).post<CreateComputeAlgorithmResponses, CreateComputeAlgorithmErrors, ThrowOnError>({
     security: [{
@@ -2209,7 +2209,7 @@ export const deleteComputeAlgorithm = <ThrowOnError extends boolean = false>(opt
 /**
  * updateComputeAlgorithm
  *
- * 计算中心。服务端重新检查项目及功能权限；任务文件仅本人和有权管理员访问。写入必须显式传当前项目。
+ * 具有算子新建编辑或维护权限的用户可编辑当前项目登记；变更启用状态仍须具有版本维护权限。
  */
 export const updateComputeAlgorithm = <ThrowOnError extends boolean = false>(options: Options<UpdateComputeAlgorithmData, ThrowOnError>): RequestResult<UpdateComputeAlgorithmResponses, UpdateComputeAlgorithmErrors, ThrowOnError> => (options.client ?? client).post<UpdateComputeAlgorithmResponses, UpdateComputeAlgorithmErrors, ThrowOnError>({
     security: [{
@@ -2282,7 +2282,7 @@ export const downloadComputePackage = <ThrowOnError extends boolean = false>(opt
 /**
  * downloadComputeTemplate
  *
- * 计算中心。服务端重新检查项目及功能权限；任务文件仅本人和有权管理员访问。写入必须显式传当前项目。
+ * 具有算子新建编辑或维护权限的用户可下载内置算子模板。
  */
 export const downloadComputeTemplate = <ThrowOnError extends boolean = false>(options: Options<DownloadComputeTemplateData, ThrowOnError>): RequestResult<DownloadComputeTemplateResponses, DownloadComputeTemplateErrors, ThrowOnError> => (options.client ?? client).get<DownloadComputeTemplateResponses, DownloadComputeTemplateErrors, ThrowOnError>({
     security: [{
@@ -3497,7 +3497,7 @@ export const listBusinessFlows = <ThrowOnError extends boolean = false>(options:
 /**
  * 登记业务流并发布第一版
  *
- * 登记业务流并发布第一版。当前项目、真实用户、策略和数据访问权由服务端检查；定义发布不授予执行或数据修改权限。
+ * 具有业务流新建编辑权限的用户可在当前项目登记业务流并发布第一版。当前项目、真实用户、策略和数据访问权由服务端检查；定义发布不授予执行或数据修改权限。
  */
 export const registerBusinessFlow = <ThrowOnError extends boolean = false>(options: Options<RegisterBusinessFlowData, ThrowOnError>): RequestResult<RegisterBusinessFlowResponses, RegisterBusinessFlowErrors, ThrowOnError> => (options.client ?? client).post<RegisterBusinessFlowResponses, RegisterBusinessFlowErrors, ThrowOnError>({
     security: [{
@@ -3531,7 +3531,7 @@ export const getBusinessFlow = <ThrowOnError extends boolean = false>(options: O
 /**
  * 修改业务流元信息
  *
- * 修改业务流元信息。当前项目、真实用户、策略和数据访问权由服务端检查；定义发布不授予执行或数据修改权限。
+ * 具有业务流新建编辑权限的用户可修改当前项目业务流的名称和说明；启用状态仍由超级管理员管理。当前项目、真实用户、策略和数据访问权由服务端检查；定义发布不授予执行或数据修改权限。
  */
 export const updateBusinessFlow = <ThrowOnError extends boolean = false>(options: Options<UpdateBusinessFlowData, ThrowOnError>): RequestResult<UpdateBusinessFlowResponses, UpdateBusinessFlowErrors, ThrowOnError> => (options.client ?? client).patch<UpdateBusinessFlowResponses, UpdateBusinessFlowErrors, ThrowOnError>({
     security: [{
@@ -3550,7 +3550,7 @@ export const updateBusinessFlow = <ThrowOnError extends boolean = false>(options
 /**
  * 发布业务流新版本
  *
- * 发布业务流新版本。当前项目、真实用户、策略和数据访问权由服务端检查；定义发布不授予执行或数据修改权限。
+ * 具有业务流新建编辑权限的用户可为当前项目业务流发布不可变新版本。当前项目、真实用户、策略和数据访问权由服务端检查；定义发布不授予执行或数据修改权限。
  */
 export const publishBusinessFlowVersion = <ThrowOnError extends boolean = false>(options: Options<PublishBusinessFlowVersionData, ThrowOnError>): RequestResult<PublishBusinessFlowVersionResponses, PublishBusinessFlowVersionErrors, ThrowOnError> => (options.client ?? client).post<PublishBusinessFlowVersionResponses, PublishBusinessFlowVersionErrors, ThrowOnError>({
     security: [{

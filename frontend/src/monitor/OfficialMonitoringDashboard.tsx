@@ -14,6 +14,7 @@ import type {
   ProjectMonitorConfig,
 } from "../api/generated/types.gen";
 import MonitorDashboardFrame from "./MonitorDashboardFrame";
+import { MonitorPanel } from "./MonitorPanels";
 import ProductMap from "./ProductMap";
 import { useMonitorActivity } from "./useMonitor";
 import "./official-monitoring.css";
@@ -116,6 +117,7 @@ export default function OfficialMonitoringDashboard({
   const hasMap = Boolean(
     product?.display || product?.resource.dataType === "vector",
   );
+  const explanation = product?.interpretation || product?.statisticsMethod;
   return (
     <MonitorDashboardFrame
       config={{ ...config, title }}
@@ -137,8 +139,8 @@ export default function OfficialMonitoringDashboard({
       sourceLabel={english}
     >
       {({ animated: mapMotion }) => (
-        <main className="official-monitor-main">
-          <section className="official-map-stage" aria-label="正式成果地图">
+        <main className="monitor-layout">
+          <section className="monitor-globe-panel" aria-label="正式成果地图">
             <ProductMap
               config={config}
               product={hasMap ? product : undefined}
@@ -149,10 +151,10 @@ export default function OfficialMonitoringDashboard({
               preparedDisplay={product?.display}
             />
             <div className="official-map-caption">
-              <span className="official-eyebrow">
-                <i /> 地理空间观测
-              </span>
-              <strong>{product?.regionLabel ?? "项目成果全景"}</strong>
+              <span className="official-map-caption-label">地理空间观测</span>
+              <h2 title={product?.regionLabel}>
+                {product?.regionLabel ?? "项目成果全景"}
+              </h2>
               {product && <span>{date}</span>}
             </div>
             {product && !hasMap && (
@@ -162,48 +164,86 @@ export default function OfficialMonitoringDashboard({
             )}
           </section>
           <aside
-            className="official-intelligence"
+            className="official-insights"
             aria-label="区域观测指标"
             onPointerEnter={() => setHovered(true)}
             onPointerLeave={() => setHovered(false)}
           >
-            <div className="official-intelligence-header">
-              <span className="official-eyebrow">
-                <i /> {english}
-              </span>
-              <span className="official-counter">
-                {String(current + (product ? 1 : 0)).padStart(2, "0")}{" "}
-                <small>/ {String(items.length).padStart(2, "0")}</small>
-              </span>
-            </div>
+            <header className="official-insights-heading">
+              <div className="official-insights-title">
+                <h2>解译统计</h2>
+                {product && <span className="official-status">已登记</span>}
+              </div>
+              {items.length > 1 && (
+                <div
+                  className="official-region-controls"
+                  role="group"
+                  aria-label="区域浏览"
+                >
+                  <span
+                    className="official-counter"
+                    title={rotating ? "区域轮播中" : "区域浏览"}
+                  >
+                    {current + 1} <small>/ {items.length}</small>
+                  </span>
+                  <Space size={4}>
+                    <Button
+                      size="small"
+                      aria-label="上一区域"
+                      icon={<ArrowLeftOutlined />}
+                      onClick={() => choose(-1)}
+                    />
+                    <Button
+                      size="small"
+                      aria-label={paused ? "播放区域轮播" : "暂停区域轮播"}
+                      icon={
+                        paused ? (
+                          <PlayCircleOutlined />
+                        ) : (
+                          <PauseCircleOutlined />
+                        )
+                      }
+                      onClick={() => setPaused((value) => !value)}
+                    />
+                    <Button
+                      size="small"
+                      aria-label="下一区域"
+                      icon={<ArrowRightOutlined />}
+                      onClick={() => choose(1)}
+                    />
+                  </Space>
+                </div>
+              )}
+            </header>
             {failure ? (
               <Alert type="error" showIcon title={failure} />
             ) : loading && !product ? (
-              <div className="official-empty">
+              <div className="official-empty monitor-panel">
                 <Spin />
                 <p>正在读取正式登记成果</p>
               </div>
             ) : !product ? (
-              <div className="official-empty">
-                <span className="official-empty-icon">◎</span>
-                <h2>暂无可展示的正式成果</h2>
+              <MonitorPanel
+                title="暂无可展示的正式成果"
+                className="official-empty"
+              >
                 <p>
                   业务流处理完成后，在数据中心登记主地图成果，即可在这里展示。
                 </p>
-              </div>
+              </MonitorPanel>
             ) : (
               <div className="official-region-story" key={product.id}>
-                <h2 title={product.regionLabel}>{product.regionLabel}</h2>
-                <div className="official-period">
-                  <span>{date}</span>
-                  <span>
-                    {product.observation?.product?.toUpperCase() ||
-                      "已登记成果"}
-                  </span>
-                </div>
-                <div className="official-hero-stat">
-                  <span>{primary?.label ?? "区域观测值"}</span>
-                  <div>
+                <MonitorPanel
+                  title={primary?.label ?? "区域观测值"}
+                  extra={
+                    product.observation?.product && (
+                      <span className="monitor-panel-caption">
+                        {product.observation.product.toUpperCase()}
+                      </span>
+                    )
+                  }
+                >
+                  <div className="official-hero-stat">
                     <strong
                       style={
                         {
@@ -213,85 +253,59 @@ export default function OfficialMonitoringDashboard({
                     >
                       {primaryValue}
                     </strong>
-                    <small>{primary?.unit}</small>
+                    {primary?.unit && <small>{primary.unit}</small>}
                   </div>
-                  <span className="official-data-line" aria-hidden="true" />
-                </div>
-                {!!secondary.length && (
-                  <dl className="official-metric-strip">
-                    {secondary.map((metric) => (
-                      <div key={metric.key}>
-                        <dt>{metric.label}</dt>
-                        <dd>
-                          {new Intl.NumberFormat("zh-CN", {
-                            maximumFractionDigits: 2,
-                          }).format(metric.value!)}{" "}
-                          <small>{metric.unit}</small>
-                        </dd>
-                      </div>
-                    ))}
-                  </dl>
-                )}
-                {product.classification?.categories.length ? (
-                  <div
-                    className="official-composition"
-                    aria-label="地类面积占比"
-                  >
-                    {product.classification.categories
-                      .slice(0, 6)
-                      .map((row) => (
-                        <div
-                          key={row.code}
-                          style={
-                            {
-                              "--class-color": row.color,
-                              "--class-share": `${row.percent}%`,
-                            } as CSSProperties
-                          }
-                        >
-                          <span>
-                            <i />
-                            {row.name}
-                          </span>
-                          <b aria-hidden="true" />
-                          <strong>
+                  {!!secondary.length && (
+                    <dl className="official-metric-strip">
+                      {secondary.map((metric) => (
+                        <div key={metric.key}>
+                          <dt>{metric.label}</dt>
+                          <dd>
                             {new Intl.NumberFormat("zh-CN", {
-                              maximumFractionDigits: 1,
-                            }).format(row.percent)}
-                            %
-                          </strong>
+                              maximumFractionDigits: 2,
+                            }).format(metric.value!)}{" "}
+                            <small>{metric.unit}</small>
+                          </dd>
                         </div>
                       ))}
-                  </div>
-                ) : (
-                  <p className="official-interpretation">
-                    {product.interpretation || product.statisticsMethod}
-                  </p>
-                )}
-              </div>
-            )}
-            {items.length > 1 && (
-              <div className="official-region-controls">
-                <span>{rotating ? "区域轮播中" : "区域浏览"}</span>
-                <Space size={8}>
-                  <Button
-                    aria-label="上一区域"
-                    icon={<ArrowLeftOutlined />}
-                    onClick={() => choose(-1)}
-                  />
-                  <Button
-                    aria-label={paused ? "播放区域轮播" : "暂停区域轮播"}
-                    icon={
-                      paused ? <PlayCircleOutlined /> : <PauseCircleOutlined />
-                    }
-                    onClick={() => setPaused((value) => !value)}
-                  />
-                  <Button
-                    aria-label="下一区域"
-                    icon={<ArrowRightOutlined />}
-                    onClick={() => choose(1)}
-                  />
-                </Space>
+                    </dl>
+                  )}
+                </MonitorPanel>
+                {product.classification?.categories.length ? (
+                  <MonitorPanel title="地类面积占比">
+                    <div className="official-composition">
+                      {product.classification.categories
+                        .slice(0, 6)
+                        .map((row) => (
+                          <div
+                            key={row.code}
+                            style={
+                              {
+                                "--class-color": row.color,
+                                "--class-share": `${row.percent}%`,
+                              } as CSSProperties
+                            }
+                          >
+                            <span>
+                              <i />
+                              {row.name}
+                            </span>
+                            <b aria-hidden="true" />
+                            <strong>
+                              {new Intl.NumberFormat("zh-CN", {
+                                maximumFractionDigits: 1,
+                              }).format(row.percent)}
+                              %
+                            </strong>
+                          </div>
+                        ))}
+                    </div>
+                  </MonitorPanel>
+                ) : explanation ? (
+                  <MonitorPanel title="成果说明">
+                    <p className="official-interpretation">{explanation}</p>
+                  </MonitorPanel>
+                ) : null}
               </div>
             )}
           </aside>

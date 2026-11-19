@@ -6,6 +6,8 @@ from django.db.models import F
 from django.utils.dateparse import parse_datetime
 
 from apps.compute.models import AlgorithmVersion
+from apps.core.initialization import is_guest_user
+from apps.core.permissions import has_feature_perm
 from apps.projects.context import (
     is_superadmin,
     require_live_membership,
@@ -19,7 +21,23 @@ from .scopes import require_registration_project
 def require_manager(user):
     require_live_membership()
     if not is_superadmin(user):
-        raise PermissionDenied("只有超级管理员可以登记或发布业务流")
+        raise PermissionDenied("此操作仅限超级管理员")
+
+
+def can_author(user, flow=None):
+    return bool(
+        user.is_authenticated
+        and user.is_active
+        and not is_guest_user(user)
+        and (flow is None or flow.project_tag_id == selected_project_id())
+        and has_feature_perm(user, "business_flows.author_business_flows")
+    )
+
+
+def require_author(user, flow=None):
+    require_live_membership()
+    if not can_author(user, flow):
+        raise PermissionDenied("没有在当前项目新建或编辑业务流的权限")
 
 
 def validate_bindings(spec, project_id):
@@ -223,14 +241,18 @@ def _locked(flow_id):
 
 
 def check_revision(flow, expected):
-    if not isinstance(expected, str) or parse_datetime(expected) != flow.updated_at:
+    try:
+        revision = parse_datetime(expected) if isinstance(expected, str) else None
+    except ValueError:
+        revision = None
+    if revision != flow.updated_at:
         from apps.compute.packages import ComputeError
 
         raise ComputeError("业务流已由其他页面更新，请刷新后再保存", 409)
 
 
 def publish_version(user, flow, definition, *, expected=None, metadata=None):
-    require_manager(user)
+    require_author(user, flow)
     spec = normalize_definition(definition)
     validate_bindings(spec, flow.project_tag_id)
     with transaction.atomic():
@@ -266,7 +288,7 @@ def publish_version(user, flow, definition, *, expected=None, metadata=None):
 
 
 def register_flow(user, value):
-    require_manager(user)
+    require_author(user)
     code = text(value.get("code"), "业务流编码", 80)
     if not CODE_PATTERN.fullmatch(code):
         raise ValidationError(
@@ -303,7 +325,7 @@ def register_flow(user, value):
 
 
 def update_flow(user, flow, value):
-    require_manager(user)
+    require_author(user, flow)
     with transaction.atomic():
         flow = _locked(flow.pk)
         check_revision(flow, value.get("updatedAt"))
@@ -316,6 +338,8 @@ def update_flow(user, flow, value):
         if "isActive" in value:
             if type(value["isActive"]) is not bool:
                 raise ValidationError("启用标记必须是布尔值")
-            flow.is_active = value["isActive"]
+            if value["isActive"] != flow.is_active:
+                require_manager(user)
+                flow.is_active = value["isActive"]
         flow.save(update_fields=["name", "description", "is_active", "updated_at"])
     return flow
