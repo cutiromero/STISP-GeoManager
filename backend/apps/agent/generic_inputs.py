@@ -14,6 +14,7 @@ from apps.catalog.models import DataResource
 from apps.compute.packages import ComputeError
 from apps.core.storage import vector_geopackage_path
 
+from .archive_inputs import UNIT_FIELDS, registered_fields, registered_units
 from .geology_generic import MINERALS, utm_epsg
 from .workflow_resources import resolve_workflow_resource
 from .workflow_uploads import register_vector
@@ -56,7 +57,7 @@ def working_epsg(lithology):
     return selected
 
 
-def lithology_copy(frame, mapping, epsg):
+def lithology_copy(frame, mapping, epsg, *, archive=None):
     import geopandas as gpd
     import pandas as pd
 
@@ -69,6 +70,18 @@ def lithology_copy(frame, mapping, epsg):
     }
     codes = _text(frame[mapping["geo_sym"]]) if mapping.get("geo_sym") else names
     data["geo_sym"] = codes.where(codes.ne(""), data["name"])
+    if archive:
+        classifications = _text(frame[archive["class_id"]])
+        symbols = _text(frame[archive["geo_sym"]])
+        if (
+            classifications.eq("").any()
+            or symbols.eq("").any()
+            or symbols.groupby(classifications).nunique().gt(1).any()
+        ):
+            raise ComputeError("归档分类编号缺失或同一编号对应多个图面地质符号")
+        # Existing published operators join by this field. The display value
+        # is a separate attribute and follows the donor row during corrections.
+        data.update(geo_sym=classifications, display_symbol=symbols)
     if mapping.get("conf"):
         data["conf"] = pd.to_numeric(frame[mapping["conf"]], errors="coerce").clip(0, 1)
     return gpd.GeoDataFrame(data, geometry=frame.geometry.values, crs=frame.crs).to_crs(
@@ -149,6 +162,52 @@ def units_override(frame, mapping):
     if not units:
         raise ComputeError("填图单元表没有可用的代号")
     return {"units": units, "aliases": aliases}
+
+
+def _unit_context(user, policy, source, mapping, lithology, archive):
+    from apps.catalog.nongeo import _resource_dataframe
+
+    resource = source.get("units")
+    selected = mapping.get("units", {})
+    if archive and resource is None:
+        resource = registered_units(user, policy, source["lithology"])
+        selected = UNIT_FIELDS
+    if resource is None:
+        return None, None
+    frame, total, _ = _resource_dataframe(resource, limit=5000, offset=0)
+    if not archive:
+        return units_override(frame, selected), None
+    if (
+        total != len(frame)
+        or not selected.get("name")
+        or not set(filter(None, selected.values())) <= set(frame.columns)
+        or not selected.get("code")
+    ):
+        raise ComputeError("归档填图单元表需提供完整的分类编号与单元名称")
+    book = _text(frame[selected["code"]])
+    if book.eq("").any() or book.duplicated().any():
+        raise ComputeError("归档填图单元表的分类编号需非空且唯一")
+    unit_names = dict(zip(book, _text(frame[selected["name"]])))
+    missing = set(lithology.geo_sym) - set(book)
+    if missing or any(
+        not unit_names[code] for code in set(lithology.geo_sym) - missing
+    ):
+        raise ComputeError("归档填图单元表不能完整对应本区岩性的分类编号与名称")
+    if (resource.source, resource.project_tag_id, resource.inventory_group_id) != (
+        source["lithology"].source,
+        source["lithology"].project_tag_id,
+        source["lithology"].inventory_group_id,
+    ):
+        raise ComputeError("归档岩性图须配合同批填图单元表；不同地区可能复用相同编号")
+    overrides = units_override(frame, selected)
+    for row in lithology.drop_duplicates("geo_sym").itertuples():
+        overrides["units"][row.geo_sym].update(
+            name=unit_names[row.geo_sym], display_symbol=row.display_symbol
+        )
+    return overrides, {
+        "resourceId": resource.pk,
+        "revision": resource.updated_at.isoformat(),
+    }
 
 
 def placeholder_raster(user, workflow, coverage, resolution):
@@ -289,7 +348,11 @@ def build_inputs(workflow, user, policy) -> None:
     original = _read(source["lithology"])
     check_cancelled(workflow)
     epsg = working_epsg(original)
-    lithology = lithology_copy(original, mapping["lithology"], epsg)
+    archive = registered_fields(source["lithology"], original.columns)
+    lithology = lithology_copy(original, mapping["lithology"], epsg, archive=archive)
+    overrides, vocabulary = _unit_context(
+        user, policy, source, mapping, lithology, archive
+    )
     check_cancelled(workflow)
     coverage = coverage_copy(
         _read(source["coverage"]) if "coverage" in source else None,
@@ -313,11 +376,6 @@ def build_inputs(workflow, user, policy) -> None:
             created,
             sources=source,
         )
-        if "units" in source:
-            from apps.catalog.nongeo import _resource_dataframe
-
-            frame, _, _ = _resource_dataframe(source["units"], limit=5000, offset=0)
-            workflow.plan["unitOverrides"] = units_override(frame, mapping["units"])
         check_cancelled(workflow)
     except Exception:
         # A failed build leaves no half set behind; the retry starts from scratch.
@@ -328,6 +386,11 @@ def build_inputs(workflow, user, policy) -> None:
     inputs = {role: resource.id for role, resource in copies.items()}
     inputs.update(rasters, rules=workflow.plan["rulesResourceId"])
     provided = set(uploads)
+    if overrides is not None:
+        workflow.plan["unitOverrides"] = overrides
+    if vocabulary:
+        workflow.plan["archivedClassification"] = {"fields": archive, **vocabulary}
+        provided.add("units")
     optional_roles = ["faults", "coverage", "units"]
     if "alteration_stack" in rasters:
         if not any(
@@ -351,7 +414,11 @@ def build_inputs(workflow, user, policy) -> None:
         droppedFaults=dropped,
         phase="inputs_ready",
     )
-    workflow.resource_ids = sorted(set(inputs.values()) | set(uploads.values()))
+    workflow.resource_ids = sorted(
+        set(inputs.values())
+        | set(uploads.values())
+        | ({vocabulary["resourceId"]} if vocabulary else set())
+    )
     _save(workflow)
     if workflow.cancel_requested:
         DataResource.objects.filter(pk__in=[r.id for r in created]).update(

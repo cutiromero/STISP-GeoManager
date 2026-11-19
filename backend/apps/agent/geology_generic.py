@@ -15,6 +15,7 @@ from django.db import transaction
 
 from apps.compute.packages import ComputeError
 
+from .archive_inputs import registered_fields
 from .geology_multi import SCENARIO as MULTI_TYPE
 from .workflow_resources import (
     scenario_rule_resources,
@@ -56,7 +57,12 @@ TARGETS = {
             True,
             ("name", "dcmc", "地层", "单元", "岩性", "formation", "unit", "名称", "mc"),
         ),
-        ("geo_sym", "代号", False, ("geo_sym", "sym", "code", "代号", "dh", "symbol")),
+        (
+            "geo_sym",
+            "图面地质符号",
+            False,
+            ("display_symbol", "geo_sym", "sym", "code", "代号", "dh", "symbol"),
+        ),
         (
             "conf",
             "分类置信度（0～1）",
@@ -302,21 +308,40 @@ def _review_roles(workflow, user, policy):
         upload = uploads[identity]
         effective = workflow.plan.get("effectiveInputs", {}).get(role, identity)
         profile = upload.profile
+        resource = upload.resource
         if effective != identity:
-            prepared = resolve_workflow_resource(user, policy, effective, workflow)
+            resource = resolve_workflow_resource(user, policy, effective, workflow)
             cache = workflow.plan.setdefault("preparedInputProfiles", {})
-            key = str(effective) + ":" + prepared.updated_at.isoformat()
+            key = str(effective) + ":" + resource.updated_at.isoformat()
             if key not in cache:
-                cache[key] = catalog_profile(prepared)
+                cache[key] = catalog_profile(resource)
             profile = cache[key]
+        fields = [f["name"] for f in profile.get("fields", [])]
+        targets = heuristic_targets(role, profile) if role in TARGETS else []
+        if role == "lithology" and (archive := registered_fields(resource, fields)):
+            symbol = next(target for target in targets if target["key"] == "geo_sym")
+            symbol.update(
+                required=True,
+                field=archive["geo_sym"],
+                reason="按该资料的登记字段读取图例与图面符号。",
+            )
+            targets.append(
+                {
+                    "key": "class_id",
+                    "label": "归档分类编号",
+                    "required": True,
+                    "field": archive["class_id"],
+                    "reason": "同批填图单元表和原始分类归档以此编号关联图斑。",
+                }
+            )
         roles.append(
             {
                 "role": role,
                 "label": role_label(role),
                 "resourceId": effective,
                 "fileName": upload.file_name,
-                "fields": [f["name"] for f in profile.get("fields", [])],
-                "targets": heuristic_targets(role, profile) if role in TARGETS else [],
+                "fields": fields,
+                "targets": targets,
                 "_profile": profile,
             }
         )
@@ -330,6 +355,12 @@ def _questions(roles):
         for target in item["targets"]
         if target["required"] and not target["field"]
     ]
+
+
+def _archived_role(item):
+    return item["role"] == "lithology" and any(
+        t["key"] == "class_id" for t in item["targets"]
+    )
 
 
 def propose_mapping(workflow, user, policy):
@@ -355,7 +386,7 @@ def propose_mapping(workflow, user, policy):
             > 0
             for item in roles
             for index, target in enumerate(item["targets"])
-            if target["required"]
+            if target["required"] and target["key"] != "class_id"
         )
     )
     try:
@@ -375,8 +406,16 @@ def propose_mapping(workflow, user, policy):
     if proposed is not None:
         mode = "real"
         for item in roles:
+            archived = _archived_role(item)
             for target in item["targets"]:
                 value = proposed.get(item["role"], {}).get(target["key"])
+                if (
+                    archived
+                    and target["key"] in {"geo_sym", "class_id"}
+                    and value
+                    and value["field"] != target["field"]
+                ):
+                    continue
                 if value:
                     target["field"], target["reason"] = value["field"], value["reason"]
     for item in roles:
@@ -401,6 +440,7 @@ def validate_mapping(review, mapping):
         if not isinstance(value, dict) or set(value) - keys:
             raise ComputeError(item["label"] + "的字段对应无效")
         chosen = {}
+        archived = _archived_role(item)
         for target in item["targets"]:
             field = value.get(target["key"])
             if field is not None and (
@@ -409,6 +449,14 @@ def validate_mapping(review, mapping):
                 raise ComputeError(f"{item['label']}没有字段“{field}”")
             if target["required"] and not field:
                 raise ComputeError(f"请指定{item['label']}的“{target['label']}”")
+            if (
+                archived
+                and target["key"] in {"geo_sym", "class_id"}
+                and field != target["field"]
+            ):
+                raise ComputeError(
+                    f"该归档岩性图的{target['label']}登记为“{target['field']}”，请按登记字段确认"
+                )
             chosen[target["key"]] = field
         picked = [field for field in chosen.values() if field]
         if len(picked) != len(set(picked)):

@@ -289,6 +289,195 @@ def test_rejection_reaches_original_producer_and_is_reviewed_again(
     assert_no_human_approval(workflow)
 
 
+@pytest.mark.parametrize("invalid", [None, "truncated", "reference"])
+def test_geology_report_text_preserves_evidence_and_real_independent_review(
+    legacy_flow, monkeypatch, settings, invalid
+):
+    from apps.agent import demo_decisions
+    from apps.agent.report_text import REPORT_MARKER
+    from apps.business_flows.execution_session import initialize
+
+    env = legacy_flow
+    workflow = env["create"]()
+    workflow.plan.update(executionPolicy="rule_geology_v2", algorithms={})
+    initialize(workflow)
+    workflow.save(update_fields=["parameters", "plan"])
+    settings.AGENT_MODELS[0] = {**settings.AGENT_MODELS[0], "model_id": "qwen-fixture"}
+    stage = {"name": "final_analysis", "identifier": "finish"}
+    reports = [
+        '[ACTION]\nfinish\n[SUMMARY]\n对照实际统计。\n[FINDINGS]\n核查原始 "U035" 分类范围。'
+        "\n[LIMITATIONS]\n需补充现场资料。\n[REFERENCES]\noutput:17\n[END]",
+        '[ACTION]\nfinish\n[SUMMARY]\n对照实际统计。\n[FINDINGS]\n"U035" 为当前分类编号，图面符号为 Tnc¹。'
+        "\n[LIMITATIONS]\n现场接触关系有待核实。\n[REFERENCES]\noutput:17\n[END]",
+    ]
+    rejects = (
+        '[DECISION]\nrequest_changes\n[REASON]\n报告未区分 "U035" 和图面符号。'
+        '\n[CHANGES]\n注明 "U035" 的性质。\n[EVIDENCE]\nnode-result\n[END]'
+    )
+    accepts = (
+        '[DECISION]\naccept\n[REASON]\n实际统计和 "U035" 分类的说明已核对。'
+        "\n[CHANGES]\n无\n[EVIDENCE]\nnode-result\n[END]"
+    )
+    first = {
+        "truncated": reports[0].removesuffix("[END]"),
+        "reference": reports[0].replace("output:17", "output:99"),
+    }.get(invalid)
+    scripted = iter(
+        ([first] if first is not None else [])
+        + [reports[0], rejects, reports[1], accepts]
+    )
+    requests, thinking = [], []
+    evidence = [
+        {
+            "outputId": 17,
+            "key": "statistics",
+            "kind": "table",
+            "taskId": "fixture-check",
+            "rows": [{"rule_id": "L-08", "issue_count": 8}],
+            "checksum": "fixture-source",
+        }
+    ]
+
+    def stream(model, messages, maximum, guard, **options):
+        guard()
+        assert options["structured"] is False
+        packet = json.loads(messages[1]["content"])
+        requests.append((messages, packet))
+        if options.get("on_thinking"):
+            options["on_thinking"]("核对字段的实际含义")
+        yield next(scripted)
+
+    def produce():
+        return demo_decisions.decide(
+            workflow,
+            env["user"],
+            default_policy(),
+            stage,
+            evidence,
+            lambda: None,
+            on_thinking=thinking.append,
+        )
+
+    monkeypatch.setattr(review.provider, "stream", stream)
+    monkeypatch.setattr(demo_decisions, "resource_context", lambda *args: [])
+    with project_scope(env["scope"]):
+        accepted, edits = review_stage(env, workflow, stage, produce(), produce)
+    assert not edits and '"U035" 为当前分类编号' in accepted["findings"][0]
+    assert accepted["evidenceRefs"][0]["id"] == "17"
+    assert len(requests) == 4 + bool(invalid)
+    assert len(thinking) == 2 + bool(invalid)
+    assert REPORT_MARKER in requests[0][0][0]["content"]
+    assert state(workflow)["nodes"]["finish"]["reviewer"]["status"] == "passed"
+    assert workflow.plan["stages"][0]["decision"]["judgement"] == "初始建议"
+    assert not workflow.steps.filter(kind="submit_operator").exists()
+
+
+def test_geology_text_review_rejects_contradictory_pass(legacy_flow, monkeypatch):
+    from apps.business_flows.execution_session import initialize
+
+    env = legacy_flow
+    workflow = env["create"]()
+    workflow.plan["executionPolicy"] = "rule_geology_v2"
+    initialize(workflow)
+    workflow.save(update_fields=["parameters", "plan"])
+    calls = []
+
+    def stream(model, messages, maximum, guard, **options):
+        calls.append(messages)
+        yield (
+            "[DECISION]\naccept\n[REASON]\n实际统计支持。\n[CHANGES]\n还需修改结论。"
+            "\n[EVIDENCE]\nnode-result\n[END]"
+        )
+
+    monkeypatch.setattr(review.provider, "stream", stream)
+    producer = Mock()
+    with pytest.raises(ContextReviewRequired, match="矛盾"):
+        review_stage(
+            env,
+            workflow,
+            {"name": "final_analysis", "identifier": "finish"},
+            ({"judgement": "实际结果"}, []),
+            producer,
+        )
+    assert len(calls) == 2
+    producer.assert_not_called()
+    assert_no_human_approval(workflow)
+
+
+def test_geology_report_revalidates_saved_json_under_original_request(
+    legacy_flow, monkeypatch, settings
+):
+    from apps.agent import demo_decisions, report_text
+    from apps.business_flows.execution_session import initialize
+
+    env = legacy_flow
+    workflow = env["create"]()
+    workflow.plan.update(executionPolicy="rule_geology_v2", algorithms={})
+    initialize(workflow)
+    workflow.save(update_fields=["parameters", "plan"])
+    settings.AGENT_MODELS[0] = {**settings.AGENT_MODELS[0], "model_id": "qwen-fixture"}
+    stage = {"name": "final_analysis", "identifier": "finish"}
+    evidence = [
+        {
+            "outputId": 17,
+            "key": "statistics",
+            "kind": "table",
+            "taskId": "fixture-check",
+            "rows": [{"rule_id": "L-08", "issue_count": 8}],
+            "checksum": "fixture-source",
+        }
+    ]
+    old_response = {
+        "decision": {
+            "problem": workflow.goal,
+            "findings": ['核对原始 "U035" 及相邻单元。'],
+            "judgement": "已有检查统计。",
+            "uncertainties": ["需现场核实。"],
+            "nextAction": "finish",
+            "algorithmReason": "采用已读取统计。",
+            "evidenceRefs": [{"kind": "output", "id": "17"}],
+            "resultSummary": "核对本轮检查与处置结果。",
+        },
+        "edits": [],
+    }
+    monkeypatch.setattr(demo_decisions, "resource_context", lambda *args: [])
+
+    def record(attempt):
+        if attempt["status"] == "requesting":
+            attempt["requested"] = True
+            workflow.plan["actualModelCallCount"] = 1
+
+    def produce(callback=None):
+        return demo_decisions.decide(
+            workflow,
+            env["user"],
+            default_policy(),
+            stage,
+            evidence,
+            lambda: None,
+            callback,
+        )
+
+    workflow.iteration = 1
+    with project_scope(env["scope"]):
+        with monkeypatch.context() as before_upgrade:
+            before_upgrade.setattr(report_text, "enabled", lambda _workflow: False)
+            before_upgrade.setattr(
+                review.provider,
+                "stream",
+                lambda *args, **kwargs: iter(
+                    [json.dumps(old_response, ensure_ascii=False)]
+                ),
+            )
+            original = produce(record)
+        network = Mock(side_effect=AssertionError("历史已接受报告不能重新生成"))
+        monkeypatch.setattr(review.provider, "stream", network)
+        assert produce() == original
+    network.assert_not_called()
+    assert stage["recoveredModelAttempt"] == 1
+    assert workflow.plan["actualModelCallCount"] == 1
+
+
 @pytest.mark.parametrize("maximum", [0, 1])
 def test_professional_review_stops_at_published_repair_limit(
     legacy_flow, monkeypatch, maximum
@@ -759,8 +948,6 @@ def final_protocol_wait(env, status, *, duplicate=False):
 def test_final_review_resumes_through_public_decision_without_reexecuting_science(
     legacy_flow, status, duplicate, history_only
 ):
-    from apps.business_flows import runtime
-
     env = legacy_flow
     workflow = final_protocol_wait(env, status, duplicate=duplicate)
     if history_only:
@@ -771,32 +958,37 @@ def test_final_review_resumes_through_public_decision_without_reexecuting_scienc
         workflow.save(update_fields=["plan"])
     scientific = deepcopy(workflow.plan["stages"][: workflow.plan["stageIndex"]])
     human = deepcopy(state(workflow)["nodes"]["apply"]["human"])
-    with project_scope(env["scope"]):
-        public = runtime.serialize_run(env["user"], workflow)
-        node = next(row for row in public["nodes"] if row["nodeId"] == "finish")
-        assert public["status"] == status and node["status"] == "waiting_context"
-        current = runtime.decide_flow(
-            env["user"],
-            workflow,
-            {
-                "nodeId": "finish",
-                "decision": "retry_context",
-                "revision": public["revision"],
-                "idempotencyKey": uuid4().hex,
-            },
-        )
-        assert current.status == "queued"
-        assert current.plan["stages"] == scientific
-        assert current.plan["actualModelCallCount"] == 2
-        assert current.plan["finalStage"]["modelAttempts"][-1]["accepted"] is True
-        assert current.plan["finalStage"].get("status") is None
-        assert not current.plan["finalStage"].get("contextBudgetReview")
-        if duplicate:
-            assert {"previousRetry": "保留原恢复审计"} in current.plan["finalStage"][
-                "modelBudgetHistory"
-            ]
-        assert state(current)["nodes"]["apply"]["human"] == human
-        assert not current.steps.filter(kind="submit_operator").exists()
+    path = f"/api/business-flows/runs/{workflow.pk}/"
+    response = env["client"].get(path, **env["header"])
+    assert response.status_code == 200, response.content
+    public = response.json()
+    node = next(row for row in public["nodes"] if row["nodeId"] == "finish")
+    assert public["status"] == status and node["status"] == "waiting_context"
+    response = env["client"].post(
+        path + "decide/",
+        {
+            "nodeId": "finish",
+            "decision": "retry_context",
+            "revision": public["revision"],
+            "idempotencyKey": uuid4().hex,
+        },
+        content_type="application/json",
+        **env["header"],
+    )
+    assert response.status_code == 200, response.content
+    workflow.refresh_from_db()
+    assert workflow.status == "queued"
+    assert workflow.plan["stages"] == scientific
+    assert workflow.plan["actualModelCallCount"] == 2
+    assert workflow.plan["finalStage"]["modelAttempts"][-1]["accepted"] is True
+    assert workflow.plan["finalStage"].get("status") is None
+    assert not workflow.plan["finalStage"].get("contextBudgetReview")
+    if duplicate:
+        assert {"previousRetry": "保留原恢复审计"} in workflow.plan["finalStage"][
+            "modelBudgetHistory"
+        ]
+    assert state(workflow)["nodes"]["apply"]["human"] == human
+    assert not workflow.steps.filter(kind="submit_operator").exists()
 
 
 @pytest.mark.parametrize("conflict", ["request", "response"])

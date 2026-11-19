@@ -314,7 +314,7 @@ export function reviewLegend(...data: GeoJsonFeatureCollection[]) {
         key,
         name: p.unit_color_by_name
           ? String(p.legend_label ?? p.name)
-          : `${String(p.name ?? "地质单元")} / ${String(p.geo_sym ?? p.code ?? key)}`,
+          : `${String(p.name ?? "地质单元")} / ${String(p.display_symbol ?? p.geo_sym ?? p.code ?? key)}`,
         color:
           typeof p.fill_color === "string" &&
           /^#[\da-f]{6}$/i.test(p.fill_color)

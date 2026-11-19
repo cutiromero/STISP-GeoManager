@@ -18,6 +18,7 @@ export const priorityFieldLabels: Record<string, readonly [string, string]> = {
   mean_change: ["平均变化值", "Mean change"],
   decline_fraction: ["下降面积占比", "Declining area fraction"],
   name: ["名称", "Name"],
+  display_symbol: ["地质符号", "Geologic symbol"],
   geo_sym: ["地质代号", "Geologic code"],
   geo_unit: ["地质单元", "Geologic unit"],
   conf: ["分类置信度", "Classification confidence"],
@@ -48,6 +49,7 @@ export const isHiddenField = (key: string) =>
 const summaryFields = [
   "name",
   "formation",
+  "display_symbol",
   "geo_sym",
   "geologic_age",
   "grade",
@@ -56,7 +58,14 @@ const summaryFields = [
   "area_m2",
 ];
 
-export function fieldLabel(key: string, english = false) {
+export function fieldLabel(
+  key: string,
+  english = false,
+  properties?: Record<string, unknown>,
+) {
+  if (key === "geo_sym" && properties?.display_symbol) {
+    return english ? "Classification ID" : "分类编号";
+  }
   return priorityFieldLabels[key]?.[english ? 1 : 0] ?? key;
 }
 
@@ -70,5 +79,8 @@ export function summaryEntries(properties: Record<string, unknown>) {
   );
   return [...named, ...rest]
     .slice(0, 4)
-    .map((key) => [fieldLabel(key), String(properties[key] ?? "-")] as const);
+    .map(
+      (key) =>
+        [fieldLabel(key, false, properties), String(properties[key] ?? "-")] as const,
+    );
 }

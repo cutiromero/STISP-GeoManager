@@ -26,7 +26,9 @@ INSTRUCTION = (
     "对每份资料，依据字段名、类型、示例取值和取值个数，判断哪个原始字段对应每个规范字段。"
     "只能选择该资料fields中真实存在的字段名；没有合适字段时field为null，不猜测。"
     "地层或填图单元名称通常是取值为组、群、段、岩体或岩性描述的文本字段；"
-    "代号通常是较短的字母数字组合，常带地质时代符号；置信度是0到1之间的数值。"
+    "图面地质符号用于地质图图例，常含地质时代符号。归档分类编号用于关联栅格分类与填图单元表，"
+    "例如U035是分类编号，Tnc¹是图面地质符号。字段名可能与其实际含义不同。"
+    "已提供registeredField时按资料登记的含义，置信度是0到1之间的数值。"
     "同一字段不能对应多个规范字段。reason用一句中文说明判断依据，并引用示例取值。"
     "如提供ruleContext和ruleSampleMatches，可将名称或代号的精确匹配作为辅助依据，"
     "结合资料内容判断；统计只覆盖已显示且可能截断的样本，未命中不表示没有规则。"
@@ -42,7 +44,17 @@ def _payload(roles, rule_context=None):
                 "label": item["label"],
                 "fields": item["_profile"].get("fields", []),
                 "targets": [
-                    {"key": t["key"], "label": t["label"], "required": t["required"]}
+                    {
+                        "key": t["key"],
+                        "label": t["label"],
+                        "required": t["required"],
+                        **(
+                            {"registeredField": t["field"]}
+                            if any(row["key"] == "class_id" for row in item["targets"])
+                            and t["key"] in {"geo_sym", "class_id"}
+                            else {}
+                        ),
+                    }
                     for t in item["targets"]
                 ],
             }

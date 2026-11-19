@@ -194,6 +194,7 @@ def request_node_result(
     tools=None,
     required_evidence_ids=None,
     protocol_repair=False,
+    structured=True,
 ):
     """Run a fresh request; persistence and all actual operations stay in the runtime."""
     if role not in {"executor", "reviewer"}:
@@ -330,7 +331,13 @@ def request_node_result(
         if registry().get(alias) != model:
             raise PermissionDenied("业务流模型配置已变化")
 
-    checked = ModelStreamGuard(authorize, started + effective["maxRunSeconds"])
+    checked = ModelStreamGuard(
+        authorize,
+        started + effective["maxRunSeconds"],
+        timeout_message="报告审核请求达到单次时限，已保留已完成成果"
+        if not structured and role == "reviewer"
+        else "场景分析已停止或达到本步时限",
+    )
     record = {
         "requestId": uuid4().hex,
         "role": role,
@@ -741,7 +748,7 @@ def request_node_result(
                 messages,
                 effective["maxOutputTokens"],
                 checked,
-                structured=True,
+                structured=structured,
                 thinking=thinking,
                 temperature=min(live["temperature"], 0.1),
                 top_p=live["topP"],
@@ -766,12 +773,14 @@ def request_node_result(
         if activity is not None:
             activity.response(raw, append=False)
         checked.poll()
-        normalized = _structured_text(raw)
+        normalized = _structured_text(raw) if structured else raw.strip()
         publish(
             "validating",
             responseSha256=_digest(raw),
             responseBytes=size,
-            responseFormat="json_fence" if normalized != raw.strip() else "json",
+            responseFormat=("json_fence" if normalized != raw.strip() else "json")
+            if structured
+            else "text",
         )
         try:
             result = validate(normalized, available)

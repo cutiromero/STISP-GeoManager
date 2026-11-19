@@ -1164,6 +1164,18 @@ def _collect_stage(workflow, user, p, stage, task) -> bool:
                 output_refs={"taskId": str(task.id), "results": stage["results"]},
             )
             _save(workflow)
+    if stage["name"] == "check" and workflow.plan.get("archivedClassification"):
+        if any(
+            row.get("metadata", {})
+            .get("qualityCheck", {})
+            .get("metrics", {})
+            .get("archive_comparison")
+            is False
+            for row in stage["results"]
+        ):
+            raise ComputeError(
+                "本次岩性初检未启用归档分类对照。请核对登记的分类编号、范围和规则版本后重试。"
+            )
     outputs = list(task.outputs.exclude(kind="archive").order_by("id"))
     if not stage.get("manualApproved"):
         try:
@@ -1554,8 +1566,14 @@ def advance_demo(workflow_id) -> None:
                         workflow, stage, _minimum_model_requests(workflow, stage)
                     )
                     return
+                from .report_text import enabled as report_text_enabled
+
+                professional_report = stage[
+                    "identifier"
+                ] == "finish" and report_text_enabled(workflow)
                 deadline, heartbeat_at = (
-                    time.monotonic() + model_policy["maxRunSeconds"],
+                    time.monotonic()
+                    + model_policy["maxRunSeconds"] * (2 if professional_report else 1),
                     [0.0],
                 )
 
@@ -1575,7 +1593,13 @@ def advance_demo(workflow_id) -> None:
                         )
                         heartbeat_at[0] = time.monotonic()
 
-                guard = ModelStreamGuard(check_stream_authorization, deadline)
+                guard = ModelStreamGuard(
+                    check_stream_authorization,
+                    deadline,
+                    timeout_message="报告节点达到累计时限，已保留计算及本节点记录"
+                    if professional_report
+                    else "场景分析已停止或达到本步时限",
+                )
                 activity = WorkflowModelActivity(
                     workflow,
                     "规划算子执行方案" if planning else stage_title(workflow, stage),

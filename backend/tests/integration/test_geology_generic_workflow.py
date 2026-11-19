@@ -5,12 +5,16 @@ import json
 import uuid
 
 import geopandas as gpd
+import pandas as pd
 import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
 from shapely.geometry import LineString, Polygon, box
 
+from apps.agent.archive_inputs import ARCHIVE_SOURCE
 from apps.agent.demo_workflow import confirm_demo, prepare_demo
 from apps.agent.generic_inputs import (
+    _read,
+    build_inputs,
     coverage_copy,
     faults_copy,
     lithology_copy,
@@ -20,8 +24,13 @@ from apps.agent.generic_inputs import (
 from apps.agent.geology_generic import heuristic_targets, utm_epsg, validate_mapping
 from apps.agent.models import AgentWorkflow, WorkflowUpload
 from apps.agent.workflow_creation import create_workflow
-from apps.agent.workflow_uploads import store_upload
-from apps.catalog.models import DataResource
+from apps.agent.workflow_uploads import (
+    add_catalog_references,
+    register_table,
+    register_vector,
+    store_upload,
+)
+from apps.catalog.models import DataResource, DataResourceGroup
 from apps.compute.packages import ComputeError
 from apps.projects.context import ProjectScope, project_scope
 from tests.integration.test_compute import setup_compute  # noqa: F401
@@ -242,6 +251,85 @@ def test_working_copies_keep_canonical_fields_and_fill_absent_inputs():
     assert empty.empty and list(empty.columns) == ["line_id", "geometry"]
 
 
+def test_archive_field_confirmation_keeps_distinct_classes_with_the_same_symbol(
+    generic,
+):
+    source = ARCHIVE_SOURCE + "wulong"
+    actor = generic["owner"]
+    generic["project"].code = "02"
+    generic["project"].save(update_fields=["code"])
+    groups = [
+        DataResourceGroup.objects.create(name=region) for region in ("五龙沟", "都兰")
+    ]
+    original = gpd.GeoDataFrame(
+        {
+            "name": ["岩性甲", "岩性乙"],
+            "geo_sym": ["U035", "U036"],
+            "display_symbol": ["Tnc¹", "Tnc¹"],
+        },
+        geometry=[
+            box(600000, 4000000, 600030, 4000030),
+            box(600030, 4000000, 600060, 4000030),
+        ],
+        crs=32646,
+    )
+    resource = register_vector(original, user=actor, name="五龙沟岩性", source=source)
+    book = pd.DataFrame(
+        {
+            "code": ["U035", "U036"],
+            "name": ["岩性甲", "岩性乙"],
+            "category": ["stratum", "stratum"],
+            "age_ma": [220, 218],
+            "group": ["volcanic", "clastic"],
+            "favorable": [1, 0],
+        }
+    )
+    units = register_table(book, user=actor, name="五龙沟单元表", source=source)
+    other_book = register_table(
+        book.assign(name=["另一区甲", "另一区乙"]),
+        user=actor,
+        name="都兰单元表",
+        source=ARCHIVE_SOURCE + "dulan",
+    )
+    for item, group in (
+        (resource, groups[0]),
+        (units, groups[0]),
+        (other_book, groups[1]),
+    ):
+        item.inventory_group = group
+        item.owner_only = False
+        item.save(update_fields=["inventory_group", "owner_only"])
+    add_catalog_references(
+        actor, generic["project"].id, generic["batch"], [resource.pk]
+    )
+    workflow = _create(generic, {"lithology": resource.pk})
+    prepare_demo(workflow, actor, generic["policy"])
+    workflow.refresh_from_db()
+    review = workflow.plan["fieldMappingReview"]
+    targets = {t["key"]: t["field"] for t in review["roles"][0]["targets"]}
+    assert (targets["geo_sym"], targets["class_id"]) == ("display_symbol", "geo_sym")
+    with pytest.raises(ComputeError, match="登记为"):
+        validate_mapping(review, {"lithology": {**targets, "geo_sym": "geo_sym"}})
+    confirm_demo(
+        workflow,
+        actor,
+        generic["policy"],
+        workflow.plan_hash,
+        field_mapping={"lithology": targets},
+    )
+    build_inputs(workflow, actor, generic["policy"])
+    assert workflow.plan["archivedClassification"]["resourceId"] == units.pk
+    assert workflow.plan["unitOverrides"]["units"]["U035"]["name"] == "岩性甲"
+    assert other_book.pk not in workflow.resource_ids
+    copied = _read(
+        DataResource.objects.get(pk=workflow.plan["workingCopies"]["lithology"])
+    )
+    assert copied.geo_sym.tolist() == ["U035", "U036"]
+    assert copied.display_symbol.tolist() == ["Tnc¹", "Tnc¹"]
+    assert copied.geometry.equals(original.geometry)
+    assert _read(resource).equals(original)
+
+
 def test_adjacent_utm_source_preserves_shared_lithology_edges():
     x, y = 850_000, 4_250_000
     frame = gpd.GeoDataFrame(
@@ -263,9 +351,12 @@ def test_adjacent_utm_source_preserves_shared_lithology_edges():
     )
     assert utm_epsg(frame.to_crs(4326).total_bounds) == 32647
     reprojected = frame.to_crs(32647)
-    assert reprojected.geometry.iloc[0].boundary.intersection(
-        reprojected.geometry.iloc[1].boundary
-    ).length == 0
+    assert (
+        reprojected.geometry.iloc[0]
+        .boundary.intersection(reprojected.geometry.iloc[1].boundary)
+        .length
+        == 0
+    )
     copied = lithology_copy(frame, {"name": "name"}, working_epsg(frame))
     left, right = copied.geometry
     assert copied.crs.to_epsg() == 32646
@@ -458,6 +549,7 @@ def test_raster_upload_is_private_from_import_and_off_the_layer_list(generic, ba
         catalog_sync.DataResource.objects.update_or_create = original
     assert upload.role_hint == "hematite"
     from apps.agent.workflow_uploads import catalog_profile
+
     profile = catalog_profile(upload.resource)
     assert profile["bandCount"] == bands
     assert profile["bandNames"] == [f"实际类别{band}" for band in range(1, bands + 1)]

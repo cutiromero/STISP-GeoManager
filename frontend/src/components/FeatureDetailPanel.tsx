@@ -2,7 +2,7 @@ import { AimOutlined, InfoCircleOutlined } from "@ant-design/icons";
 import { Descriptions, Empty, Tag, Typography } from "antd";
 import { useTranslation } from "react-i18next";
 import type { FeatureInfo } from "../types";
-import { isHiddenField, priorityFieldLabels } from "../map/featureFields";
+import { fieldLabel, isHiddenField, priorityFieldLabels } from "../map/featureFields";
 
 interface Props {
   feature: FeatureInfo | null;
@@ -45,7 +45,7 @@ export default function FeatureDetailPanel({ feature }: Props) {
               {entries.map(([key, value]) => (
                 <Descriptions.Item
                   key={key}
-                  label={priorityFieldLabels[key]?.[english ? 1 : 0] ?? key}
+                  label={fieldLabel(key, english, feature.properties)}
                 >
                   <span className="feature-detail-value">
                     {String(value ?? "-")}

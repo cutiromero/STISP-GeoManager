@@ -109,6 +109,12 @@ def node_definition(workflow, stage):
         )
         node["contract"]["tools"] = [*TOOLS, "read_task_record"]
         node["contract"]["acceptance"][0] = "已查询登记版本并按真实输入和清单参数预检"
+    if workflow.plan.get("archivedClassification"):
+        node["instruction"] += (
+            "本次使用已登记的归档岩性分类。岩性端口沿用已确认的工作副本或清洗产物；"
+            "其geo_sym是算子连接分类编号的字段，display_symbol是图面地质符号。"
+            "保留算子清单的字段映射，不把stratum_code改为display_symbol。"
+        )
     return node
 
 
@@ -140,13 +146,24 @@ def visible_inputs(workflow, node):
     return values
 
 
-def check_protected_inputs(inputs, expected):
+def check_protected_inputs(body, expected, *, archived=False):
+    inputs = body["inputs"]
     if any(
         inputs.get(key) != identity
         for key, identity in expected.items()
         if key in {"rules", "approved_changes"}
     ):
         raise ComputeError("规则依据或获批处置凭据不能由输入绑定替换")
+    if (
+        archived
+        and "lithology" in expected
+        and (
+            inputs.get("lithology") != expected["lithology"]
+            or body["fieldMappings"].get("lithology", {}).get("stratum_code", "geo_sym")
+            != "geo_sym"
+        )
+    ):
+        raise ComputeError("归档对照须使用已确认的岩性资料及归档分类编号字段geo_sym")
 
 
 def ancestor_output_ids(workflow, node):
@@ -181,8 +198,9 @@ def check_submission(workflow, node, version, body):
         raise ComputeError("科学参数与已确认配方不一致，请保留原值或请求用户重新确认")
     if session(workflow):
         check_protected_inputs(
-            body["inputs"],
+            body,
             state(workflow)["nodes"][node["id"]]["toolLoop"].get("approvedInputs", {}),
+            archived=bool(workflow.plan.get("archivedClassification")),
         )
         return
     # Canonical fields were confirmed before working copies were created. A
@@ -219,7 +237,11 @@ def revalidate_inputs(workflow, user, policy, node, body):
     if not session(workflow) and body["inputs"] != _inputs(workflow, stage):
         raise ComputeError("实际输入与当前专业科学方案不一致，不能提交计算")
     if session(workflow):
-        check_protected_inputs(body["inputs"], _inputs(workflow, stage))
+        check_protected_inputs(
+            body,
+            _inputs(workflow, stage),
+            archived=bool(workflow.plan.get("archivedClassification")),
+        )
 
 
 def catalog_rows(workflow, user, policy, node, arguments):

@@ -159,6 +159,13 @@ def install_model(monkeypatch, *, mapping_failure=False):
         packet = json.loads(messages[1]["content"])
         calls.append((deepcopy(packet), options))
         options["on_thinking"]("正在核对本节点实际输入、预检诊断与统计依据。")
+        if options["structured"] is False:
+            assert packet["node"]["id"] == "finish"
+            yield (
+                "[DECISION]\naccept\n[REASON]\n实际统计支持结论，处置范围已核对。"
+                "\n[CHANGES]\n无\n[EVIDENCE]\nnode-result\n[END]"
+            )
+            return
         if "nodeContext" not in packet:
             answer = {
                 "decision": "accept",

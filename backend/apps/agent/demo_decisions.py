@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import time
 from copy import deepcopy
 
 from apps.compute.packages import ComputeError
@@ -26,6 +27,7 @@ from .decision_budget import (
 from .decision_text import clipped, normalize_items
 from .decision_audit import response_artifact
 from .demo_execution_evidence import execution_evidence_scope
+from . import report_text as report_wire
 
 FIELDS = {
     "problem",
@@ -780,12 +782,18 @@ def _validate_response(
     execution_state=None,
     allow_partial=False,
     model_payload=None,
+    text_report=False,
 ) -> tuple[dict, list]:
-    cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw).strip()
-    try:
-        value = json.loads(cleaned)
-    except (ValueError, TypeError) as exc:
-        raise ComputeError(f"模型分析响应不是有效JSON：{exc}；已保留此前结果") from exc
+    if text_report:
+        value = report_wire.report_value(raw, getattr(workflow, "goal", ""))
+    else:
+        cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw).strip()
+        try:
+            value = json.loads(cleaned)
+        except (ValueError, TypeError) as exc:
+            raise ComputeError(
+                f"模型分析响应不是有效JSON：{exc}；已保留此前结果"
+            ) from exc
     if not isinstance(value, dict) or set(value) != {"decision", "edits"}:
         raise ComputeError(
             f"模型分析响应必须仅包含decision与edits，实际类型为 {type(value).__name__}，字段为 {list(value) if isinstance(value, dict) else '不适用'}"
@@ -1098,6 +1106,15 @@ def _decide_once(
     refs = evidence_refs(workflow, context, results)
     if model.model_id.casefold().startswith("mock") and not stage.get("modelAttempts"):
         return _mock_decision(model, stage, refs, results, workflow)
+    professional_report = stage["identifier"] == "finish" and report_wire.enabled(
+        workflow
+    )
+    # Continue validating an existing JSON attempt with its original prompt and
+    # evidence. A new report or revision uses the text protocol.
+    text_report = professional_report and (
+        not stage.get("modelAttempts")
+        or report_wire.REPORT_MARKER in stage.get("modelRequestInstruction", "")
+    )
 
     def progress(status, **values):
         if on_progress:
@@ -1362,6 +1379,11 @@ def _decide_once(
             "降权后仍可存在问题记录，不得声称全部清零；set_code是代号修正，不能与reclassify统称岩性重分类。"
             "不得编造野外观测、修改、矿化证据或找矿成果；远景为零时如实说明。"
         )
+        if text_report:
+            instruction = report_wire.REPORT_INSTRUCTION
+            payload["reportTemplate"].update(
+                summaryField="[SUMMARY]", analysisField="[FINDINGS]"
+            )
     from apps.business_flows.execution_session import guidance, request_context
 
     from apps.business_flows.model_recovery import guidance_context
@@ -1607,13 +1629,20 @@ def _decide_once(
         chunks = []
         output_chars = 0
         progress("requesting", attempt=attempt + 1, outputChars=0)
+        request_guard = guard
+        if professional_report:
+            request_guard = ModelStreamGuard(
+                guard.poll if isinstance(guard, ModelStreamGuard) else guard,
+                time.monotonic() + policy["maxRunSeconds"],
+                timeout_message="报告撰写请求达到单次时限，已保留计算及本节点记录",
+            )
         try:
             for chunk in provider.stream(
                 model,
                 messages,
                 output_limit,
-                guard,
-                structured=True,
+                request_guard,
+                structured=not text_report,
                 thinking=thinking,
                 temperature=policy["temperature"],
                 top_p=policy["topP"],
@@ -1621,8 +1650,8 @@ def _decide_once(
                 on_usage=record["usage"].update,
                 on_thinking=on_thinking,
                 **(
-                    {"monitor_guard": guard.poll}
-                    if isinstance(guard, ModelStreamGuard)
+                    {"monitor_guard": request_guard.poll}
+                    if isinstance(request_guard, ModelStreamGuard)
                     else {}
                 ),
             ):
@@ -1672,6 +1701,7 @@ def _decide_once(
                 execution_state=payload["executionState"],
                 allow_partial=bool(attempt),
                 model_payload=visible_payload(payload, budget_level),
+                text_report=text_report,
             )
         except ComputeError as exc:
             record.update(
@@ -1794,6 +1824,19 @@ def _repair_feedback(stage, payload, error):
 
 def _retry_messages(base, raw, feedback, level):
     messages = [dict(message) for message in base]
+    if report_wire.REPORT_MARKER in messages[0]["content"]:
+        diagnostic = json.loads(feedback)["validationError"][
+            : max(80, 500 // (level + 1))
+        ]
+        return [
+            *messages,
+            {
+                "role": "user",
+                "content": "上次报告没有通过校验。按同一份证据修正："
+                + diagnostic
+                + "。只返回完整的分段报告文本，以 [END] 结束；不输出 JSON。",
+            },
+        ]
     if level == 0:
         return [
             *messages,
@@ -1881,6 +1924,7 @@ def _recover_decision(
     # Fresh facts must match before replaying the exact serialized request.
     # Equal dictionaries can arrive in a different key order after a restart.
     payload = deepcopy(stage["modelRequestPayload"])
+    text_report = report_wire.REPORT_MARKER in instruction
     original_messages = [dict(message) for message in messages]
     original_messages[1]["content"] = json.dumps(
         payload,
@@ -1946,6 +1990,7 @@ def _recover_decision(
                     model_payload=visible_payload(
                         payload, previous.get("budgetLevel", 0)
                     ),
+                    text_report=text_report,
                 )
             except ComputeError as exc:
                 feedback = _repair_feedback(stage, payload, exc)
@@ -2004,6 +2049,7 @@ def _recover_decision(
         execution_state=payload["executionState"],
         allow_partial=len(attempts) == 2,
         model_payload=visible_payload(payload, last.get("budgetLevel", 0)),
+        text_report=text_report,
     )
     decision.update(modelMode="real", modelName=model.name)
     stage["recoveredModelAttempt"] = last["attempt"]

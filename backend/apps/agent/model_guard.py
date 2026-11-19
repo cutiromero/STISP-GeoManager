@@ -17,11 +17,13 @@ class ModelStreamGuard:
         *,
         interval: float = 0.5,
         clock: Callable[[], float] | None = None,
+        timeout_message: str = "场景分析已停止或达到本步时限",
     ) -> None:
         if not 0 < interval <= 0.5:
             raise ValueError("模型授权检查间隔必须大于0且不超过0.5秒")
         self._check = check
         self._deadline = deadline
+        self._timeout_message = timeout_message
         self._interval = interval
         self._clock = clock or time.monotonic
         self._next_check = float("-inf")
@@ -31,7 +33,7 @@ class ModelStreamGuard:
     def _check_deadline(self) -> float:
         current = self._clock()
         if current > self._deadline:
-            raise ModelError("场景分析已停止或达到本步时限")
+            raise ModelError(self._timeout_message)
         return current
 
     def __call__(self) -> None:
