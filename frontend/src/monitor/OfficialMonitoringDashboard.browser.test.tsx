@@ -89,9 +89,13 @@ it("轮播切换真实区域指标和已登记图层，不查询来源或执行�
   });
   show("landcover");
   const map = screen.getByRole("region", { name: "正式成果地图" });
-  const region = screen.getByRole("complementary", { name: "区域观测指标" });
+  const stats = () => screen.getByRole("region", { name: "有效统计面积" });
   await within(map).findByRole("heading", { name: "环江一号区" });
-  await waitFor(() => expect(within(region).getByText("1,832")).toBeVisible());
+  await waitFor(() => expect(within(stats()).getByText("1,832")).toBeVisible());
+  const overview = screen.getByRole("region", { name: "区域成果一览" });
+  const first = within(overview).getByRole("button", { name: /环江一号区/ });
+  const second = within(overview).getByRole("button", { name: /环江二号区/ });
+  expect(first).toHaveAttribute("aria-pressed", "true");
   expect(screen.getByTestId("official-map-handoff")).toHaveTextContent(
     '[9,true,"style-9"]',
   );
@@ -101,14 +105,156 @@ it("轮播切换真实区域指标和已登记图层，不查询来源或执行�
       within(map).getByRole("heading", { name: "环江二号区" }),
     ).toBeVisible(),
   );
-  await waitFor(() => expect(within(region).getByText("410")).toBeVisible());
+  await waitFor(() => expect(within(stats()).getByText("410")).toBeVisible());
+  expect(second).toHaveAttribute("aria-pressed", "true");
   expect(screen.getByTestId("official-map-handoff")).toHaveTextContent(
     '[8,true,"style-8"]',
   );
+  fireEvent.click(first);
+  expect(first).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByTestId("official-map-handoff")).toHaveTextContent(
+    '[9,true,"style-9"]',
+  );
+  expect(screen.getByRole("button", { name: "播放区域轮播" })).toBeVisible();
   expect(screen.queryByText(/框选|历史成果|开始业务流/)).toBeNull();
   expect(vi.mocked(requestJson).mock.calls.map(([path]) => path)).toEqual([
     "/api/ecology/monitoring/official/?scene=landcover",
   ]);
+});
+
+it("把四项正式成果铺到右下，仍使用透明卡片；翻组联动地图", async () => {
+  await page.viewport(1600, 900);
+  const items = Array.from({ length: 6 }, (_, index) =>
+    item(index + 1, `环江 ${index + 1} 区`, 123 + index),
+  );
+  vi.mocked(requestJson).mockResolvedValue({ scene: "landcover", items });
+  show("landcover");
+
+  const aside = screen.getByRole("complementary", { name: "区域观测指标" });
+  const overview = await within(aside).findByRole("region", {
+    name: "区域成果一览",
+  });
+  const list = within(overview).getByRole("list");
+  expect(within(list).getAllByRole("listitem")).toHaveLength(4);
+  const last = within(list).getByRole("button", { name: /环江 4 区/ });
+  expect(last).toHaveTextContent("2025-09-01");
+  expect(last).toHaveTextContent("126");
+  expect(getComputedStyle(overview).backgroundColor).toBe("rgba(0, 0, 0, 0)");
+  expect(
+    aside.getBoundingClientRect().bottom -
+      overview.getBoundingClientRect().bottom,
+  ).toBeLessThan(2);
+  expect(
+    overview.getBoundingClientRect().bottom -
+      last.getBoundingClientRect().bottom,
+  ).toBeLessThan(30);
+
+  fireEvent.click(within(overview).getByRole("button", { name: "下一组成果" }));
+  expect(within(list).getAllByRole("listitem")).toHaveLength(2);
+  expect(
+    within(list).getByRole("button", { name: /环江 5 区/ }),
+  ).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByTestId("official-map-handoff")).toHaveTextContent(
+    '[5,true,"style-5"]',
+  );
+  expect(
+    within(overview).getByRole("button", { name: "下一组成果" }),
+  ).toBeDisabled();
+});
+
+it("在窄屏保留每项野火成果的观测量与单位，不将缺测显示为零", async () => {
+  await page.viewport(390, 844);
+  vi.mocked(requestJson).mockResolvedValue({
+    scene: "wildfire",
+    items: [
+      {
+        ...item(4, "烧毁面积监测区", 1234.567),
+        metrics: [
+          {
+            key: "burned_area_ha",
+            label: "观测烧毁面积",
+            value: 1234.567,
+            unit: "ha",
+          },
+        ],
+      },
+      {
+        ...item(5, "辐射功率监测区", 0.52),
+        observation: { product: "cams_frpfire", unit: "W m-2" },
+        metrics: [
+          {
+            key: "frp_w_m2",
+            label: "观测火辐射功率密度",
+            value: 0.52,
+            unit: "W m-2",
+          },
+        ],
+      },
+      {
+        ...item(6, "缺测监测区", 0),
+        observedStart: null,
+        observedEnd: null,
+        metrics: [
+          {
+            key: "burned_area_ha",
+            label: "观测烧毁面积",
+            value: null,
+            unit: "ha",
+          },
+        ],
+      },
+    ],
+  });
+  show("wildfire");
+
+  const overview = await screen.findByRole("region", { name: "区域成果一览" });
+  const burned = within(overview).getByRole("button", {
+    name: /烧毁面积监测区/,
+  });
+  const power = within(overview).getByRole("button", {
+    name: /辐射功率监测区/,
+  });
+  const missing = within(overview).getByRole("button", { name: /缺测监测区/ });
+  expect(burned).toHaveTextContent("观测烧毁面积");
+  expect(within(burned).getByText("ha")).toBeVisible();
+  expect(power).toHaveTextContent("观测火辐射功率密度");
+  expect(within(power).getByText("W m-2")).toBeVisible();
+  expect(missing).toHaveTextContent("观测期未登记");
+  expect(missing).toHaveTextContent("统计未登记");
+  expect(within(missing).getByText("—")).toBeVisible();
+  expect(power.getBoundingClientRect().right).toBeLessThanOrEqual(390);
+  fireEvent.click(power);
+  const selected = screen.getByRole("region", { name: "观测火辐射功率密度" });
+  await waitFor(() => expect(within(selected).getByText("0.52")).toBeVisible());
+});
+
+it("只有一项时呈现实际登记档案，而不是空的区域列表", async () => {
+  vi.mocked(requestJson).mockResolvedValue({
+    scene: "landcover",
+    items: [
+      {
+        ...item(9, "环江一号区", 1832),
+        model: { name: "地表覆盖 UNet", version: "2.1.0" },
+        quality: "passed",
+        sourceLabel: "环江高分辨率正射影像",
+        statisticsMethod: "仅统计有效像元，按原投影面积汇总。",
+      },
+    ],
+  });
+  show("landcover");
+
+  const archive = await screen.findByRole("region", { name: "成果档案" });
+  expect(within(archive).getByText("环江高分辨率正射影像")).toBeVisible();
+  expect(within(archive).getByText("地表覆盖 UNet · 2.1.0")).toBeVisible();
+  expect(within(archive).getByText("已核验")).toBeVisible();
+  expect(
+    within(archive).getByText("仅统计有效像元，按原投影面积汇总。"),
+  ).toBeVisible();
+  expect(archive.querySelector("time")).toHaveAttribute(
+    "datetime",
+    "2026-11-18T11:00:00Z",
+  );
+  expect(screen.queryByRole("region", { name: "区域成果一览" })).toBeNull();
 });
 
 it.each([

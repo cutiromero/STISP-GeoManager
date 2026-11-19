@@ -20,11 +20,57 @@ import { useMonitorActivity } from "./useMonitor";
 import "./official-monitoring.css";
 
 const rotationMs = 13000;
+const overviewPageSize = 4;
+const primaryNumber = new Intl.NumberFormat("zh-CN", {
+  maximumFractionDigits: 3,
+});
+const scientificNumber = new Intl.NumberFormat("zh-CN", {
+  maximumFractionDigits: 3,
+  notation: "scientific",
+});
+const registrationTime = new Intl.DateTimeFormat("zh-CN", {
+  dateStyle: "medium",
+  timeStyle: "short",
+});
 const sceneTitles = {
   landcover: ["地表覆盖解译", "LAND COVER INTELLIGENCE"],
   spartina: ["互花米草分布监测", "COASTAL HABITAT MONITORING"],
   wildfire: ["野火遥感观测", "WILDFIRE EARTH OBSERVATION"],
 } as const;
+
+function mainMetric(
+  scene: OfficialMonitoringList["scene"],
+  product: OfficialMonitoringProduct | undefined,
+) {
+  const key =
+    scene === "landcover"
+      ? "valid_area_km2"
+      : scene === "spartina"
+        ? "area_ha"
+        : product?.observation?.unit === "W m-2"
+          ? "frp_w_m2"
+          : "burned_area_ha";
+  const measured =
+    product?.metrics.filter((metric) => metric.value != null) ?? [];
+  return {
+    primary: measured.find((metric) => metric.key === key) ?? measured[0],
+    measured,
+  };
+}
+
+function formatMetric(value: number | null | undefined) {
+  if (value == null) return "—";
+  return (Math.abs(value) >= 1e12 ? scientificNumber : primaryNumber).format(
+    value,
+  );
+}
+
+function observedPeriod(product: OfficialMonitoringProduct) {
+  const { observedStart: start, observedEnd: end } = product;
+  return start && end && start !== end
+    ? `${start} — ${end}`
+    : start || end || "观测期未登记";
+}
 
 export default function OfficialMonitoringDashboard({
   config,
@@ -83,37 +129,17 @@ export default function OfficialMonitoringDashboard({
     setPaused(true);
     setCurrent((index) => (index + offset + items.length) % items.length);
   };
+  const selectResult = (index: number) => {
+    setPaused(true);
+    setCurrent(index);
+  };
   const product = items[current];
   const [title, english] = sceneTitles[scene];
-  const primaryKey =
-    scene === "landcover"
-      ? "valid_area_km2"
-      : scene === "spartina"
-        ? "area_ha"
-        : product?.observation?.unit === "W m-2"
-          ? "frp_w_m2"
-          : "burned_area_ha";
-  const measured =
-    product?.metrics.filter((metric) => metric.value != null) ?? [];
-  const primary =
-    measured.find((metric) => metric.key === primaryKey) ?? measured[0];
-  const primaryValue =
-    primary?.value == null
-      ? "—"
-      : new Intl.NumberFormat("zh-CN", {
-          maximumFractionDigits: 3,
-          ...(Math.abs(primary.value) >= 1e12
-            ? { notation: "scientific" as const }
-            : {}),
-        }).format(primary.value);
+  const { primary, measured } = mainMetric(scene, product);
+  const primaryValue = formatMetric(primary?.value);
   const secondary = measured
     .filter((metric) => metric.key !== primary?.key)
     .slice(0, 3);
-  const date = !product?.observedStart
-    ? "观测期未登记"
-    : product.observedStart === product.observedEnd
-      ? product.observedStart
-      : `${product.observedStart} — ${product.observedEnd}`;
   const hasMap = Boolean(
     product?.display || product?.resource.dataType === "vector",
   );
@@ -155,7 +181,7 @@ export default function OfficialMonitoringDashboard({
               <h2 title={product?.regionLabel}>
                 {product?.regionLabel ?? "项目成果全景"}
               </h2>
-              {product && <span>{date}</span>}
+              {product && <span>{observedPeriod(product)}</span>}
             </div>
             {product && !hasMap && (
               <div className="official-map-note">
@@ -308,9 +334,170 @@ export default function OfficialMonitoringDashboard({
                 ) : null}
               </div>
             )}
+            {!failure &&
+              product &&
+              (items.length > 1 ? (
+                <OfficialRegionOverview
+                  scene={scene}
+                  items={items}
+                  current={current}
+                  onSelect={selectResult}
+                  onKeyboardFocus={() => setPaused(true)}
+                />
+              ) : (
+                <OfficialResultArchive product={product} />
+              ))}
           </aside>
         </main>
       )}
     </MonitorDashboardFrame>
+  );
+}
+
+function OfficialRegionOverview({
+  scene,
+  items,
+  current,
+  onSelect,
+  onKeyboardFocus,
+}: {
+  scene: OfficialMonitoringList["scene"];
+  items: OfficialMonitoringProduct[];
+  current: number;
+  onSelect: (index: number) => void;
+  onKeyboardFocus: () => void;
+}) {
+  const start = Math.floor(current / overviewPageSize) * overviewPageSize;
+  const end = Math.min(start + overviewPageSize, items.length);
+  return (
+    <MonitorPanel
+      title="区域成果一览"
+      className="official-overview"
+      extra={
+        <div className="official-overview-nav">
+          <span className="monitor-panel-caption">
+            {items.length > overviewPageSize
+              ? `${start + 1}–${end} / ${items.length} 项`
+              : `${items.length} 项已登记`}
+          </span>
+          {items.length > overviewPageSize && (
+            <Space size={4}>
+              <Button
+                size="small"
+                icon={<ArrowLeftOutlined />}
+                aria-label="上一组成果"
+                disabled={start === 0}
+                onClick={() => onSelect(start - overviewPageSize)}
+              />
+              <Button
+                size="small"
+                icon={<ArrowRightOutlined />}
+                aria-label="下一组成果"
+                disabled={end === items.length}
+                onClick={() => onSelect(end)}
+              />
+            </Space>
+          )}
+        </div>
+      }
+    >
+      <ul className="official-overview-list">
+        {items.slice(start, end).map((item, offset) => {
+          const index = start + offset;
+          const { primary } = mainMetric(scene, item);
+          return (
+            <li key={item.id}>
+              <button
+                type="button"
+                className="official-overview-row"
+                aria-pressed={index === current}
+                onClick={() => onSelect(index)}
+                onFocus={(event) => {
+                  if (event.currentTarget.matches(":focus-visible"))
+                    onKeyboardFocus();
+                }}
+              >
+                <span className="official-overview-index" aria-hidden="true">
+                  {String(index + 1).padStart(2, "0")}
+                </span>
+                <span className="official-overview-name">
+                  <strong title={item.regionLabel}>{item.regionLabel}</strong>
+                  <small>{observedPeriod(item)}</small>
+                </span>
+                <span className="official-overview-metric">
+                  <small>{primary?.label ?? "统计未登记"}</small>
+                  <strong>
+                    {formatMetric(primary?.value)}
+                    {primary?.unit && <small>{primary.unit}</small>}
+                  </strong>
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </MonitorPanel>
+  );
+}
+
+function OfficialResultArchive({
+  product,
+}: {
+  product: OfficialMonitoringProduct;
+}) {
+  const timestamp = new Date(product.registeredAt);
+  const method = product.model
+    ? [product.model.name, product.model.version].filter(Boolean).join(" · ")
+    : product.observation?.product.toUpperCase();
+  const quality = {
+    passed: "已核验",
+    unverified: "未核验",
+    needs_review: "待复核",
+  }[product.quality];
+  return (
+    <MonitorPanel title="成果档案" className="official-overview">
+      <dl className="official-archive">
+        <div>
+          <dt>观测期</dt>
+          <dd>{observedPeriod(product)}</dd>
+        </div>
+        {Number.isFinite(timestamp.getTime()) && (
+          <div>
+            <dt>登记时间</dt>
+            <dd>
+              <time dateTime={product.registeredAt}>
+                {registrationTime.format(timestamp)}
+              </time>
+            </dd>
+          </div>
+        )}
+        {method && (
+          <div>
+            <dt>{product.model ? "解译模型" : "观测产品"}</dt>
+            <dd>{method}</dd>
+          </div>
+        )}
+        {quality && (
+          <div>
+            <dt>核验状态</dt>
+            <dd>{quality}</dd>
+          </div>
+        )}
+        {product.sourceLabel && (
+          <div className="official-archive-wide">
+            <dt>资料来源</dt>
+            <dd>{product.sourceLabel}</dd>
+          </div>
+        )}
+        {product.statisticsMethod &&
+          product.interpretation &&
+          product.statisticsMethod !== product.interpretation && (
+            <div className="official-archive-wide">
+              <dt>统计口径</dt>
+              <dd>{product.statisticsMethod}</dd>
+            </div>
+          )}
+      </dl>
+    </MonitorPanel>
   );
 }
