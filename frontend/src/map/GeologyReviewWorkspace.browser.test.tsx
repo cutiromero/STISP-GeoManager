@@ -3,7 +3,13 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { beforeEach, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
-import { resetProjectSession, setActiveProject } from "../projects/session";
+import {
+  getActiveProject,
+  resetProjectSession,
+  setActiveProject,
+} from "../projects/session";
+import { ProjectProvider } from "../projects/ProjectContext";
+import { platformApi } from "../api/platform";
 import { agentApi } from "../api/agent";
 import { workflowReport } from "../agent/workflowReport.testFixtures";
 import GeologyReviewWorkspace from "./GeologyReviewWorkspace";
@@ -263,6 +269,41 @@ it("缺少批准记录时不查询修正成果，批准后入库未齐时给出�
     await screen.findByText("修正结果与实际修改范围尚未全部就绪，请稍后刷新"),
   ).toBeVisible();
   expect(request).toHaveBeenCalledTimes(1);
+});
+
+it("成果链接能在其他已选项目中切换到有权访问的任务项目", async () => {
+  setActiveProject("1");
+  vi.spyOn(platformApi, "projects").mockResolvedValue({
+    items: [1, 3].map((id) => ({
+      id, name: `项目${id}`, code: String(id), description: "",
+      isDefault: id === 1, isActive: true, sortOrder: id,
+    })),
+    defaultProjectId: 1,
+    canManage: false,
+    canAssign: false,
+  });
+  const scopes: string[] = [];
+  const original = request.getMockImplementation()!;
+  request.mockImplementation((url: string, ...args: unknown[]) => {
+    if (url.startsWith("/api/agent/workflows/")) scopes.push(getActiveProject());
+    return original(url, ...args);
+  });
+  render(
+    <App>
+      <MemoryRouter initialEntries={["/map?geologyReview=review-workflow&projectTagId=3"]}>
+        <ProjectProvider>
+          <GeologyReviewWorkspace
+            workflowId="review-workflow"
+            projectTagId="3"
+            suggestionId={null}
+          />
+        </ProjectProvider>
+      </MemoryRouter>
+    </App>,
+  );
+  expect(await screen.findByLabelText("待检查地质图地图")).toBeInTheDocument();
+  expect(scopes).toEqual(["3"]);
+  expect(screen.queryByText("请切换到检查任务所属项目后查看")).toBeNull();
 });
 
 it("拒绝跨项目入口及资源查询失败或截断，不展示不完整地图", async () => {

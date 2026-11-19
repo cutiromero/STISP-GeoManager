@@ -52,6 +52,14 @@ export default function GeologyReviewWorkspace({
   const navigate = useNavigate();
   const project = useProjectContext();
   const currentProject = project?.current ?? getActiveProject();
+  const allowedLinkedProject = Boolean(
+    projectTagId &&
+      project?.projects.some(
+        (entry) => entry.isActive && String(entry.id) === projectTagId,
+      ),
+  );
+  const chooseProject = useRef(project?.choose);
+  chooseProject.current = project?.choose;
   const [workflow, setWorkflow] = useState<AgentWorkflow | null>(null);
   const [data, setData] = useState<Maps | null>(null);
   const [error, setError] = useState("");
@@ -76,8 +84,15 @@ export default function GeologyReviewWorkspace({
       setData(null);
       setWorkflow(null);
       try {
-        if (projectTagId && projectTagId !== currentProject)
+        if (projectTagId && projectTagId !== currentProject) {
+          if (allowedLinkedProject && chooseProject.current) {
+            // The explicit result link selects an authorized project. Its
+            // provider updates the request scope before loading any map data.
+            chooseProject.current(projectTagId, undefined, { confirm: false });
+            return;
+          }
           throw new Error("请切换到检查任务所属项目后查看");
+        }
         if (comparePage.current.workflowId !== workflowId)
           comparePage.current = { workflowId, offset: 0, element: "all" };
         const { offset, element } = comparePage.current;
@@ -158,7 +173,14 @@ export default function GeologyReviewWorkspace({
       initialRequest.abort();
       comparisonRequest.current?.abort();
     };
-  }, [workflowId, projectTagId, currentProject, reload, suggestionId]);
+  }, [
+    workflowId,
+    projectTagId,
+    currentProject,
+    allowedLinkedProject,
+    reload,
+    suggestionId,
+  ]);
   const current = data?.differences.features[selected];
   const properties = current?.properties ?? {};
   const actual = Boolean(data?.after);

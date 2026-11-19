@@ -17,6 +17,7 @@ ACTIONS = {
 
 def render_report(workflow, tasks):
     from .workflow_reports import _cell, _text, _decision
+    from .geology_multi_results import public_knowledge
     from .geology_review_report import actual_table
 
     from .workflow_resources import display_input_names
@@ -322,7 +323,7 @@ def render_report(workflow, tasks):
             "| --- | --- | --- | --- |",
         ]
     )
-    for entry in workflow.evidence:
+    for entry in public_knowledge(workflow.evidence):
         binding = entry.get("trialBinding")
         if not binding:
             continue
