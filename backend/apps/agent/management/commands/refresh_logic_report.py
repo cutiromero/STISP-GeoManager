@@ -152,7 +152,8 @@ class Command(BaseCommand):
                 "status": "completed",
             }
             current.plan_hash = _state_hash(current.plan)
-            current.save(update_fields=["plan", "plan_hash", "updated_at"])
+            current.detail = (decision["resultSummary"] or decision["judgement"])[:300]
+            current.save(update_fields=["plan", "plan_hash", "detail", "updated_at"])
             step(
                 current,
                 "report_reinterpretation",

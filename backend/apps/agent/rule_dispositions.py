@@ -93,7 +93,10 @@ def _report_before_after(results, stage_tasks):
 def report_payload(payload, workflow):
     """A report reads real totals and evidence; it does not review edits again."""
     from .geology_multi_results import public_knowledge
+    from .report_text import bound_report_scope
 
+    if scope := bound_report_scope(workflow):
+        payload["analysisSubject"] = scope
     payload["reportTemplate"] = {
         "summaryField": "resultSummary",
         "analysisField": "findings",

@@ -21,8 +21,10 @@ def render_report(workflow, tasks):
     from .geology_review_report import actual_table
 
     from .workflow_resources import display_input_names
+    from .report_text import bound_report_scope
 
     names = display_input_names(workflow)
+    scope = bound_report_scope(workflow)
     by_id = {str(task.id): task for task in tasks}
     stages = {
         stage["name"]: by_id[stage["taskId"]]
@@ -94,7 +96,12 @@ def render_report(workflow, tasks):
         if getattr(workflow, "workflow_type", None) == "geology_generic"
         else "# 海德乌拉综合检查报告",
         "",
-        "研究区资料",
+        (
+            f"研究区资料：{_text(scope['sourceTitle'] or '本次绑定的岩性图')}"
+            f"（资源 {scope['sourceResourceId']}）"
+            if scope
+            else "研究区资料"
+        ),
         "",
         f"项目：{_text(workflow.project_tag.name)}",
         "",

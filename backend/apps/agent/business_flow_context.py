@@ -36,6 +36,7 @@ contextNotice逐条说明实际输入的省略范围；必须如实写入limitat
 # Facts and execution authority cannot be rewritten by a lossy summarizer.
 PROTECTED_KEYS = {
     "verifiedReportFacts",
+    "analysisSubject",
     "conditions",
     "exceptions",
     "ruleConfig",

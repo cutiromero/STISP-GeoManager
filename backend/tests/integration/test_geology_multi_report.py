@@ -161,3 +161,19 @@ def test_report_rejects_changes_that_do_not_match_approval(monkeypatch, change):
         rows[0]["weight"] = "0.5"
     with pytest.raises(ComputeError, match="批准|获批"):
         render_report(workflow, [task])
+
+
+def test_report_header_is_bound_to_original_lithology_not_the_rule_source(monkeypatch):
+    workflow, task, _ = report_fixture(monkeypatch)
+    workflow.workflow_type = "geology_generic"
+    workflow.plan["uploadInputs"] = {"lithology": 72}
+    workflow.plan["fieldMappingReview"] = {
+        "roles": [
+            {"role": "lithology", "resourceId": 94, "fileName": "北岭 v7 岩性资料"},
+        ]
+    }
+    workflow.evidence[0]["conditions"] = ["仅适用于南沟旧示范区；不替代实测资料"]
+    text = render_report(workflow, [task]).decode()
+    assert "研究区资料：北岭 v7 岩性资料（资源 72）" in text
+    assert "研究区资料：南沟旧示范区" not in text
+    assert "仅适用于南沟旧示范区" in text
