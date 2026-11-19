@@ -18,6 +18,8 @@ REPORT_INSTRUCTION = """GEOLOGY_REPORT_TEXT_V1：你负责依据已完成的地�
 [FINDINGS]
 分段解释主要问题、处置与复查效果、构造与蚀变证据及远景依据。区分计算事实、推断与待验证假设。
 提到具体远景区时，只用 verifiedReportFacts.correctedProspectExamples 中与该区编号一致的矿物名单。未列出的区只做总体说明，不推定不同区的组合相同。
+涉及岩性图斑总数与构造交汇时，仅引用 verifiedReportFacts 中的明确 before、after 和 delta；无法确定时由实际统计附表列出，正文只解释意义。before 是处置前，after 是处置后，不能互换。
+依据 approvalMode 区分规则授权与人工选项；reviewed_rules 或 rule_authorized 执行的自动项不称逐项人工批准。
 处置按要素和规则编号分别说明。未批准条数或初检与复查的差额不能解释为另一条规则的处置，也不能据数量推断个别图斑未执行的原因。
 [LIMITATIONS]
 说明适用限制和下一步核查建议。缺资料写清缺项，不能推断对应现象不存在。

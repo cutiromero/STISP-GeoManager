@@ -389,12 +389,45 @@ def test_report_facts_resolve_minerals_for_each_corrected_zone_and_keep_rule_sco
 
     workflow, stage, _ = measured(241)
     stage["taskId"] = "apply-task"
-    workflow.plan["stages"].append({"name": "prospect", "taskId": "prospect-task"})
+    workflow.plan["stages"].extend(
+        [
+            {"name": "prospect", "taskId": "prospect-task"},
+            {"name": "relations", "taskId": "relations-task"},
+            {"name": "recheck", "taskId": "recheck-task"},
+        ]
+    )
+    stage["modificationsApproval"] = {
+        "mode": "reviewed_rules",
+        "manualSuggestionIds": [],
+    }
     first = ["方解石化", "绢云母", "白云石化"]
     second = ["方解石化", "绢云母"]
     report = report_payload(
         {
             "actualResults": [
+                {
+                    "kind": "table",
+                    "key": "statistics",
+                    "taskId": "task",
+                    "outputId": 10,
+                    "metadata": {"qualityCheck": {"metrics": {"lithology_count": 576}}},
+                },
+                {
+                    "kind": "table",
+                    "key": "statistics",
+                    "taskId": "recheck-task",
+                    "outputId": 11,
+                    "metadata": {"qualityCheck": {"metrics": {"lithology_count": 596}}},
+                },
+                {
+                    "kind": "table",
+                    "key": "statistics",
+                    "taskId": "relations-task",
+                    "outputId": 14,
+                    "rowFormat": "columns",
+                    "columns": ["kind", "before_count", "after_count"],
+                    "rows": [["geometric", "7", "8"], ["inferred", "46", "45"]],
+                },
                 {
                     "kind": "table",
                     "key": "evidence",
@@ -448,6 +481,15 @@ def test_report_facts_resolve_minerals_for_each_corrected_zone_and_keep_rule_sco
         workflow,
     )
     facts = report["verifiedReportFacts"]
+    assert facts["lithologyFeatureCounts"] == {"before": 576, "after": 596}
+    assert facts["structuralIntersectionCounts"] == [
+        dict(kind="geometric", before=7, after=8, delta=1, outputId=14),
+        dict(kind="inferred", before=46, after=45, delta=-1, outputId=14),
+    ]
+    assert (
+        facts["approvalMode"] == "reviewed_rules"
+        and facts["explicitManualDispositionCount"] == 0
+    )
     assert facts["correctedProspectExamples"] == [
         {"zoneId": "R01", "areaKm2": 12, "minerals": first, "outputId": 12},
         {"zoneId": "R02", "areaKm2": 8, "minerals": second, "outputId": 12},

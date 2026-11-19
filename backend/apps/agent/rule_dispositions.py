@@ -36,6 +36,60 @@ def _report_prospect_examples(results, task_id):
     return examples
 
 
+def _report_count(value):
+    if type(value) is int and value >= 0:
+        return value
+    return int(value) if isinstance(value, str) and value.isdecimal() else None
+
+
+def _report_before_after(results, stage_tasks):
+    morphology = {}
+    for stage, label in (("check", "before"), ("recheck", "after")):
+        task_id = stage_tasks.get(stage)
+        if not task_id:
+            continue
+        for item in results:
+            if item.get("taskId") != task_id:
+                continue
+            count = _report_count(
+                item.get("metadata", {})
+                .get("qualityCheck", {})
+                .get("metrics", {})
+                .get("lithology_count")
+            )
+            if count is not None:
+                morphology[label] = count
+                break
+    relations = []
+    task_id = stage_tasks.get("relations")
+    for item in results:
+        if not task_id or item.get("taskId") != task_id or item["key"] != "statistics":
+            continue
+        for row in item.get("rows", []):
+            if item.get("rowFormat") == "columns":
+                row = dict(zip(item["columns"], row, strict=True))
+            if row.get("kind") not in {"geometric", "inferred"}:
+                continue
+            before, after = (
+                _report_count(row.get("before_count")),
+                _report_count(row.get("after_count", row.get("count"))),
+            )
+            if after is not None:
+                relations.append(
+                    {
+                        "kind": row["kind"],
+                        "before": before,
+                        "after": after,
+                        "delta": after - before if before is not None else None,
+                        "outputId": item["outputId"],
+                    }
+                )
+    return {
+        "lithologyFeatureCounts": morphology,
+        "structuralIntersectionCounts": relations,
+    }
+
+
 def report_payload(payload, workflow):
     """A report reads real totals and evidence; it does not review edits again."""
     from .geology_multi_results import public_knowledge
@@ -68,8 +122,9 @@ def report_payload(payload, workflow):
         }
         for entry in public_knowledge(workflow.evidence)
     ]
+    results = payload["actualResults"]
     projected = []
-    for result in payload["actualResults"]:
+    for result in results:
         if result["key"] not in {
             "issues",
             "statistics",
@@ -102,7 +157,20 @@ def report_payload(payload, workflow):
         for item in projected
         if item["key"] == "changes" and item.get("taskId") == stage_tasks.get("apply")
     ]
+    approval = next(
+        (
+            stage.get("modificationsApproval", {})
+            for stage in workflow.plan["stages"]
+            if stage["name"] == "apply"
+        ),
+        {},
+    )
     payload["verifiedReportFacts"] = {
+        **_report_before_after(results, stage_tasks),
+        "approvalMode": approval.get("mode"),
+        "explicitManualDispositionCount": len(approval.get("manualSuggestionIds", []))
+        if approval.get("mode") in {"reviewed_rules", "rule_authorized"}
+        else None,
         "initialIssueCount": issue_counts.get(stage_tasks.get("check")),
         "recheckRemainingIssueCount": issue_counts.get(stage_tasks.get("recheck")),
         "initialIssuesByElement": issues.get(stage_tasks.get("check"), {}).get(
