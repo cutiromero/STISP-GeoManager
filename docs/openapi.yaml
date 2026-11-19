@@ -452,8 +452,8 @@ paths:
       - name: scene
         in: query
         required: true
-        description: 当前项目已配置的互花米草或野火场景。
-        schema: {type: string, enum: [spartina, wildfire, landcover]}
+        description: 当前项目已显式配置的遥感监测场景。
+        schema: {type: string, enum: [spartina, wildfire, landcover, glacier]}
       - name: beforeId
         in: query
         description: 上一页返回的nextBeforeId；只扫描比该ID更早的产品。
@@ -481,7 +481,7 @@ paths:
       security: [{sessionAuth: []}]
       parameters:
       - {name: X-Project-Id, in: header, required: true, description: 当前项目编号。, schema: {type: integer, minimum: 1}}
-      - {name: scene, in: query, required: true, description: 展示场景。, schema: {type: string, enum: [spartina, wildfire, landcover]}}
+      - {name: scene, in: query, required: true, description: 展示场景。, schema: {type: string, enum: [spartina, wildfire, landcover, glacier]}}
       responses:
         '200':
           description: 精选区域及已准备好的地图展示描述。
@@ -13884,10 +13884,10 @@ components:
         scenes:
           type: array
           minItems: 1
-          maxItems: 3
+          maxItems: 4
           uniqueItems: true
           description: 显式开启的遥感场景。真实产品源省略时开启互花米草和野火；胡杨源省略时只展示原演示。
-          items: {type: string, enum: [spartina, wildfire, landcover], description: 遥感监测场景。}
+          items: {type: string, enum: [spartina, wildfire, landcover, glacier], description: 遥感监测场景。}
         initialView:
           type: object
           description: 研究区初始视角。
@@ -13943,7 +13943,7 @@ components:
         code: {type: string, description: 同项目唯一的稳定产品编码，内容变化使用新编码。}
         name: {type: string, description: 产品名称。}
         resourceId: {type: integer, minimum: 1, description: 已入库的地图矢量或栅格资源ID。}
-        scene: {type: string, enum: [spartina, wildfire, landcover], description: 监测场景。}
+        scene: {type: string, enum: [spartina, wildfire, landcover, glacier], description: 监测场景。}
         referenceRole: {type: string, enum: [standard, historical], description: 外部成果的登记用途；不将系统解译成果标为上传标准。}
         kind: {type: string, enum: [historical, model, observation], description: 历史成果、模型结果或观测资料。}
         quality: {type: string, enum: [unverified, passed, needs_review], description: 未验证、已核验或待复核；不代表自动拥有精度报告。}
@@ -14099,7 +14099,7 @@ components:
       description: 只读大屏的区域展示结果。
       required: [scene, items]
       properties:
-        scene: {type: string, enum: [spartina, wildfire, landcover], description: 展示场景。}
+        scene: {type: string, enum: [spartina, wildfire, landcover, glacier], description: 展示场景。}
         items:
           type: array
           description: 每个区域与物理量仅展示最新观测期的正式版本。
@@ -14118,6 +14118,20 @@ components:
             oneOf:
             - {$ref: '#/components/schemas/RasterRenderResult'}
             - {type: 'null'}
+          comparison:
+            description: 冰川场景的配对原始影像及已准备的只读切片；未就绪时为null。
+            oneOf:
+            - type: object
+              required: [resource, display]
+              properties:
+                resource: {$ref: '#/components/schemas/ResourceListItem'}
+                display: {$ref: '#/components/schemas/RasterRenderResult'}
+            - {type: 'null'}
+          references:
+            type: array
+            description: 冰川场景下可访问的交接文档与参考影像目录条目。
+            maxItems: 31
+            items: {$ref: '#/components/schemas/ResourceListItem'}
     CatalogueComputeResultGroups:
       type: object
       description: 当前页的可见任务分组。
@@ -14203,7 +14217,7 @@ components:
           description: 当前项目可用的推荐原始影像，按原有资源权限过滤。
           items: {$ref: '#/components/schemas/ResourceListItem'}
         projectId: {type: integer, description: 当前项目ID。}
-        scene: {type: string, enum: [spartina, wildfire, landcover], description: 当前场景。}
+        scene: {type: string, enum: [spartina, wildfire, landcover, glacier], description: 当前场景。}
         title: {type: string, description: 场景标题。}
         route:
           type: array

@@ -3976,7 +3976,7 @@ export type ProjectMonitorConfig = {
     /**
      * 显式开启的遥感场景。真实产品源省略时开启互花米草和野火；胡杨源省略时只展示原演示。
      */
-    scenes?: Array<'spartina' | 'wildfire' | 'landcover'>;
+    scenes?: Array<'spartina' | 'wildfire' | 'landcover' | 'glacier'>;
     /**
      * 研究区初始视角。
      */
@@ -4150,7 +4150,7 @@ export type MonitoringProductManifest = {
     /**
      * 监测场景。
      */
-    scene: 'spartina' | 'wildfire' | 'landcover';
+    scene: 'spartina' | 'wildfire' | 'landcover' | 'glacier';
     /**
      * 外部成果的登记用途；不将系统解译成果标为上传标准。
      */
@@ -4443,7 +4443,7 @@ export type OfficialMonitoringList = {
     /**
      * 展示场景。
      */
-    scene: 'spartina' | 'wildfire' | 'landcover';
+    scene: 'spartina' | 'wildfire' | 'landcover' | 'glacier';
     /**
      * 每个区域与物理量仅展示最新观测期的正式版本。
      */
@@ -4462,6 +4462,17 @@ export type OfficialMonitoringProduct = MonitoringProduct & {
      * 已准备的只读栅格展示，无展示时为null。
      */
     display: RasterRenderResult | null;
+    /**
+     * 冰川场景的配对原始影像及已准备的只读切片；未就绪时为null。
+     */
+    comparison?: {
+        resource: DataResource;
+        display: RasterRenderResult;
+    } | null;
+    /**
+     * 冰川场景下可访问的交接文档与参考影像目录条目。
+     */
+    references?: Array<DataResource>;
 };
 
 /**
@@ -4639,7 +4650,7 @@ export type MonitoringProductList = {
     /**
      * 当前场景。
      */
-    scene: 'spartina' | 'wildfire' | 'landcover';
+    scene: 'spartina' | 'wildfire' | 'landcover' | 'glacier';
     /**
      * 场景标题。
      */
@@ -16360,9 +16371,9 @@ export type GetMonitoringProductsData = {
     path?: never;
     query: {
         /**
-         * 当前项目已配置的互花米草或野火场景。
+         * 当前项目已显式配置的遥感监测场景。
          */
-        scene: 'spartina' | 'wildfire' | 'landcover';
+        scene: 'spartina' | 'wildfire' | 'landcover' | 'glacier';
         /**
          * 上一页返回的nextBeforeId；只扫描比该ID更早的产品。
          */
@@ -16418,7 +16429,7 @@ export type GetOfficialMonitoringData = {
         /**
          * 展示场景。
          */
-        scene: 'spartina' | 'wildfire' | 'landcover';
+        scene: 'spartina' | 'wildfire' | 'landcover' | 'glacier';
     };
     url: '/api/ecology/monitoring/official/';
 };

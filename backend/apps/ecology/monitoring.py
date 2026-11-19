@@ -21,6 +21,10 @@ from .models import RemoteSensingProduct
 
 # CONFIGURATION: bounded metadata only; raster and vector reads use catalog APIs.
 SCENES = {
+    "glacier": {
+        "title": "冰川遥感监测",
+        "route": ["核对原始影像与分类网格", "登记历史分类成果", "地图对照与覆盖统计"],
+    },
     "landcover": {
         "title": "地表覆盖解译",
         "route": [
@@ -56,6 +60,12 @@ SCENES = {
     },
 }
 METRICS = {
+    "glacier": {
+        "valid_coverage_percent": ("分类有效覆盖率", "%"),
+        "class_1_percent": ("类别 1 占有效像元", "%"),
+        "class_2_percent": ("类别 2 占有效像元", "%"),
+        "valid_pixels": ("有效像元", "个"),
+    },
     "landcover": {
         "valid_area_km2": ("有效统计面积", "km²"),
         "classified_area_km2": ("已提取地类面积", "km²"),
@@ -214,6 +224,19 @@ def normalize_product(value):
             invalid(f"统计项{key}超出范围或不是有限数值")
         if key == "patch_count" and number != int(number):
             invalid("斑块数量须为整数")
+    if scene == "glacier":
+        if item["kind"] != "historical":
+            invalid("冰川场景只接受历史交接分类，不作为预测产品")
+        if ids[0] == item["resourceId"]:
+            invalid("冰川历史分类须有独立配对的原始影像")
+        pixels = statistics.get("valid_pixels")
+        if pixels is not None and pixels != int(pixels):
+            invalid("有效像元数须为整数")
+        shares = [statistics.get(f"class_{code}_percent") for code in (1, 2)]
+        if all(share is not None for share in shares) and not math.isclose(
+            sum(shares), 100, abs_tol=1e-5
+        ):
+            invalid("类别 1 和类别 2 必须覆盖全部有效像元")
     item["statistics"] = statistics
     if "observation" in item:
         from .wildfire import normalize_observation
@@ -310,6 +333,8 @@ def normalize_product(value):
             != model["forecastLeadDays"]
         ):
             invalid("预测提前天数须与输入截至时间、有效开始日期一致")
+    if scene == "glacier" and (model is not None or threshold is not None):
+        invalid("冰川历史分类不登记模型预报或警戒阈值")
     item["timing"] = timing
     return item
 
@@ -399,6 +424,20 @@ def register_product(user, value, *, computed_import=None):
         or not resource.storage_path
     ):
         invalid("监测地图须绑定已入库的空间矢量或栅格资源")
+    if item["scene"] == "glacier":
+        original_id, *references = item["sourceResourceIds"]
+        original = resources[original_id]
+        if (
+            resource.data_type != "raster"
+            or original.data_type != "raster"
+            or original.spatial_class != "spatial"
+            or not original.storage_path
+            or any(
+                resources[pk].data_type not in {"document", "image"}
+                for pk in references
+            )
+        ):
+            invalid("冰川分类须配对原始栅格；其余关联资源只接受文档或图片")
     validate_model_import(resource, item)
     digest = hashlib.sha256(
         json.dumps(item, ensure_ascii=False, sort_keys=True, allow_nan=False).encode()

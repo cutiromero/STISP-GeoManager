@@ -7,6 +7,7 @@ import {
 } from "@ant-design/icons";
 import { Alert, Button, Space, Spin } from "antd";
 import { type CSSProperties, type ReactNode, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { requestJson } from "../api/client";
 import type {
   OfficialMonitoringList,
@@ -33,6 +34,7 @@ const registrationTime = new Intl.DateTimeFormat("zh-CN", {
   timeStyle: "short",
 });
 const sceneTitles = {
+  glacier: ["冰川遥感监测", "HISTORICAL GLACIER MAPPING"],
   landcover: ["地表覆盖解译", "LAND COVER INTELLIGENCE"],
   spartina: ["互花米草分布监测", "COASTAL HABITAT MONITORING"],
   wildfire: ["野火遥感观测", "WILDFIRE EARTH OBSERVATION"],
@@ -43,13 +45,15 @@ function mainMetric(
   product: OfficialMonitoringProduct | undefined,
 ) {
   const key =
-    scene === "landcover"
-      ? "valid_area_km2"
-      : scene === "spartina"
-        ? "area_ha"
-        : product?.observation?.unit === "W m-2"
-          ? "frp_w_m2"
-          : "burned_area_ha";
+    scene === "glacier"
+      ? "valid_coverage_percent"
+      : scene === "landcover"
+        ? "valid_area_km2"
+        : scene === "spartina"
+          ? "area_ha"
+          : product?.observation?.unit === "W m-2"
+            ? "frp_w_m2"
+            : "burned_area_ha";
   const measured =
     product?.metrics.filter((metric) => metric.value != null) ?? [];
   return {
@@ -88,6 +92,8 @@ export default function OfficialMonitoringDashboard({
   const [loading, setLoading] = useState(true);
   const [failure, setFailure] = useState("");
   const [revision, setRevision] = useState(0);
+  const [showOriginal, setShowOriginal] = useState(false);
+  const [showReferences, setShowReferences] = useState(false);
   const { animated } = useMonitorActivity();
   useEffect(() => {
     const controller = new AbortController();
@@ -140,9 +146,11 @@ export default function OfficialMonitoringDashboard({
   const secondary = measured
     .filter((metric) => metric.key !== primary?.key)
     .slice(0, 3);
-  const hasMap = Boolean(
-    product?.display || product?.resource.dataType === "vector",
-  );
+  const isGlacier = scene === "glacier";
+  const comparison = isGlacier && showOriginal ? product?.comparison : null;
+  const display = comparison?.display ?? product?.display;
+  const references = isGlacier ? (product?.references ?? []) : [];
+  const hasMap = Boolean(display || product?.resource.dataType === "vector");
   const explanation = product?.interpretation || product?.statisticsMethod;
   return (
     <MonitorDashboardFrame
@@ -161,7 +169,13 @@ export default function OfficialMonitoringDashboard({
         </Button>
       }
       updatedAt={items[0]?.registeredAt}
-      status={() => (product ? "正式成果展示 · 只读" : "正式成果展示")}
+      status={() =>
+        isGlacier
+          ? "历史分类 · 非实时预警"
+          : product
+            ? "正式成果展示 · 只读"
+            : "正式成果展示"
+      }
       sourceLabel={english}
     >
       {({ animated: mapMotion }) => (
@@ -170,11 +184,13 @@ export default function OfficialMonitoringDashboard({
             <ProductMap
               config={config}
               product={hasMap ? product : undefined}
+              resource={comparison?.resource}
+              focusKey={isGlacier ? product?.id : undefined}
               animated={mapMotion}
               information
               focusProduct
               readOnly
-              preparedDisplay={product?.display}
+              preparedDisplay={display}
             />
             <div className="official-map-caption">
               <span className="official-map-caption-label">地理空间观测</span>
@@ -182,6 +198,31 @@ export default function OfficialMonitoringDashboard({
                 {product?.regionLabel ?? "项目成果全景"}
               </h2>
               {product && <span>{observedPeriod(product)}</span>}
+              {isGlacier && product?.comparison && (
+                <Space
+                  className="official-glacier-map-toggle"
+                  role="group"
+                  aria-label="影像与分类对照"
+                >
+                  <Button
+                    size="small"
+                    type={comparison ? "default" : "primary"}
+                    aria-pressed={!comparison}
+                    onClick={() => setShowOriginal(false)}
+                  >
+                    分类结果
+                  </Button>
+                  <Button
+                    size="small"
+                    type={comparison ? "primary" : "default"}
+                    aria-pressed={!!comparison}
+                    onClick={() => setShowOriginal(true)}
+                  >
+                    原始影像
+                  </Button>
+                  {comparison && <small>第 1 波段灰度</small>}
+                </Space>
+              )}
             </div>
             {product && !hasMap && (
               <div className="official-map-note">
@@ -333,6 +374,36 @@ export default function OfficialMonitoringDashboard({
                   </MonitorPanel>
                 ) : null}
               </div>
+            )}
+            {!failure && references.length > 0 && (
+              <MonitorPanel
+                title="参考资料"
+                extra={
+                  <Button
+                    size="small"
+                    aria-expanded={showReferences}
+                    onClick={() => setShowReferences((value) => !value)}
+                  >
+                    {showReferences ? "收起" : `查看 ${references.length} 项`}
+                  </Button>
+                }
+              >
+                {showReferences && (
+                  <ul className="official-glacier-references">
+                    {references.map((reference) => (
+                      <li key={reference.id}>
+                        <Link
+                          to={`/resources/data/inventory?${new URLSearchParams({ q: reference.name, resourceId: String(reference.id), projectTagId: String(reference.projectTagId) })}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          {reference.name}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </MonitorPanel>
             )}
             {!failure &&
               product &&

@@ -351,4 +351,6 @@ def test_existing_database_migration_is_safe_and_idempotent(has_target):
         if target is not None:
             assert settings.objects.get(project_id=target.pk).enabled is False
     finally:
-        MigrationExecutor(connection).migrate([("projects", "0004_project_deleted_at")])
+        # Downgrading projects also unapplies dependent migrations in other apps.
+        executor = MigrationExecutor(connection)
+        executor.migrate(executor.loader.graph.leaf_nodes())

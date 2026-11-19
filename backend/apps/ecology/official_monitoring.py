@@ -198,7 +198,13 @@ def official_snapshot(user, scene):
             valid.append((row, item))
     source_ids = {pk for _, item in valid for pk in item["sourceResourceIds"]}
     sources = visible_resources(user, source_ids).in_bulk()
-    ids = [row.data_resource_id for row, _ in valid]
+    ids = {row.data_resource_id for row, _ in valid}
+    if scene == "glacier":
+        ids.update(
+            item["sourceResourceIds"][0]
+            for _, item in valid
+            if item["sourceResourceIds"][0] in sources
+        )
     datasets = {
         row.data_resource_id: row
         for row in RasterDataset.objects.filter(
@@ -219,6 +225,12 @@ def official_snapshot(user, scene):
         dataset = by_dataset[dataset_id]
         if style.rules == dataset.default_rules:
             default_styles[dataset_id] = style_hash
+
+    def prepared_default(dataset):
+        if dataset is None or dataset.pk not in default_styles:
+            return None
+        return _prepared_display(dataset, default_styles[dataset.pk])
+
     featured = {}
     for row, item in valid:
         if not set(item["sourceResourceIds"]) <= sources.keys():
@@ -229,8 +241,8 @@ def official_snapshot(user, scene):
         if dataset is not None:
             if (dataset.pk, stored.get("styleHash")) in styles:
                 display = stored
-            elif dataset.pk in default_styles:
-                display = _prepared_display(dataset, default_styles[dataset.pk])
+            else:
+                display = prepared_default(dataset)
         observed = period_payload(
             getattr(row.data_resource, "observation_metadata", None)
         )
@@ -244,16 +256,33 @@ def official_snapshot(user, scene):
         if key in featured and featured[key][0] >= rank:
             continue
         source = sources[item["sourceResourceIds"][0]]
+        extra = {}
+        if scene == "glacier":
+            comparison = prepared_default(datasets.get(source.pk))
+            extra = {
+                "comparison": {
+                    "resource": serialize_resource(source),
+                    "display": comparison,
+                }
+                if comparison is not None
+                else None,
+                "references": [
+                    serialize_resource(sources[pk])
+                    for pk in item["sourceResourceIds"][1:]
+                    if sources[pk].data_type in {"document", "image"}
+                ],
+            }
         featured[key] = (
             rank,
             {
                 **item,
+                **extra,
                 "id": row.pk,
                 "name": row.name,
                 "resource": serialize_resource(row.data_resource),
                 "registeredAt": row.created_at.isoformat(),
                 "regionLabel": row.name
-                if source.pk == row.data_resource_id or scene == "wildfire"
+                if source.pk == row.data_resource_id or scene in {"wildfire", "glacier"}
                 else source.name,
                 "display": display,
                 "metrics": [

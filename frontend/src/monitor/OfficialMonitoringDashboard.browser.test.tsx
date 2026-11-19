@@ -63,7 +63,7 @@ function item(id: number, label: string, area: number) {
   };
 }
 
-function show(scene: "landcover" | "wildfire") {
+function show(scene: "landcover" | "wildfire" | "glacier") {
   return render(
     <App>
       <style>{monitorStyles}</style>
@@ -305,3 +305,47 @@ it.each([
     expect(within(card as HTMLElement).getByText("ha")).toBeVisible();
   },
 );
+
+it("冰川成果切换同区原始影像并链接项目参考资料，不触发计算", async () => {
+  vi.mocked(requestJson).mockClear();
+  vi.mocked(requestJson).mockResolvedValue({
+    scene: "glacier",
+    items: [
+      {
+        ...item(81, "冰川样区 · T42-1", 0),
+        observedStart: null,
+        observedEnd: null,
+        comparison: {
+          resource: { id: 80, name: "原始影像" },
+          display: { styleHash: "raw-80" },
+        },
+        references: [{ id: 91, name: "冰川图集", projectTagId: 8 }],
+      },
+    ],
+  });
+  show("glacier");
+  const original = await screen.findByRole("button", { name: "原始影像" });
+  expect(screen.getByTestId("official-map-handoff")).toHaveTextContent(
+    '[81,true,"style-81"]',
+  );
+  fireEvent.click(original);
+  expect(original).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByText("第 1 波段灰度")).toBeVisible();
+  expect(screen.getByTestId("official-map-handoff")).toHaveTextContent(
+    '[81,true,"raw-80"]',
+  );
+  fireEvent.click(screen.getByRole("button", { name: "分类结果" }));
+  expect(screen.getByTestId("official-map-handoff")).toHaveTextContent(
+    '[81,true,"style-81"]',
+  );
+  fireEvent.click(screen.getByRole("button", { name: "查看 1 项" }));
+  expect(
+    screen.getByRole("link", { name: "冰川图集" }).getAttribute("href"),
+  ).toContain("resourceId=91&projectTagId=8");
+  expect(
+    within(screen.getByRole("region", { name: "正式成果地图" })).getByText(
+      "观测期未登记",
+    ),
+  ).toBeVisible();
+  expect(vi.mocked(requestJson)).toHaveBeenCalledTimes(1);
+});

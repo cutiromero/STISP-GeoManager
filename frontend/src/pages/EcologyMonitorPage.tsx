@@ -110,7 +110,8 @@ export default function EcologyMonitorPage() {
       <App>
         {selectedScene === "landcover" ||
         selectedScene === "spartina" ||
-        selectedScene === "wildfire" ? (
+        selectedScene === "wildfire" ||
+        selectedScene === "glacier" ? (
           <Suspense fallback={<Spin />}>
             <OfficialMonitoringDashboard
               key={`${user?.id ?? "visitor"}:${project.id}:${selectedScene}:${i18n.resolvedLanguage}`}

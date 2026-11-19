@@ -8,6 +8,7 @@ from .context import is_superadmin
 from .models import ProjectFeature, ProjectFeatureSetting
 
 MONITOR_FEATURE = "ecology_monitor"
+REMOTE_MONITOR_SCENES = ("landcover", "spartina", "wildfire", "glacier")
 UNSET = object()
 
 
@@ -28,10 +29,9 @@ def validate_config(key, config):
         scenes = config["scenes"]
         if (
             not isinstance(scenes, list)
-            or not 1 <= len(scenes) <= 3
+            or not 1 <= len(scenes) <= len(REMOTE_MONITOR_SCENES)
             or any(
-                not isinstance(value, str)
-                or value not in {"spartina", "wildfire", "landcover"}
+                not isinstance(value, str) or value not in REMOTE_MONITOR_SCENES
                 for value in scenes
             )
             or len(set(scenes)) != len(scenes)

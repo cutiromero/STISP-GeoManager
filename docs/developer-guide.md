@@ -14,11 +14,13 @@
 地表覆盖场景、GPU运行、分类图例与大屏任务入口见[环江油田地表覆盖解译](landcover-interpretation.md)。大屏通过既有业务流模块创建同一智能体会话，不增加独立调度器。
 
 
-`GET /api/ecology/monitoring/`必须登录并显式携带`X-Project-Id`，需要`core.browse_data`、项目访问和已开启的`ecology_monitor`场景。`scene`为`spartina`或`wildfire`，`limit`为1至60，`beforeId`使用前页`nextBeforeId`。响应只读现有`RemoteSensingProduct`的交接元数据，不打开影像或运行模型；地图资源及全部来源资源均须同项目、启用、可见且不是内部任务资料。任一来源撤权后，产品和派生统计不再返回。无权访问的项目遵循共享中间件返回404；未登录访问公开项目返回401，未配置场景返回403。
+`GET /api/ecology/monitoring/`必须登录并显式携带`X-Project-Id`，需要`core.browse_data`、项目访问和已开启的`ecology_monitor`场景。`scene`支持`landcover`、`spartina`、`wildfire`和`glacier`，`limit`为1至60，`beforeId`使用前页`nextBeforeId`。响应只读现有`RemoteSensingProduct`的交接元数据，不打开影像或运行模型；地图资源及全部来源资源均须同项目、启用、可见且不是内部任务资料。任一来源撤权后，产品和派生统计不再返回。无权访问的项目遵循共享中间件返回404；未登录访问公开项目返回401，未配置场景返回403。
 
-项目`monitorConfig.source`可选`tarim_poplar_mock`或`remote_sensing_products`，可选`scenes`显式启用互花米草、野火。真实产品源省略scenes时启用两场景；胡杨源省略时保持原演示。未知源或重复/未知场景被拒绝。页面选择产品后复用catalog profile和后端栅格/矢量瓦片，不在浏览器符号化科学栅格。空值不等于零；登记日期不替代观测日期，权重标签不推导预测时效。
+项目`monitorConfig.source`可选`tarim_poplar_mock`或`remote_sensing_products`，可选`scenes`显式启用地表覆盖、互花米草、野火、冰川监测的若干场景。真实产品源省略scenes时启用两场景；胡杨源省略时保持原演示。未知源或重复/未知场景被拒绝。页面选择产品后复用catalog profile和后端栅格/矢量瓦片，不在浏览器符号化科学栅格。空值不等于零；登记日期不替代观测日期，权重标签不推导预测时效。
 
 超级管理员用`register_monitor_product --project <code> --actor <username> --manifest <path>`登记已标准入库的资源，清单遵循`MonitoringProductManifest`；同编码相同内容幂等，内容变化使用新编码。模型结果必须有真实模型版本及权重SHA-256；预测有效期须与输入截至时间、提前天数和证据一致。登记不替代计算中心质量门禁，不自动发布业务流。完整路线、原始资料核验与接入配置见[remote-sensing-monitoring.md](remote-sensing-monitoring.md)及`examples/monitoring/`。
+
+`GET /api/ecology/monitoring/official/?scene=glacier` 使用相同的项目、功能和来源权限。第一项来源为配对原始栅格；该栅格有已登记默认瓦片样式时响应附带 `comparison` 的资源和瓦片参数。`references` 提供同项目、已授权的 PDF/JPEG 等参考资料目录信息。分类有效覆盖率与类别码占比都来自交接原生网格；冰川场景不开放在线解译或预测成果登记。
 
 ## 效率回归与并发复用
 

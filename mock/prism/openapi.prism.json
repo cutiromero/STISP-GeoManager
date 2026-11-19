@@ -716,13 +716,14 @@
             "name": "scene",
             "in": "query",
             "required": true,
-            "description": "当前项目已配置的互花米草或野火场景。",
+            "description": "当前项目已显式配置的遥感监测场景。",
             "schema": {
               "type": "string",
               "enum": [
                 "spartina",
                 "wildfire",
-                "landcover"
+                "landcover",
+                "glacier"
               ]
             }
           },
@@ -824,7 +825,8 @@
               "enum": [
                 "spartina",
                 "wildfire",
-                "landcover"
+                "landcover",
+                "glacier"
               ]
             }
           }
@@ -37610,7 +37612,7 @@
           "scenes": {
             "type": "array",
             "minItems": 1,
-            "maxItems": 3,
+            "maxItems": 4,
             "uniqueItems": true,
             "description": "显式开启的遥感场景。真实产品源省略时开启互花米草和野火；胡杨源省略时只展示原演示。",
             "items": {
@@ -37618,7 +37620,8 @@
               "enum": [
                 "spartina",
                 "wildfire",
-                "landcover"
+                "landcover",
+                "glacier"
               ],
               "description": "遥感监测场景。"
             }
@@ -37938,7 +37941,8 @@
             "enum": [
               "spartina",
               "wildfire",
-              "landcover"
+              "landcover",
+              "glacier"
             ],
             "description": "监测场景。"
           },
@@ -38452,7 +38456,8 @@
             "enum": [
               "spartina",
               "wildfire",
-              "landcover"
+              "landcover",
+              "glacier"
             ],
             "description": "展示场景。"
           },
@@ -38493,6 +38498,37 @@
                     "type": "null"
                   }
                 ]
+              },
+              "comparison": {
+                "description": "冰川场景的配对原始影像及已准备的只读切片；未就绪时为null。",
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "required": [
+                      "resource",
+                      "display"
+                    ],
+                    "properties": {
+                      "resource": {
+                        "$ref": "#/components/schemas/DataResource"
+                      },
+                      "display": {
+                        "$ref": "#/components/schemas/RasterRenderResult"
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "references": {
+                "type": "array",
+                "description": "冰川场景下可访问的交接文档与参考影像目录条目。",
+                "maxItems": 31,
+                "items": {
+                  "$ref": "#/components/schemas/DataResource"
+                }
               }
             }
           }
@@ -38806,7 +38842,8 @@
             "enum": [
               "spartina",
               "wildfire",
-              "landcover"
+              "landcover",
+              "glacier"
             ],
             "description": "当前场景。"
           },

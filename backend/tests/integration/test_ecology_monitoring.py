@@ -373,3 +373,105 @@ def test_command_uses_existing_project_actor_and_catalog_ids(setup_monitor, tmp_
         actor=setup_monitor[0].username,
     )
     assert RemoteSensingProduct.objects.count() == 1
+
+
+@pytest.mark.efficiency
+def test_glacier_official_comparison_stays_project_scoped(client, setup_monitor):
+    from apps.raster.models import RasterDataset, RasterStyle
+
+    admin, reader, project, other, feature, _, original, base = setup_monitor
+    set_feature(
+        admin,
+        feature,
+        project=project,
+        enabled=True,
+        config={
+            "title": "生态监测",
+            "source": "remote_sensing_products",
+            "scenes": ["landcover", "spartina", "wildfire", "glacier"],
+            "initialView": {"center": [71.5, 37], "zoom": 3, "regionZoom": 10},
+        },
+    )
+    classification = DataResource.objects.create(
+        project_tag=project,
+        code="glacier-result",
+        name="冰川交接分类",
+        data_type="raster",
+        coordinate_system="EPSG:3857",
+        storage_path="class.tif",
+        maintainer=admin,
+    )
+    reference = DataResource.objects.create(
+        project_tag=project,
+        code="glacier-reference",
+        name="冰川交接说明",
+        data_type="document",
+        storage_path="table/reference.pdf",
+        maintainer=admin,
+    )
+    for item in (classification, original):
+        rules = {"mode": "unique" if item == classification else "gray", "bands": [1]}
+        dataset = RasterDataset.objects.create(
+            project_tag=project,
+            code=item.code,
+            source_relative_path=f"{item.code}.tif",
+            data_resource=item,
+            status="ready",
+            bounds_4326=[71.3, 37, 71.4, 37.2],
+            bounds_3857=[7900000, 4400000, 7910000, 4420000],
+            default_rules=rules,
+        )
+        RasterStyle.objects.create(
+            project_tag=project, dataset=dataset, style_hash=item.code, rules=rules
+        )
+    values = {
+        **base,
+        "name": "冰川历史分类",
+        "code": "historical-glacier",
+        "scene": "glacier",
+        "resourceId": classification.pk,
+        "sourceResourceIds": [original.pk, reference.pk],
+        "statistics": {
+            "valid_coverage_percent": 30,
+            "valid_pixels": 2700000,
+            "class_1_percent": 40,
+            "class_2_percent": 60,
+        },
+    }
+    from apps.ecology.official_monitoring import official_snapshot
+
+    with project_scope(ProjectScope((project.pk,), project.pk, admin.pk)):
+        with pytest.raises(ValidationError, match="只接受历史"):
+            register_product(admin, {**values, "kind": "model"})
+        with pytest.raises(ValidationError, match="配对原始栅格"):
+            register_product(admin, {**values, "sourceResourceIds": [reference.pk]})
+        with pytest.raises(ValidationError, match="覆盖全部有效像元"):
+            register_product(
+                admin,
+                {
+                    **values,
+                    "statistics": {**values["statistics"], "class_1_percent": 30},
+                },
+            )
+        product, _ = register_product(admin, values)
+    with project_scope(ProjectScope((project.pk,), project.pk, reader.pk)):
+        with CaptureQueriesContext(connection) as queries:
+            data = official_snapshot(reader, "glacier")["items"]
+        assert len(queries) <= 9
+    assert len(data) == 1
+    item = data[0]
+    assert item["id"] == product.pk and item["observedStart"] is None
+    assert item["display"]["styleHash"] == classification.code
+    assert item["comparison"]["display"]["styleHash"] == original.code
+    assert item["comparison"]["resource"]["id"] == original.pk
+    assert [ref["id"] for ref in item["references"]] == [reference.pk]
+    client.force_login(reader)
+    url = "/api/ecology/monitoring/official/?scene=glacier"
+    assert client.get(url, HTTP_X_PROJECT_ID=str(other.pk)).status_code == 404
+    ProjectMembership.objects.create(user=reader, project=other)
+    assert client.get(url, HTTP_X_PROJECT_ID=str(other.pk)).status_code == 403
+    original.owner_only = True
+    original.save()
+    response = client.get(url, HTTP_X_PROJECT_ID=str(project.pk))
+    assert response.status_code == 200
+    assert response.json()["items"] == []
