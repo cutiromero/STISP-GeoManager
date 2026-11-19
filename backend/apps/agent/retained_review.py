@@ -96,6 +96,7 @@ def inspection_held_suggestions(plan):
                 "status": row["status"],
                 "areaM2": area if math.isfinite(area) else 0,
                 "observations": measurements,
+                "knowledgeRefs": [],
                 "preview": row.get("geometry_json"),
             }
         )

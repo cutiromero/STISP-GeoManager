@@ -324,6 +324,8 @@ def test_auto_only_run_can_inspect_authorized_extent_and_nonactionable_findings(
     projected = page["modificationReview"]["suggestions"]
     assert projected[0]["featureId"] == "held-patch"
     assert projected[0]["action"] == "keep" and projected[0]["preview"]["coordinates"]
+    assert projected[0]["bounds"] == [98, 35, 98.001, 35.001]
+    assert projected[0]["knowledgeRefs"] == []
     assert [item["featureId"] for item in projected] == (
         ["held-patch", "0"] if apply_in_progress else ["held-patch"]
     )

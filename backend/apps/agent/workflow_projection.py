@@ -96,6 +96,20 @@ def display_preview(preview):
     return {**geometry, "coordinates": quantize(geometry["coordinates"])}
 
 
+def _review_item(item, retained):
+    preview = (
+        display_preview(item.get("preview"))
+        if retained
+        else {"type": "Polygon", "coordinates": []}
+    )
+    projected = {**item, "preview": preview}
+    if retained and "bounds" not in item:
+        projected["bounds"] = (
+            list(shape(preview).bounds) if preview["coordinates"] else [0, 0, 0, 0]
+        )
+    return projected
+
+
 def _identity(item, suggestion=False):
     keys = (
         ("featureId", "ruleId", "action")
@@ -621,12 +635,7 @@ def project_workflow(
         data["modificationReview"] = {
             **{key: value for key, value in review.items() if key != "suggestions"},
             "suggestions": [
-                {
-                    **item,
-                    "preview": display_preview(item.get("preview"))
-                    if part == "retained"
-                    else {"type": "Polygon", "coordinates": []},
-                }
+                _review_item(item, retained=part == "retained")
                 for item in suggestions[offset : offset + limit]
             ]
             if part in {"suggestions", "retained"}
