@@ -8,7 +8,8 @@ import json
 import math
 
 from django.core.exceptions import PermissionDenied
-from django.db import transaction
+from django.db import connection, transaction
+from django.db.models import F
 
 from apps.catalog.models import DataResource
 from apps.compute.access import require_actor
@@ -423,7 +424,12 @@ def prepare(workflow, user, policy):
     path = table_data_path(relative)
     source = f"geology-multi-frozen-rules:{workflow.id}"
     with transaction.atomic():
-        existing = DataResource.objects.filter(source=source).first()
+        resources = DataResource.objects.filter(source=source)
+        if connection.vendor == "sqlite":
+            # Reserve the writer before reading this short metadata transaction.
+            # A stale SQLite read snapshot cannot upgrade while workers write.
+            resources.update(size_bytes=F("size_bytes"))
+        existing = resources.first()
         if existing:
             if not path.is_file() or path.read_bytes() != raw:
                 raise ComputeError("已冻结的项目规则与当前知识版本不一致", 409)

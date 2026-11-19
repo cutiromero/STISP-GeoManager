@@ -169,6 +169,10 @@ def test_uploaded_geology_business_flow_completes_all_seven_nodes(
                 "evidenceIds": ["node-result"],
             }
         )
+        if node_id == "apply" and value.get("action") == "preflight_operator":
+            # The approved ports already belong to this frozen plan. The main
+            # model may request validation by version without repeating IDs.
+            value["arguments"] = {"versionId": value["arguments"]["versionId"]}
         yield json.dumps(value, ensure_ascii=False)
 
     monkeypatch.setattr(provider, "stream", streamed)

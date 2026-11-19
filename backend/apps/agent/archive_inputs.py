@@ -5,7 +5,9 @@ from django.core.exceptions import PermissionDenied
 from apps.compute.packages import ComputeError
 
 ARCHIVE_SOURCE = "logic-test-data:20261119-v5:"
-ARCHIVE_REGIONS = {"wulong", "nuomuhong", "dulan"}
+# The verified reference products share UTM 46N, including Dulan's zone edge.
+ARCHIVE_EPSG = 32646
+ARCHIVE_RESOLUTIONS_M = {"wulong": 29, "nuomuhong": 30, "dulan": 30}
 ARCHIVE_FIELDS = {"geo_sym": "display_symbol", "class_id": "geo_sym"}
 UNIT_FIELDS = {
     key: key for key in ("code", "name", "category", "age_ma", "group", "favorable")
@@ -16,7 +18,7 @@ def _registered_archive(resource):
     return (
         resource.inventory_group_id
         and resource.source.startswith(ARCHIVE_SOURCE)
-        and resource.source.removeprefix(ARCHIVE_SOURCE) in ARCHIVE_REGIONS
+        and resource.source.removeprefix(ARCHIVE_SOURCE) in ARCHIVE_RESOLUTIONS_M
     )
 
 
@@ -26,6 +28,16 @@ def registered_fields(resource, columns):
     if not set(ARCHIVE_FIELDS.values()) <= set(columns):
         raise ComputeError("归档岩性图缺少已登记的图面地质符号或分类编号字段")
     return ARCHIVE_FIELDS
+
+
+def registered_grid(resource):
+    if not _registered_archive(resource):
+        return {}
+    region = resource.source.removeprefix(ARCHIVE_SOURCE)
+    return {
+        "working_epsg": ARCHIVE_EPSG,
+        "grid_resolution_m": ARCHIVE_RESOLUTIONS_M[region],
+    }
 
 
 def registered_units(user, policy, lithology):

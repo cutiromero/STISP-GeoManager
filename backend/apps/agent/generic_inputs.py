@@ -14,7 +14,12 @@ from apps.catalog.models import DataResource
 from apps.compute.packages import ComputeError
 from apps.core.storage import vector_geopackage_path
 
-from .archive_inputs import UNIT_FIELDS, registered_fields, registered_units
+from .archive_inputs import (
+    UNIT_FIELDS,
+    registered_fields,
+    registered_grid,
+    registered_units,
+)
 from .geology_generic import MINERALS, utm_epsg
 from .workflow_resources import resolve_workflow_resource
 from .workflow_uploads import register_vector
@@ -347,8 +352,11 @@ def build_inputs(workflow, user, policy) -> None:
     }
     original = _read(source["lithology"])
     check_cancelled(workflow)
-    epsg = working_epsg(original)
     archive = registered_fields(source["lithology"], original.columns)
+    grid = registered_grid(source["lithology"]) if archive else {}
+    epsg = grid["working_epsg"] if grid else working_epsg(original)
+    if grid:
+        workflow.parameters.setdefault("grid_resolution_m", grid["grid_resolution_m"])
     lithology = lithology_copy(original, mapping["lithology"], epsg, archive=archive)
     overrides, vocabulary = _unit_context(
         user, policy, source, mapping, lithology, archive

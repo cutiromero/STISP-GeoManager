@@ -424,6 +424,9 @@ def submission(workflow, user, policy, node, loop, arguments, *, source_state=No
     from apps.compute.preflight import expand_bindings
     from apps.agent.business_flow_operator_repair import _effective, _specs
 
+    from . import logic_nodes
+    from .execution_session import session
+
     version = version_for(
         workflow, user, node, loop, arguments.get("versionId"), policy
     )
@@ -434,13 +437,13 @@ def submission(workflow, user, policy, node, loop, arguments, *, source_state=No
     )
     if not all(isinstance(value, dict) for value in (inputs, parameters, mappings)):
         raise ComputeError("输入、参数与字段映射必须为对象")
+    defaults = known_role_bindings(workflow, node)
+    if logic_nodes.enabled(workflow) and session(workflow):
+        # These bindings come from the current frozen recipe, including
+        # generated rules and approvals that have no user-facing input role.
+        defaults.update(loop.get("approvedInputs", {}))
     inputs = resolve_output_bindings(
-        workflow,
-        user,
-        policy,
-        node,
-        loop,
-        {**known_role_bindings(workflow, node), **inputs},
+        workflow, user, policy, node, loop, {**defaults, **inputs}
     )
     if len(encoded(arguments)) > MAX_TOOL_BYTES:
         raise ComputeError("工具参数超过8192字节")
@@ -485,7 +488,6 @@ def submission(workflow, user, policy, node, loop, arguments, *, source_state=No
     from .launch_parameters import require_fixed_parameters
 
     require_fixed_parameters(version.manifest, baseline)
-    from . import logic_nodes
 
     fixed_keys = set(parameters) - adjustable
     if fixed_keys:

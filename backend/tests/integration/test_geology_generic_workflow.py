@@ -32,6 +32,7 @@ from apps.agent.workflow_uploads import (
 from apps.catalog.models import DataResource, DataResourceGroup
 from apps.compute.packages import ComputeError
 from apps.projects.context import ProjectScope, project_scope
+from tests.integration.test_agent_runtime_heartbeat import wal_database  # noqa: F401
 from tests.integration.test_compute import setup_compute  # noqa: F401
 from tests.integration.test_demo_workflow import demo  # noqa: F401
 
@@ -250,12 +251,15 @@ def test_working_copies_keep_canonical_fields_and_fill_absent_inputs():
     assert empty.empty and list(empty.columns) == ["line_id", "geometry"]
 
 
-@pytest.mark.parametrize("resume", [False, True])
+@pytest.mark.parametrize(
+    "resume,catalog_wgs84", [(False, False), (True, False), (False, True)]
+)
 def test_archive_field_confirmation_keeps_distinct_classes_with_the_same_symbol(
     generic,
     tmp_path,
     monkeypatch,
     resume,
+    catalog_wgs84,
 ):
     from django.core.exceptions import PermissionDenied
 
@@ -272,12 +276,14 @@ def test_archive_field_confirmation_keeps_distinct_classes_with_the_same_symbol(
     )
     from tests.unit.test_geology_multi_algorithms import fixture
 
-    source = ARCHIVE_SOURCE + "wulong"
+    source = ARCHIVE_SOURCE + ("dulan" if catalog_wgs84 else "wulong")
+    region = "都兰" if catalog_wgs84 else "五龙沟"
+    easting = 850_000 if catalog_wgs84 else 600_000
     actor = generic["owner"]
     generic["project"].code = "02"
     generic["project"].save(update_fields=["code"])
     groups = [
-        DataResourceGroup.objects.create(name=region) for region in ("五龙沟", "都兰")
+        DataResourceGroup.objects.create(name=name) for name in (region, "诺木洪")
     ]
     original = gpd.GeoDataFrame(
         {
@@ -286,12 +292,15 @@ def test_archive_field_confirmation_keeps_distinct_classes_with_the_same_symbol(
             "display_symbol": ["Tnc¹", "Tnc¹"],
         },
         geometry=[
-            box(600000, 4000000, 600030, 4000030),
-            box(600030, 4000000, 600060, 4000030),
+            box(easting, 4_000_000, easting + 30, 4_000_030),
+            box(easting + 30, 4_000_000, easting + 60, 4_000_030),
         ],
         crs=32646,
     )
-    resource = register_vector(original, user=actor, name="五龙沟岩性", source=source)
+    visible = original.to_crs(4326) if catalog_wgs84 else original
+    if catalog_wgs84:
+        assert working_epsg(visible) == 32647
+    resource = register_vector(visible, user=actor, name=region + "岩性", source=source)
     book = pd.DataFrame(
         {
             "code": ["U035", "U036"],
@@ -302,12 +311,12 @@ def test_archive_field_confirmation_keeps_distinct_classes_with_the_same_symbol(
             "favorable": [1, 0],
         }
     )
-    units = register_table(book, user=actor, name="五龙沟单元表", source=source)
+    units = register_table(book, user=actor, name=region + "单元表", source=source)
     other_book = register_table(
         book.assign(name=["另一区甲", "另一区乙"]),
         user=actor,
-        name="都兰单元表",
-        source=ARCHIVE_SOURCE + "dulan",
+        name="诺木洪单元表",
+        source=ARCHIVE_SOURCE + "nuomuhong",
     )
     for item, group in (
         (resource, groups[0]),
@@ -422,8 +431,66 @@ def test_archive_field_confirmation_keeps_distinct_classes_with_the_same_symbol(
     )
     assert copied.geo_sym.tolist() == ["U035", "U036"]
     assert copied.display_symbol.tolist() == ["Tnc¹", "Tnc¹"]
-    assert copied.geometry.equals(original.geometry)
-    assert _read(resource).equals(original)
+    assert workflow.parameters["working_epsg"] == copied.crs.to_epsg() == 32646
+    assert workflow.parameters["grid_resolution_m"] == (30 if catalog_wgs84 else 29)
+    assert copied.geometry.geom_equals_exact(original.geometry, tolerance=1e-7).all()
+    assert _read(resource).equals(visible)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_frozen_rules_registration_waits_for_other_writers(
+    generic, wal_database, monkeypatch
+):
+    from contextlib import closing
+    import sqlite3
+    from types import SimpleNamespace
+
+    from django.db import connection
+    from apps.agent import geology_multi
+
+    source = DataResource.objects.get(pk=generic["rules"].pk)
+    monkeypatch.setattr(
+        geology_multi, "validate_inputs", lambda *args, **kwargs: (source, [], {}, {})
+    )
+    workflow = SimpleNamespace(
+        id=uuid.uuid4(),
+        project_tag_id=generic["project"].pk,
+        plan={"inputs": {}},
+        parameters={},
+        resource_ids=[],
+    )
+    with closing(
+        sqlite3.connect(connection.settings_dict["NAME"], timeout=0)
+    ) as writer:
+        assert writer.execute("PRAGMA journal_mode=WAL").fetchone() == ("wal",)
+        with writer:
+            writer.execute("CREATE TABLE rules_write_probe (n INTEGER)")
+            writer.execute("INSERT INTO rules_write_probe VALUES (0)")
+        observed = []
+
+        def try_competing_write(execute, sql, params, many, context):
+            result = execute(sql, params, many, context)
+            if (
+                not observed
+                and connection.in_atomic_block
+                and sql.lstrip().upper().startswith("SELECT")
+                and f"geology-multi-frozen-rules:{workflow.id}" in (params or ())
+            ):
+                try:
+                    with writer:
+                        writer.execute("UPDATE rules_write_probe SET n=n+1")
+                except sqlite3.OperationalError as error:
+                    assert error.sqlite_errorcode == sqlite3.SQLITE_BUSY
+                    observed.append("waits for existing writer")
+            return result
+
+        with connection.execute_wrapper(try_competing_write):
+            geology_multi.prepare(workflow, generic["owner"], generic["policy"])
+        assert observed == ["waits for existing writer"]
+        assert DataResource.objects.filter(pk=workflow.plan["frozen_rules"]).exists()
+        with writer:
+            writer.execute("UPDATE rules_write_probe SET n=n+1")
+        assert writer.execute("SELECT n FROM rules_write_probe").fetchone() == (1,)
 
 
 def test_adjacent_utm_source_preserves_shared_lithology_edges():
