@@ -475,12 +475,15 @@ def prepare_demo(workflow, user, p) -> None:
     from apps.business_flows import logic_nodes
 
     if logic_nodes.uses_fixed_nodes(workflow):
-        workflow.plan["modelPlanning"] = False
-        decisions_required = 2 + sum(
-            bool(node["review"]["ai"])
-            for node in workflow.parameters["_businessFlow"]["definitionSnapshot"][
-                "nodes"
-            ]
+        decisions_required = (
+            2
+            + int(workflow.plan["modelPlanning"])
+            + sum(
+                bool(node["review"]["ai"])
+                for node in workflow.parameters["_businessFlow"]["definitionSnapshot"][
+                    "nodes"
+                ]
+            )
         )
     elif logic_nodes.enabled(workflow):
         workflow.plan["modelPlanning"] = False
@@ -1547,7 +1550,10 @@ def advance_demo(workflow_id) -> None:
                 and not _has_model_progress(stage)
                 and not stage.get("contextBudgetReview")
             ):
-                stage["executionMode"] = "automatic"
+                # Approval authenticates the proposal origin. Submission only
+                # records how the already approved work reaches the calculator.
+                stage.setdefault("executionMode", "automatic")
+                stage["dispatchMode"] = "automatic"
                 _submit_stage(workflow, user, p, stage)
                 step(
                     workflow,

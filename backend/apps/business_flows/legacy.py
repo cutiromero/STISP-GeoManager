@@ -170,7 +170,10 @@ def projected_state(workflow):
                 if workflow.status in {"failed", "interrupted"}
                 else "executing"
             )
-        if stage.get("taskId") and stage.get("executionMode") == "automatic":
+        if stage.get("taskId") and (
+            stage.get("dispatchMode") == "automatic"
+            or stage.get("executionMode") == "automatic"
+        ):
             item["executor"].pop("model", None)
             item["executor"].update(
                 status="succeeded" if identity in completed else "running",

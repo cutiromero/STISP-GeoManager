@@ -242,8 +242,9 @@ def native_task(task):
     RuntimeLease.objects.filter(name="worker").update(heartbeat=timezone.now())
 
 
+@pytest.mark.parametrize("restore_origin", [False, True], ids=["fresh", "retry"])
 def test_published_fixed_nodes_dispatch_once_and_keep_human_boundary(
-    generic, tmp_path, monkeypatch
+    generic, tmp_path, monkeypatch, restore_origin
 ):
     generic["project"].code = "02"
     generic["project"].save(update_fields=["code"])
@@ -311,6 +312,62 @@ def test_published_fixed_nodes_dispatch_once_and_keep_human_boundary(
     run_workflow(workflow.id)
     assert ComputeTask.objects.filter(owner=generic["owner"]).count() == 1
     assert not workflow.plan["stages"][1].get("modificationsApproval")
+
+    def review(workflow, node, attempt, evidence, **kwargs):
+        assert node["id"] == "apply"
+        return {
+            "decision": "accept",
+            "reason": "核对当前检查的确切证据",
+            "issues": [],
+            "repairInstructions": "",
+            "evidenceIds": [row["id"] for row in evidence],
+        }
+
+    monkeypatch.setattr("apps.agent.business_flow_review.review_node", review)
+    native_task(ComputeTask.objects.get(pk=check["taskId"]))
+    resume_waiting()
+    for record in ComputeImport.objects.filter(status="queued"):
+        process_import(record)
+        record.refresh_from_db()
+        assert record.status == "ready", record.error
+    resume_waiting()
+    run_workflow(workflow.id)
+    workflow.refresh_from_db()
+    assert workflow.plan["phase"] == "review_modifications", workflow.detail
+    assert ComputeTask.objects.filter(owner=generic["owner"]).count() == 1
+    proposal = workflow.plan["modificationReview"]
+    selection = [
+        next(
+            row["id"] for row in proposal["suggestions"] if row["status"] == "suggested"
+        )
+    ]
+    response = post(
+        generic,
+        f"/api/agent/workflows/{workflow.id}/confirm/",
+        {"planHash": workflow.plan_hash, "selectedSuggestionIds": selection},
+    )
+    assert response.status_code == 200, response.content
+    workflow.refresh_from_db()
+    if restore_origin:
+        # Reproduce the persisted faulty dispatch record from interrupted tasks.
+        workflow.plan["stages"][1]["executionMode"] = "automatic"
+        workflow.save(update_fields=["plan"])
+    run_workflow(workflow.id)
+    workflow.refresh_from_db()
+    assert workflow.status == "waiting_compute", workflow.detail
+    apply = workflow.plan["stages"][1]
+    assert (
+        apply["executionMode"] == "rule_verified"
+        and apply["dispatchMode"] == "automatic"
+    )
+    assert (
+        workflow.plan["modificationReview"]["proposalHash"] == proposal["proposalHash"]
+    )
+    assert apply["modificationsApproval"]["selectedSuggestionIds"] == selection
+    assert (
+        len(apply["approvedEdits"]) == 1
+        and ComputeTask.objects.filter(owner=generic["owner"]).count() == 2
+    )
 
 
 def test_system_data_to_clean_results_and_new_conversation_reuse(

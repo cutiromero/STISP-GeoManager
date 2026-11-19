@@ -682,10 +682,30 @@ def _fresh(workflow, user, policy, stage):
     if result_evidence(actual) != result_evidence(check["results"]):
         raise ComputeError("实际检查结果已变化，请重新检查并确认", 409)
     review, rows = proposal(workflow, stage, actual)
-    if any(
-        workflow.plan["modificationReview"].get(key) != review[key]
-        for key in ("proposalHash", "suggestions")
+    frozen = workflow.plan["modificationReview"]
+
+    def matches(value):
+        return all(
+            frozen.get(key) == value[key] for key in ("proposalHash", "suggestions")
+        )
+
+    if not matches(review) and (
+        stage.get("executionMode") == "automatic"
+        and stage.get("modificationsApproval")
+        and stage.get("decision", {}).get("modelMode") == "rules"
     ):
+        from apps.business_flows.logic_nodes import uses_fixed_nodes
+
+        if uses_fixed_nodes(workflow):
+            # The former dispatch path overwrote only the proposal's origin.
+            # Recover the original only when the entire frozen proposal matches.
+            restored, candidate_rows = proposal(
+                workflow, {**stage, "executionMode": "rule_verified"}, actual
+            )
+            if matches(restored):
+                stage.update(executionMode="rule_verified", dispatchMode="automatic")
+                review, rows = restored, candidate_rows
+    if not matches(review):
         raise ComputeError("建议的对象、动作或知识版本已变化，须重新确认", 409)
     return review, rows
 
