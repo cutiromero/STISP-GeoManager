@@ -811,7 +811,16 @@ def confirm_demo(
         workflow.plan["phase"] = "decide"
         workflow.status = "queued"
     elif workflow.plan["phase"] == "review_results":
-        stage = workflow.plan["stages"][workflow.plan["stageIndex"]]
+        stages, index = workflow.plan["stages"], workflow.plan["stageIndex"]
+        stage = (
+            stages[index]
+            if 0 <= index < len(stages)
+            else workflow.plan.get("finalStage")
+            if index == len(stages)
+            else None
+        )
+        if not isinstance(stage, dict) or not stage:
+            raise ComputeError("当前没有待确认的分析阶段，请刷新任务", 409)
         budget_retry = bool(stage.get("contextBudgetReview"))
         if stage.get("contextBudgetReview", {}).get("kind") == "model_call_limit":
             raise ComputeError(

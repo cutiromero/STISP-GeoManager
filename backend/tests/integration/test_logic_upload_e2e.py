@@ -118,13 +118,46 @@ def test_uploaded_geology_business_flow_completes_all_seven_nodes(
         tokens = conservative_tokens(model, messages)
         assert tokens <= WINDOW - maximum - 256
         packet = json.loads(messages[1]["content"])
-        metric = node_metrics[packet["node"]["id"]]
+        from apps.agent.report_text import REPORT_MARKER
+
+        instruction = messages[0]["content"]
+        report = REPORT_MARKER in instruction
+        node_id = "finish" if report else packet["node"]["id"]
+        metric = node_metrics[node_id]
         if metric["started"] is None:
             metric["started"] = time.perf_counter() - started
         metric["modelRequests"] += 1
-        calls.append(
-            {"node": packet["node"]["id"], "tokens": tokens, "outputTokens": maximum}
-        )
+        calls.append({"node": node_id, "tokens": tokens, "outputTokens": maximum})
+        if report:
+            facts = packet["verifiedReportFacts"]
+            references = [
+                f"output:{value}"
+                for value in packet["executionState"]["currentRun"][
+                    "latestStatisticsOutputIds"
+                ]
+            ]
+            references += [
+                f"knowledge:{ref['id']}@{ref['revision']}"
+                for ref in packet["availableEvidence"]
+                if ref["kind"] == "knowledge"
+            ][:1]
+            summary = (
+                f"初检 {facts['initialIssueCount']} 项，实际处置 "
+                f"{facts['executedDispositionCount']} 项，复查剩余 {facts['recheckRemainingIssueCount']} 项。"
+            )
+            yield (
+                f"[ACTION]\nfinish\n[SUMMARY]\n{summary}\n[FINDINGS]\n按实际统计核对修正与远景成果。"
+                "\n[LIMITATIONS]\n优先核查现场接触关系。\n[REFERENCES]\n"
+                + "\n".join(references)
+                + "\n[END]"
+            )
+            return
+        if node_id == "finish" and "[DECISION]" in instruction:
+            yield (
+                "[DECISION]\naccept\n[REASON]\n已核对实际统计和依据。"
+                "\n[CHANGES]\n无\n[EVIDENCE]\nnode-result\n[END]"
+            )
+            return
         value = (
             node_action(packet)
             if "nodeContext" in packet

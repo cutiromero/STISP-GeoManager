@@ -101,8 +101,8 @@ def test_real_model_pause_boundaries_preserve_response_and_never_resend(
 
     poll_time = [0.0]
 
-    def stream_guard(check, deadline):
-        return ModelStreamGuard(check, deadline, clock=lambda: poll_time[0])
+    def stream_guard(check, deadline, **kwargs):
+        return ModelStreamGuard(check, deadline, clock=lambda: poll_time[0], **kwargs)
 
     workflow = prepared(demo)
     assert claim() == workflow.id
