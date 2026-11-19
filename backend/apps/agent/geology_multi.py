@@ -489,11 +489,9 @@ def prepare(workflow, user, policy):
 def authorize_frozen(workflow, user, policy):
     vocabulary = workflow.plan.get("archivedClassification")
     if vocabulary:
-        book = resolve_workflow_resource(
-            user, policy, vocabulary["resourceId"], workflow
-        )
-        if vocabulary["revision"] != book.updated_at.isoformat():
-            raise PermissionDenied("本次归档分类使用的填图单元表已变化，请重新核对资料")
+        from .archive_inputs import authorize_unit_vocabulary
+
+        authorize_unit_vocabulary(workflow, user, policy, vocabulary)
     source, entries, units, aliases = read_rules(
         user, policy, workflow.plan["inputs"]["rules"], workflow=workflow
     )

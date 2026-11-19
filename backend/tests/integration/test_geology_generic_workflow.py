@@ -14,7 +14,6 @@ from apps.agent.archive_inputs import ARCHIVE_SOURCE
 from apps.agent.demo_workflow import confirm_demo, prepare_demo
 from apps.agent.generic_inputs import (
     _read,
-    build_inputs,
     coverage_copy,
     faults_copy,
     lithology_copy,
@@ -251,9 +250,28 @@ def test_working_copies_keep_canonical_fields_and_fill_absent_inputs():
     assert empty.empty and list(empty.columns) == ["line_id", "geometry"]
 
 
+@pytest.mark.parametrize("resume", [False, True])
 def test_archive_field_confirmation_keeps_distinct_classes_with_the_same_symbol(
     generic,
+    tmp_path,
+    monkeypatch,
+    resume,
 ):
+    from django.core.exceptions import PermissionDenied
+
+    from apps.agent.archive_inputs import authorize_unit_vocabulary
+    from apps.agent.workflow import run_workflow
+    from apps.business_flows import catalog
+    from apps.business_flows.builtins import builtin_flows
+    from apps.business_flows.failure_handoff import handoff_exception
+    from apps.compute.models import ComputeTask
+    from tests.integration.test_logic_reasoning_journey import (
+        post,
+        register_operators,
+        register_rules,
+    )
+    from tests.unit.test_geology_multi_algorithms import fixture
+
     source = ARCHIVE_SOURCE + "wulong"
     actor = generic["owner"]
     generic["project"].code = "02"
@@ -302,22 +320,100 @@ def test_archive_field_confirmation_keeps_distinct_classes_with_the_same_symbol(
     add_catalog_references(
         actor, generic["project"].id, generic["batch"], [resource.pk]
     )
-    workflow = _create(generic, {"lithology": resource.pk})
-    prepare_demo(workflow, actor, generic["policy"])
+    context, _ = fixture(tmp_path)
+    register_rules(generic, context)
+    register_operators(generic)
+    flow, version = catalog.register_flow(generic["admin"], builtin_flows()[0])
+    response = post(
+        generic,
+        f"/api/business-flows/{flow.pk}/start/",
+        {
+            "versionId": version.pk,
+            "model": "mock",
+            "goal": "核对同批归档岩性",
+            "inputs": {"lithology": resource.pk},
+            "idempotencyKey": uuid.uuid4().hex,
+            "parameters": {"uploadBatchId": generic["batch"]},
+        },
+    )
+    assert response.status_code == 202, response.content
+    workflow = AgentWorkflow.objects.get(pk=response.json()["id"])
+    run_workflow(workflow.pk)
     workflow.refresh_from_db()
     review = workflow.plan["fieldMappingReview"]
     targets = {t["key"]: t["field"] for t in review["roles"][0]["targets"]}
     assert (targets["geo_sym"], targets["class_id"]) == ("display_symbol", "geo_sym")
     with pytest.raises(ComputeError, match="登记为"):
         validate_mapping(review, {"lithology": {**targets, "geo_sym": "geo_sym"}})
-    confirm_demo(
-        workflow,
-        actor,
-        generic["policy"],
-        workflow.plan_hash,
-        field_mapping={"lithology": targets},
+    response = post(
+        generic,
+        f"/api/agent/workflows/{workflow.pk}/confirm/",
+        {
+            "planHash": workflow.plan_hash,
+            "fieldMapping": {"lithology": targets},
+            "executeAfterMapping": True,
+        },
     )
-    build_inputs(workflow, actor, generic["policy"])
+    assert response.status_code == 200, response.content
+    if resume:
+        with monkeypatch.context() as interrupted:
+            interrupted.setattr(
+                "apps.agent.input_execution.input_execution_authorized",
+                lambda *args: False,
+            )
+            run_workflow(workflow.pk)
+        workflow.refresh_from_db()
+        assert (
+            workflow.plan["phase"] == "review_plan" and not workflow.execute_operators
+        )
+        before = workflow.plan["workingCopies"].copy()
+        workflow.resource_ids.remove(units.pk)
+        workflow.save(update_fields=["resource_ids"])
+        binding = workflow.plan["archivedClassification"]
+        with pytest.raises(PermissionDenied, match="同一归档批次"):
+            authorize_unit_vocabulary(
+                workflow,
+                actor,
+                generic["policy"],
+                {
+                    **binding,
+                    "resourceId": other_book.pk,
+                    "revision": other_book.updated_at.isoformat(),
+                },
+            )
+        with pytest.raises(PermissionDenied, match="已变化"):
+            authorize_unit_vocabulary(
+                workflow, actor, generic["policy"], {**binding, "revision": "old"}
+            )
+        handoff_exception(workflow, PermissionDenied("内部资料未绑定到当前科研任务"))
+        path = f"/api/business-flows/runs/{workflow.pk}/"
+        public = generic["client"].get(
+            path, HTTP_X_PROJECT_ID=str(generic["project"].pk)
+        )
+        assert public.status_code == 200, public.content
+        response = post(
+            generic,
+            path + "decide/",
+            {
+                "nodeId": "check",
+                "decision": "retry_context",
+                "revision": public.json()["revision"],
+                "idempotencyKey": uuid.uuid4().hex,
+            },
+        )
+        assert response.status_code == 200, response.content
+    run_workflow(workflow.pk)
+    workflow.refresh_from_db()
+    assert workflow.execute_operators and workflow.plan["phase"] == "decide", (
+        workflow.detail
+    )
+    assert workflow.status == "queued" and units.pk in workflow.resource_ids
+    assert workflow.steps.filter(kind="field_mapping_confirmed").count() == 1
+    assert workflow.steps.filter(kind="working_copies").count() == 1
+    assert workflow.steps.filter(kind="input_execution_authorized").count() == 1
+    assert not ComputeTask.objects.exists()
+    if resume:
+        assert workflow.plan["workingCopies"] == before
     assert workflow.plan["archivedClassification"]["resourceId"] == units.pk
     assert workflow.plan["unitOverrides"]["units"]["U035"]["name"] == "岩性甲"
     assert other_book.pk not in workflow.resource_ids

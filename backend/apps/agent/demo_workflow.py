@@ -370,7 +370,13 @@ def prepare_demo(workflow, user, p) -> None:
             return
         from .geology_generic import prepare_generic
 
-        if prepare_generic(workflow, user, p):
+        if workflow.plan.get("phase") == "review_plan" and workflow.plan.get(
+            "scenarioVersion"
+        ):
+            # An interrupted initial confirmation can leave the prepared plan
+            # without a committed confirmation. Reuse its authorised inputs.
+            authorize_demo(workflow, user, p)
+        elif prepare_generic(workflow, user, p):
             return
     roles = ROLES[workflow.workflow_type]
     inputs = workflow.plan.get("inputs", {})
@@ -567,6 +573,7 @@ def prepare_demo(workflow, user, p) -> None:
             "batchPlanning": "after_check",
         },
     }
+    vocabulary = workflow.plan.get("archivedClassification")
     workflow.resource_ids = sorted(
         set(inputs.values())
         | set(
@@ -574,6 +581,7 @@ def prepare_demo(workflow, user, p) -> None:
             if workflow.workflow_type == "geology_generic"
             else []
         )
+        | ({vocabulary["resourceId"]} if vocabulary else set())
     )
     workflow.evidence = knowledge
     workflow.status, workflow.current_step = "waiting_approval", "review_plan"
