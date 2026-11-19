@@ -179,3 +179,32 @@ def test_native_schema_only_offers_current_phase_actions():
         "run_operator"
         in NATIVE_TOOLS[0]["function"]["parameters"]["properties"]["action"]["enum"]
     )
+
+
+@pytest.mark.parametrize("name", ["preflight_operator", "run_operator"])
+def test_unique_mapping_next_to_arguments_is_normalized_for_operator_validation(name):
+    mapping = {"lithology": {"class_name": "name"}}
+    args = {"versionId": 32, "inputs": {"lithology": 40}, "parameters": {}}
+    result = validate_contract_action(
+        json.dumps({"action": name, "arguments": args, "fieldMappings": mapping}),
+        set(),
+        [name],
+    )
+    assert result == {"action": name, "arguments": {**args, "fieldMappings": mapping}}
+
+
+@pytest.mark.parametrize(
+    "action,args,mapping",
+    [
+        ("preflight_operator", {"fieldMappings": {}}, {}),
+        ("preflight_operator", {}, []),
+        ("ask_user", {"question": "待确认"}, {}),
+    ],
+)
+def test_ambiguous_or_other_top_level_mappings_are_rejected(action, args, mapping):
+    with pytest.raises(ActionFormatError):
+        validate_contract_action(
+            json.dumps({"action": action, "arguments": args, "fieldMappings": mapping}),
+            set(),
+            [action],
+        )
