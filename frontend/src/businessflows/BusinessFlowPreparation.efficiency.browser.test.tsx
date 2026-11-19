@@ -195,6 +195,83 @@ function showWorkspace() {
   );
 }
 
+async function reusePrevious() {
+  fireEvent.click(await screen.findByRole("button", { name: "沿用上次配置" }));
+}
+
+it("只按本次所选资料启动，不自动带入上一次的地区和角色", async () => {
+  const replacement = {
+    ...items[0]!,
+    id: "different-region",
+    resourceId: 912,
+    fileName: "另一区域的分类结果",
+  };
+  vi.spyOn(agentApi, "workflowCatalogResources").mockResolvedValue({
+    items: [
+      {
+        id: replacement.resourceId,
+        name: replacement.fileName,
+        dataType: replacement.dataType,
+        directoryId: null,
+        directoryName: "",
+        createdAt: "2026-11-20",
+      },
+    ],
+    total: 1,
+    page: 1,
+    pageSize: 20,
+    directories: [],
+  });
+  const references = vi
+    .spyOn(agentApi, "addWorkflowCatalogReferences")
+    .mockResolvedValue({ items: [replacement], errors: [] });
+  vi.spyOn(agentApi, "recognizeWorkflowRoles").mockResolvedValue({
+    source: "model",
+    questions: [],
+    items: [
+      {
+        uploadId: replacement.id,
+        resourceId: replacement.resourceId,
+        role: "lithology",
+        reason: "属性样本描述地层类别，且几何为多边形。",
+      },
+    ],
+  });
+  const start = vi
+    .spyOn(businessFlowsApi, "start")
+    .mockResolvedValue(businessFlowRun());
+  showWorkspace();
+  await screen.findByText("0 份已选");
+  expect(agentApi.restoreLogicConfiguration).not.toHaveBeenCalled();
+  const action = screen.getByRole("button", { name: "开始业务流" });
+  expect(action).toBeDisabled();
+  const goal = "只看这批资料，缺少的旁证留到报告说明。";
+  fireEvent.change(screen.getByRole("textbox", { name: "本次任务目标" }), {
+    target: { value: goal },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "选择系统数据" }));
+  fireEvent.click(
+    await screen.findByRole("checkbox", {
+      name: `选择${replacement.fileName}`,
+    }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "加入本次任务" }));
+  await waitFor(() => expect(references).toHaveBeenCalledOnce());
+  fireEvent.click(await screen.findByRole("button", { name: "识别资料用途" }));
+  await waitFor(() => expect(action).toBeEnabled());
+  expect(screen.queryByText(items[0]!.fileName)).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "沿用上次配置" }),
+  ).not.toBeInTheDocument();
+  fireEvent.click(action);
+  await waitFor(() => expect(start).toHaveBeenCalledOnce());
+  expect(start.mock.calls[0]![1]).toMatchObject({
+    goal,
+    inputs: { lithology: replacement.resourceId },
+  });
+  expect(agentApi.restoreLogicConfiguration).not.toHaveBeenCalled();
+});
+
 it.each([
   [1440, 1000],
   [390, 844],
@@ -203,6 +280,7 @@ it.each([
   async (width, height) => {
     await page.viewport(width, height);
     showWorkspace();
+    await reusePrevious();
     await screen.findByText("五龙沟-海德乌拉_岩性识别");
     const start = await screen.findByRole("button", {
       name: "开始业务流",
@@ -297,6 +375,7 @@ it.each(["restore", "suggest"])(
         />
       </App>,
     );
+    await reusePrevious();
     await screen.findByText(items[0]!.fileName);
     if (mode === "suggest")
       fireEvent.click(screen.getByRole("button", { name: "识别资料用途" }));
@@ -383,6 +462,7 @@ it("lets a fresh source receive one real role suggestion before starting the sam
     exact: true,
   });
   expect(button).toBeDisabled();
+  await reusePrevious();
   fireEvent.click(await screen.findByRole("button", { name: "识别资料用途" }));
   await waitFor(() => expect(button).toBeEnabled());
   expect(recognize).toHaveBeenCalledOnce();
@@ -426,6 +506,7 @@ it("keeps selections across remote searches and does not reread the restored sou
     .spyOn(agentApi, "addWorkflowCatalogReferences")
     .mockResolvedValue({ items: added, errors: [] });
   showWorkspace();
+  await reusePrevious();
   await screen.findByText("五龙沟-海德乌拉_岩性识别");
   fireEvent.click(
     screen.getByRole("button", { name: "选择系统数据", exact: true }),
@@ -473,6 +554,7 @@ it.each([
       unavailableResourceIds: [],
     });
     showWorkspace();
+    await reusePrevious();
     await screen.findByText(selected[0]!.fileName);
     const panel = screen.getByRole("region", { name: "业务流启动准备" });
     expect(panel.querySelectorAll(".flow-materials-row")).toHaveLength(count);
@@ -515,6 +597,7 @@ it("复用来源通过业务流启动并冻结版本和本次目标", async () =
       />
     </App>,
   );
+  await reusePrevious();
   await screen.findByText(items[0]!.fileName);
   const action = screen.getByRole("button", {
     name: "开始业务流",
@@ -532,11 +615,12 @@ it("复用来源通过业务流启动并冻结版本和本次目标", async () =
   expect(submit).not.toHaveBeenCalled();
 });
 
-it("退出准备保留引用，重新打开仍可恢复，只有清空才解除引用", async () => {
+it("退出不会移除引用；重新打开先为空，明确沿用后仍可清空", async () => {
   const remove = vi
     .spyOn(agentApi, "deleteWorkflowUpload")
     .mockResolvedValue(undefined);
   const view = showWorkspace();
+  await reusePrevious();
   await screen.findByText(items[0]!.fileName);
   fireEvent.click(
     screen.getByRole("button", { name: "取消业务流准备", exact: true }),
@@ -549,6 +633,9 @@ it("退出准备保留引用，重新打开仍可恢复，只有清空才解除�
   expect(remove).not.toHaveBeenCalled();
   view.unmount();
   showWorkspace();
+  await screen.findByText("0 份已选");
+  expect(agentApi.restoreLogicConfiguration).toHaveBeenCalledOnce();
+  await reusePrevious();
   await screen.findByText(items[0]!.fileName);
   fireEvent.click(screen.getByRole("button", { name: "清空", exact: true }));
   await waitFor(() => expect(remove).toHaveBeenCalledTimes(items.length));

@@ -419,3 +419,33 @@ def test_upload_and_role_permissions_and_bound_batch(generic):
     generic["client"].force_login(generic["outsider"])
     response = recognize(generic)
     assert response.status_code in (400, 403, 404)
+
+
+@pytest.mark.parametrize("feature_count", [1, 3, 87])
+@pytest.mark.parametrize(
+    ("name", "fields", "expected"),
+    [
+        ("研究区岩性图.geojson", [], "lithology"),
+        ("地质样区.gpkg", [{"name": "DCMC"}], "lithology"),
+        ("调查范围.gpkg", [], "coverage"),
+        ("矢量待核对.gpkg", [{"name": "material_key"}], None),
+        ("岩性范围.gpkg", [{"name": "geo_sym"}], None),
+    ],
+)
+def test_polygon_role_hint_uses_evidence_instead_of_feature_count(
+    feature_count, name, fields, expected
+):
+    from apps.agent.workflow_uploads import role_hint
+
+    assert (
+        role_hint(
+            name,
+            {
+                "kind": "vector",
+                "geometryTypes": ["MultiPolygon"],
+                "fields": fields,
+                "featureCount": feature_count,
+            },
+        )
+        == expected
+    )

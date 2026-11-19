@@ -970,15 +970,28 @@ def test_large_execution_catalog_has_usable_summary_without_paging_entire_manife
 
 
 @pytest.mark.parametrize(
-    ("requested", "available", "outcome"),
+    ("plan", "requested", "available", "outcome"),
     [
-        ("conf", False, "omit"),
-        ("conf", True, "preserve"),
-        ("unverified", False, "reject"),
+        ({"archivedClassification": {"resourceId": 1984}}, "conf", False, "omit"),
+        ({"confirmedMapping": {"lithology": {"conf": None}}}, "conf", False, "omit"),
+        ({"confirmedMapping": {"lithology": {"conf": None}}}, "conf", True, "preserve"),
+        (
+            {"confirmedMapping": {"lithology": {"conf": "survey_prob"}}},
+            "conf",
+            False,
+            "reject",
+        ),
+        (
+            {"confirmedMapping": {"lithology": {"conf": None}}},
+            "unverified",
+            False,
+            "reject",
+        ),
+        ({}, "conf", False, "reject"),
     ],
 )
-def test_archive_optional_confidence_preflight_keeps_required_bindings(
-    monkeypatch, requested, available, outcome
+def test_optional_confidence_preflight_keeps_confirmed_bindings(
+    monkeypatch, plan, requested, available, outcome
 ):
     from apps.agent import policy
     from apps.business_flows import node_loop
@@ -1038,7 +1051,7 @@ def test_archive_optional_confidence_preflight_keeps_required_bindings(
         workflow_type="geology_generic",
         owner_id=1,
         model="test",
-        plan={"archivedClassification": {"resourceId": 1984}},
+        plan=plan,
         parameters={"_businessFlow": {"nodeExecution": "geology_node_tools_v1"}},
     )
     item = {}

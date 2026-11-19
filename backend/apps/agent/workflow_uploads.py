@@ -49,7 +49,19 @@ MINERAL_HINTS = {
     "calcite": ("calcite", "fangjieshi", "方解"),
     "dolomite": ("dolomite", "baiyunshi", "白云石"),
 }
-COVERAGE_HINTS = ("范围", "边界", "研究区", "coverage", "extent", "boundary")
+COVERAGE_HINTS = ("范围", "边界", "coverage", "extent", "boundary")
+LITHOLOGY_HINTS = ("岩性", "地层", "地质图", "litholog", "stratigraph", "geologic map")
+LITHOLOGY_FIELDS = {
+    "dcmc",
+    "geo_sym",
+    "display_symbol",
+    "lithology",
+    "formation_name",
+    "stratum_name",
+    "地层名称",
+    "岩性名称",
+    "岩性",
+}
 
 
 def require_upload_access(user, project_id):
@@ -221,12 +233,19 @@ def role_hint(file_name: str, profile: dict) -> str | None:
     if "Line" in geometry:
         return "faults"
     if "Polygon" in geometry:
-        small = (profile["featureCount"] or 0) <= 3
-        return (
-            "coverage"
-            if small or any(w in lowered for w in COVERAGE_HINTS)
-            else "lithology"
-        )
+        named_coverage = any(word in lowered for word in COVERAGE_HINTS)
+        named_lithology = any(word in lowered for word in LITHOLOGY_HINTS)
+        if named_coverage and named_lithology:
+            return None  # Conflicting evidence: let the model or user decide.
+        if named_lithology:
+            return "lithology"
+        if named_coverage or "研究区" in lowered:
+            return "coverage"
+        if any(
+            field.get("name", "").casefold() in LITHOLOGY_FIELDS
+            for field in profile.get("fields", [])
+        ):
+            return "lithology"
     return None
 
 

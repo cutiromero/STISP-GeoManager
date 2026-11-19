@@ -19,6 +19,7 @@ import {
   UploadOutlined,
 } from "@ant-design/icons";
 import {
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -164,6 +165,7 @@ export default function GenericWorkflowUploads({
   const currentBatch = useRef(batchId);
   currentBatch.current = batchId;
   const inFlight = useRef(false);
+  const restoreRequest = useRef<AbortController | null>(null);
   const changed = useRef(false);
   useEffect(() => {
     if (!catalogOpen || catalogComposing) return;
@@ -206,9 +208,77 @@ export default function GenericWorkflowUploads({
     onActivityChange?.(Boolean(uploading) || recognizing);
     return () => onActivityChange?.(false);
   }, [uploading, recognizing, onActivityChange]);
+  const restorePrevious = useCallback(
+    async (signal: AbortSignal) => {
+      setUploading("上次配置");
+      setRestoreWarning("");
+      try {
+        let result = await agentApi.restoreLogicConfiguration(batchId, signal);
+        if (signal.aborted || currentBatch.current !== batchId) return;
+        if (result.configuration)
+          result = {
+            ...result,
+            configuration: {
+              ...result.configuration,
+              roles: workflowInputsForRoles(
+                result.configuration.roles,
+                allowedRoleKey?.split(","),
+              ),
+            },
+          };
+        const savedRoles = Object.entries(result.configuration?.roles ?? {});
+        setItems(
+          result.items.map((item) => ({
+            ...item,
+            roleHint:
+              genericRoles.find((role) =>
+                savedRoles.some(
+                  ([key, id]) =>
+                    workflowRoleName(key) === role.key &&
+                    id === item.resourceId,
+                ),
+              )?.key ?? item.roleHint,
+          })),
+        );
+        setRestoreWarning(
+          result.unavailableResourceIds.length
+            ? `${result.unavailableResourceIds.length} 份上次资料已失效、变化或无权访问，请重新选择并核对。`
+            : result.configuration && !result.configuration.roles.lithology
+              ? "上次岩性图未纳入可沿用配置，请重新选择岩性图。"
+              : !result.configuration && !result.items.length && polished
+                ? "没有可沿用的配置，请选择本次任务资料。"
+                : "",
+        );
+        restoredCallback.current?.(result);
+      } catch (reason) {
+        if (!signal.aborted && currentBatch.current === batchId)
+          setRestoreWarning(
+            reason instanceof Error
+              ? reason.message
+              : "上次配置读取失败，可重新选择资料",
+          );
+      } finally {
+        if (!signal.aborted && currentBatch.current === batchId)
+          setUploading(undefined);
+      }
+    },
+    [allowedRoleKey, batchId, polished],
+  );
+  const reusePrevious = () => {
+    if (disabled || inFlight.current || items.length || recognizing) return;
+    const controller = new AbortController();
+    restoreRequest.current = controller;
+    inFlight.current = true;
+    void restorePrevious(controller.signal).finally(() => {
+      if (restoreRequest.current !== controller) return;
+      restoreRequest.current = null;
+      inFlight.current = false;
+    });
+  };
   useEffect(() => {
     setItems([]);
     setError("");
+    setRestoreWarning("");
     setSuggestions(undefined);
     setRecognitionError("");
     setUploading(undefined);
@@ -222,57 +292,14 @@ export default function GenericWorkflowUploads({
     setCatalogQuery("");
     const controller = new AbortController();
     if (uploadOnly) {
-      setUploading("上次配置");
-      void agentApi
-        .restoreLogicConfiguration(batchId, controller.signal)
-        .then((result) => {
-          if (controller.signal.aborted || currentBatch.current !== batchId)
-            return;
-          if (result.configuration)
-            result = {
-              ...result,
-              configuration: {
-                ...result.configuration,
-                roles: workflowInputsForRoles(
-                  result.configuration.roles,
-                  allowedRoleKey?.split(","),
-                ),
-              },
-            };
-          setItems(
-            result.items.map((item) => ({
-              ...item,
-              roleHint:
-                genericRoles.find((role) =>
-                  Object.entries(result.configuration?.roles ?? {}).some(
-                    ([key, id]) =>
-                      workflowRoleName(key) === role.key &&
-                      id === item.resourceId,
-                  ),
-                )?.key ?? item.roleHint,
-            })),
-          );
-          setRestoreWarning(
-            result.unavailableResourceIds.length
-              ? `${result.unavailableResourceIds.length} 份上次资料已失效、变化或无权访问，请重新选择并核对。`
-              : result.configuration && !result.configuration.roles.lithology
-                ? "上次岩性图为临时资料，未纳入可复用配置，请重新选择岩性图。"
-                : "",
-          );
-          restoredCallback.current?.(result);
-        })
-        .catch((reason) => {
-          if (!controller.signal.aborted)
-            setRestoreWarning(
-              reason instanceof Error
-                ? reason.message
-                : "上次配置读取失败，可重新选择资料",
-            );
-        })
-        .finally(() => {
-          if (!controller.signal.aborted) setUploading(undefined);
-        });
-      return () => controller.abort();
+      // A new business-flow task has no material bindings until the user
+      // chooses sources or explicitly reuses an earlier configuration.
+      if (!polished) void restorePrevious(controller.signal);
+      return () => {
+        controller.abort();
+        restoreRequest.current?.abort();
+        restoreRequest.current = null;
+      };
     }
     void agentApi
       .workflowUploads(batchId, { signal: controller.signal })
@@ -284,7 +311,7 @@ export default function GenericWorkflowUploads({
         // A new batch has nothing to restore.
       });
     return () => controller.abort();
-  }, [batchId, uploadOnly, allowedRoleKey]);
+  }, [batchId, polished, restorePrevious, uploadOnly]);
   const roleOf = (item: AgentWorkflowUpload) =>
     workflowRoleName(
       Object.entries(inputs).find(([, id]) => id === item.resourceId)?.[0] ??
@@ -450,6 +477,14 @@ export default function GenericWorkflowUploads({
       )}
       {restoreWarning && <Alert type="warning" title={restoreWarning} />}
       <Space wrap className={polished ? "flow-materials-tools" : undefined}>
+        {polished && uploadOnly && !items.length && (
+          <Button
+            disabled={disabled || Boolean(uploading) || recognizing}
+            onClick={reusePrevious}
+          >
+            沿用上次配置
+          </Button>
+        )}
         <Button
           icon={polished ? <PlusOutlined /> : undefined}
           aria-label="选择系统数据"

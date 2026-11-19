@@ -709,6 +709,50 @@ def test_prepared_chat_rechecks_its_matched_algorithm_snapshot(
     assert not ComputeTask.objects.exists()
 
 
+def test_restoring_configuration_never_carries_unbound_draft_resources(generic):
+    import uuid
+
+    from apps.agent.logic_configuration import save_configuration
+    from apps.agent.models import LogicConfiguration, WorkflowUpload
+    from apps.projects.context import ProjectScope, project_scope
+
+    run, upload = confirmed_catalog_configuration(generic)
+    run.refresh_from_db()
+    workflow = run.research_workflow
+    unused = generic["rules"]
+    with project_scope(
+        ProjectScope(
+            (generic["project"].id,), generic["project"].id, generic["owner"].id
+        )
+    ):
+        WorkflowUpload.objects.create(
+            owner=generic["owner"],
+            project_tag=generic["project"],
+            batch_id=upload.batch_id,
+            resource=unused,
+            workflow=workflow,
+            source="catalog",
+            file_name=unused.name,
+        )
+        save_configuration(workflow, workflow.plan["confirmedMapping"])
+        saved = LogicConfiguration.objects.get(owner=generic["owner"])
+        assert saved.value["resourceIds"] == [upload.resource_id]
+        saved.value["resourceIds"].append(unused.pk)
+        saved.value["updatedAt"][str(unused.pk)] = unused.updated_at.isoformat()
+        saved.save(update_fields=["value"])
+    response = generic["client"].post(
+        "/api/agent/logic-configuration/",
+        json.dumps({"batchId": uuid.uuid4().hex}),
+        content_type="application/json",
+        HTTP_X_PROJECT_ID=str(generic["project"].id),
+    )
+    assert response.status_code == 200, response.content
+    restored = response.json()
+    assert restored["configuration"]["resourceIds"] == [upload.resource_id]
+    assert restored["unavailableResourceIds"] == []
+    assert [item["resourceId"] for item in restored["items"]] == [upload.resource_id]
+
+
 def test_configuration_invalid_resources_and_user_project_isolation(generic):
     import uuid
     from apps.agent.logic_configuration import read_configuration

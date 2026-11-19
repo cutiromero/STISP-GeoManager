@@ -24,7 +24,15 @@ def read_configuration(user, project_id):
     ).first()
     if saved is None:
         return None, []
-    value = saved.value
+    # Older configurations could contain every referenced item in the draft,
+    # including those that were never assigned a role in the confirmed run.
+    bound = set(saved.value["roles"].values())
+    value = {
+        **saved.value,
+        "resourceIds": [
+            identity for identity in saved.value["resourceIds"] if identity in bound
+        ],
+    }
     resources = {
         str(item.pk): item for item in available.filter(pk__in=value["resourceIds"])
     }
@@ -77,9 +85,10 @@ def save_configuration(workflow, mapping):
         pk=workflow.project_tag_id, code__in=GEOLOGY_PROJECT_CODES
     ).exists():
         return
+    bindings = workflow.plan["uploadInputs"]
     uploads = list(
         WorkflowUpload.objects.filter(
-            workflow=workflow, source="catalog"
+            workflow=workflow, source="catalog", resource_id__in=bindings.values()
         ).select_related("resource")
     )
     if not uploads:
@@ -100,13 +109,13 @@ def save_configuration(workflow, mapping):
         "resourceIds": sorted(identities),
         "roles": {
             role: identity
-            for role, identity in workflow.plan["uploadInputs"].items()
+            for role, identity in bindings.items()
             if identity in identities
         },
         "fieldMapping": {
             role: fields
             for role, fields in mapping.items()
-            if workflow.plan["uploadInputs"].get(role) in identities
+            if bindings.get(role) in identities
         },
         "prompt": workflow.goal,
         "reasoningEffort": (

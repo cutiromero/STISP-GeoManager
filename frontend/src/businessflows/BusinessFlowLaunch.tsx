@@ -338,6 +338,9 @@ export default function BusinessFlowLaunch({
             (input.multiple && key.startsWith(input.key + ":")),
         ),
     ) ?? [];
+  const unassigned = isLegacy
+    ? materialCount - new Set(Object.values(inputs)).size
+    : 0;
   const loadCandidates = async (query = wantedQuery.current, force = false) => {
     if (!roleOpen.current || !alive.current || candidateComposing.current)
       return;
@@ -748,6 +751,14 @@ export default function BusinessFlowLaunch({
                     )}
                   </SettingsTag>
                 }
+                {unassigned > 0 && missing.length === 0 && !uploading && (
+                  <Alert
+                    type="warning"
+                    showIcon
+                    title={`${unassigned} 份资料尚未指定用途，不会参与本次计算。`}
+                    description="可先识别或手动核对用途；未提供的可选资料不必补齐。"
+                  />
+                )}
                 {isLegacy ? (
                   <Suspense fallback={<Spin />}>
                     <GenericWorkflowUploads

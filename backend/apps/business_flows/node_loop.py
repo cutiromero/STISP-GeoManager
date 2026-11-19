@@ -1187,14 +1187,14 @@ def execute_tool(
         if action == "preflight_operator":
             from .logic_nodes import (
                 submission_digest,
-                without_missing_archive_confidence,
+                without_missing_optional_confidence,
             )
 
             note = ""
             try:
                 validated = validate_submission(user, body)
             except ComputeError as error:
-                cleaned = without_missing_archive_confidence(
+                cleaned = without_missing_optional_confidence(
                     workflow, version.manifest, body, error
                 )
                 if cleaned is None:
