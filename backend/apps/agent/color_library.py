@@ -152,7 +152,7 @@ def _library(index, lithology, alteration):
             entry.update(
                 color=units["colors"][entry["name"]],
                 referenceColor=units["colors"][entry["name"]],
-                source=units["source"],
+                source=entry.get("source") or units["source"],
             )
         elif entry["domain"] == "alteration":
             selected = next(

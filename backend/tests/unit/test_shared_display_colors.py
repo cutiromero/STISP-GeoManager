@@ -21,7 +21,7 @@ def profile():
     }
 
 
-def test_map_and_logic_use_all_38_exact_reference_colors_and_keep_standard_duplicates():
+def test_map_and_logic_use_exact_reference_colors_and_keep_standard_duplicates():
     expected = color_library.lithology_colors()
     data = profile()
     proposal = {
@@ -54,6 +54,23 @@ def test_map_and_logic_use_all_38_exact_reference_colors_and_keep_standard_dupli
         ]
         == "#ffffd8"
     )
+
+
+def test_regional_lyrx_fill_colors_override_generic_rock_colors():
+    expected = {
+        "大干沟组深灰色灰岩夹粉砂岩c1dg": ("#c6c7b5", "都兰_30m重建"),
+        "鄂拉山组流纹岩-火山碎屑岩t3e3": ("#ffd3ff", "都兰_30m重建"),
+        "早泥盆世中粗粒二长花岗岩d1ny": ("#ffb1d1", "诺木洪"),
+        "早泥盆世灰-浅灰绿色中粗粒绿泥石化二长花岗岩d1ny": ("#ffe5ff", "诺木洪"),
+    }
+    audit = []
+    category_style("name", list(expected), audit=audit)
+    assert {row["value"] for row in audit} == expected.keys()
+    for row in audit:
+        color, layer = expected[row["value"]]
+        assert row["source"] == "library_selected"
+        assert row["color"] == color
+        assert row["referenceSource"].startswith(f"核能开发图层成果.lyrx / {layer} /")
 
 
 def test_editing_only_canonical_table_updates_logic_tools_and_saved_maps(

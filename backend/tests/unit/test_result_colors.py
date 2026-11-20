@@ -24,7 +24,7 @@ def test_standard_lithology_model_selection_and_offline_fallback_are_identical()
         for entry in library()
         if entry["domain"] == "lithology" and entry["id"].startswith("lithology-")
     ]
-    assert len(entries) == len(values) == 38
+    assert len(entries) == len(values)
     assert {
         entry["name"]: entry["referenceColor"] for entry in entries
     } == LITHOLOGY_COLORS
@@ -275,7 +275,7 @@ def test_mock_registration_uses_library_for_all_lithologies_without_network(
     monkeypatch.setattr(result_colors.provider, "stream", request)
     result_colors.style_result(workflow, resource, "apply.lithology")
     records = resource.default_visualization["colorAdvice"]["classes"]
-    assert len(records) == 38
+    assert {item["value"]: item["color"] for item in records} == LITHOLOGY_COLORS
     assert {item["source"] for item in records} == {"library_selected"}
     assert all(not item["remainingIssues"] for item in records)
     request.assert_not_called()
@@ -435,7 +435,7 @@ def test_management_command_previews_and_reapplies_current_flow(monkeypatch, app
     assert '"colorAdvice"' in output.getvalue()
 
 
-def test_management_preview_has_38_original_lithology_library_colors(monkeypatch):
+def test_management_preview_has_all_registered_lithology_colors(monkeypatch):
     from apps.agent.management.commands import style_logic_results as command
 
     monkeypatch.setattr(command.ComputeOutput.objects, "filter", Mock(return_value=[]))
@@ -480,7 +480,7 @@ def test_management_preview_has_38_original_lithology_library_colors(monkeypatch
     )
     preview = json.loads(output.getvalue().splitlines()[0])["visualization"]
     records = preview["colorAdvice"]["classes"]
-    assert len(records) == 38
+    assert len(records) == len(LITHOLOGY_COLORS)
     assert {item["source"] for item in records} == {"library_selected"}
     assert {item["value"]: item["color"] for item in records} == LITHOLOGY_COLORS
     assert all(item["color"] == item["referenceColor"] for item in records)

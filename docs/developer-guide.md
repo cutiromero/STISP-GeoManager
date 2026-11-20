@@ -138,7 +138,7 @@ GET `/api/catalog/resources/{id}/vector-tiles/{revision}/{z}/{x}/{y}.pbf`沿用q
 
 逻辑推理项目先按首句生成标题，资料任务可附主资料名，不加入固定任务模板、时间或编号。首轮成功后，所选模型在后台将首句和已授权资料名概括为简短标题；最多一个并发请求、8秒超时，失败保留原标题，不影响回答。手动命名优先于异步摘要。界面在首轮完成后最多用10秒、4次元数据读取等待标题，切换会话或手动命名即停止。正式环境使用应用现有 Conda 和正式配置运行 `python manage.py backfill_logic_titles --config <正式配置路径>` 预览旧自动模板待回填数量，追加 `--apply` 写入；重复执行不会改写已回填或自定义标题。其他项目不适用该规则。
 
-逻辑推理、科研智能体个人地图及输入展示共用 `result_colors.category_style` 和 `color_library.reference_entries`，精确单元名称优先于宽泛岩类。模型核对分类字段和实际类别，命中色表时原样采用，未覆盖时才建议新色；原表同色类别保留，以图例名称区分。`lithology_colors.json` 是38类岩性色值的唯一来源，来自 ExportedFiles.lyrx 的 CIMUniqueValueRenderer；`alteration_colors.json` 是蚀变色值的唯一来源。`result_color_library.json` 仅保存两者的名称、别名、来源索引，以及在该索引独立维护的等级和常见岩类条目，不再复制岩性或蚀变色值。蚀变、等级及常见岩类为项目参考约定，不宣称国家或行业强制标准。
+逻辑推理、科研智能体个人地图及输入展示共用 `result_colors.category_style` 和 `color_library.reference_entries`，精确单元名称优先于宽泛岩类。模型核对分类字段和实际类别，命中色表时原样采用，未覆盖时才建议新色；原表同色类别保留，以图例名称区分。`lithology_colors.json` 是岩性色值的唯一来源，按单元全名登记 `ExportedFiles.lyrx`（海德乌拉）及 `核能开发图层成果.lyrx`（都兰_30m重建、诺木洪）中 CIMUniqueValueRenderer 的填充色；`alteration_colors.json` 是蚀变色值的唯一来源。`result_color_library.json` 仅保存两者的名称、别名、来源索引，以及在该索引独立维护的等级和常见岩类条目，不再复制岩性或蚀变色值。蚀变、等级及常见岩类为项目参考约定，不宣称国家或行业强制标准。
 
 通用地图工具可用 `mode=reference` 直接绑定平台规则，不重复生成完整色表；`unique` 提供的颜色同样通过共用函数校验。`colorPolicy.revision` 由唯一色表及匹配/校验实现的内容产生。规则变化后，已绑定的工程、成果详情和蚀变预览在刷新时按当前规则投影；栅格颜色变化后改用后台渲染缓存。该过程不读完整要素、不写原始快照或科学文件，不重新调用模型和算子。未绑定的普通手工配色不自动覆盖。
 
