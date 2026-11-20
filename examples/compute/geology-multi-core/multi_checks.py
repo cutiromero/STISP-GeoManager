@@ -10,6 +10,12 @@ from shapely.ops import unary_union
 from multi_io import ISSUE_FIELDS, digest, dump, geojson_geometry, scalar
 from multi_lithology_merge import candidates as merge_candidates
 from multi_lithology_shape import shape_candidates, continuity_candidates
+from multi_context import (
+    WHOLE_FEATURE_STRATEGY,
+    buffered_group,
+    candidates as context_candidates,
+    whole_feature_candidates,
+)
 
 
 def issue(
@@ -63,7 +69,15 @@ def lithology_findings(
     lithology, faults, area, rules, units, aliases, snapshot, config
 ):
     result = []
-    fault_union = unary_union(faults.geometry)
+    neighbour_buffers = {}
+    context_rule = rules.get("L-08")
+    context_strategy = (
+        context_rule["params"].get("context_strategy") if context_rule else None
+    )
+    if context_strategy is not None and context_strategy != WHOLE_FEATURE_STRATEGY:
+        raise ValueError("项目地质规则指定了未知的 L-08 判读策略")
+    whole_feature_context = context_strategy == WHOLE_FEATURE_STRATEGY
+    fault_union = None if whole_feature_context else unary_union(faults.geometry)
     if "L-06" in rules:
         rule = rules["L-06"]
         for index, host, measurements in shape_candidates(lithology, units, rule):
@@ -136,6 +150,10 @@ def lithology_findings(
                 )
             )
             continue
+        if whole_feature_context:
+            # L-01/L-02/L-04 chronology is measured by L-08 instead of
+            # opening a second or age-only candidate on the same polygon.
+            continue
         geometry = row.geometry
         exteriors = unary_union(
             [
@@ -157,7 +175,9 @@ def lithology_findings(
         if neighbours.empty:
             continue
         shares = {
-            code: exteriors.intersection(unary_union(group.geometry).buffer(0.5)).length
+            code: exteriors.intersection(
+                buffered_group(group, neighbour_buffers)
+            ).length
             for code, group in neighbours.groupby("geo_sym")
         }
         host, shared = max(shares.items(), key=lambda pair: pair[1])
@@ -246,7 +266,7 @@ def lithology_findings(
                     ["keep", "review", "reclassify", "merge"],
                 )
             )
-    if "L-07" in rules:
+    if "L-07" in rules and not whole_feature_context:
         represented = {row["feature_id"] for row in result}
         for index, host, measured in continuity_candidates(
             lithology, units, rules["L-07"]
@@ -267,6 +287,47 @@ def lithology_findings(
                     config,
                     {**measured, "fault_distance_m": distance},
                     f"本演示案例试用：较早单元{row.geo_sym}为不与同类相接的低置信度近等轴斑块，{measured['shared_boundary_ratio']:.1%}外边界邻接较年轻同类单元{host}。需核查分布连续性、接触产状及构造窗/捕虏体；构造线不作为自动排除依据，始终待用户裁定，不据形状直接判错。",
+                    "review",
+                    host,
+                    "review",
+                    ["keep", "review", "reclassify"],
+                )
+            )
+    if context_rule:
+        represented = {row["feature_id"] for row in result}
+        measure = (
+            whole_feature_candidates if whole_feature_context else context_candidates
+        )
+        for row, host, measured in measure(
+            lithology, faults, area, units, context_rule["params"], represented
+        ):
+            if whole_feature_context:
+                context = (
+                    "同类图斑未在局部范围内延续。"
+                    if measured["context_evidence"] == "isolated_same_unit"
+                    else "附近虽有同类图斑但不相接，本斑仍呈紧凑形态和近闭合共边。"
+                )
+                reason = (
+                    f"主导相邻单元与当前图斑共边占外周的{measured['shared_boundary_ratio']:.1%}；"
+                    f"轮廓凸包填充率为{measured['hull_fill_ratio']:.1%}。{context}"
+                    "待核查是否为合法包体、残留体或构造窗；只有批准后才整斑改类并融合共边。"
+                )
+            else:
+                reason = (
+                    f"邻域复核：{measured['shared_boundary_ratio']:.1%}外边界由{host}主导，"
+                    f"局部面积占比{measured['local_area_fraction']:.1%}；结合岩石组／时代与同类连续性列为候选。"
+                    "附近构造单独记录；构造窗、包体、残留体及多期岩体仍需裁定，不能仅据包围判错。"
+                )
+            result.append(
+                issue(
+                    "lithology",
+                    row.feature_id,
+                    row.geometry,
+                    context_rule,
+                    snapshot,
+                    config,
+                    measured,
+                    reason,
                     "review",
                     host,
                     "review",
