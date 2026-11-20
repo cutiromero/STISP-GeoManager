@@ -13,6 +13,8 @@ import {
   beforeReviewMap,
 } from "../map/geologyReview.testFixtures";
 import RetainedIssueReview from "./RetainedIssueReview";
+const SOURCE = "Qhᵃˡ（全新世冲积物）";
+const TARGET = "Qp3pal（晚更新世冲积物）";
 const { mapQuery } = vi.hoisted(() => ({ mapQuery: vi.fn() }));
 vi.mock("../map/geologyReviewData", async (original) => ({
   ...(await original<typeof import("../map/geologyReviewData")>()),
@@ -34,11 +36,19 @@ function task() {
       id: "held-1",
       kind: "multi_element",
       element: "lithology",
-      featureId: "F-01",
+      featureId: "F00188",
       ruleId: "L-06",
       status: "review",
       candidateAction: "reclassify",
-      candidateTargetCode: "Qp3pal",
+      candidateTargetCode: "U034",
+      currentState: SOURCE,
+      observations: {
+        lithology_display: {
+          current: SOURCE,
+          target: TARGET,
+          codes: { U036: SOURCE, U034: TARGET },
+        },
+      },
       reason: "紧凑度异常，需要核对冲积扇例外",
     },
     {
@@ -86,7 +96,7 @@ it("核查仅加载当前成果单图，切换对象和勾选不重新请求底�
     501,
     expect.objectContaining({ displayGeometry: true, loadStyle: true }),
   );
-  fireEvent.click(screen.getByRole("checkbox", { name: "处置F-01" }));
+  fireEvent.click(screen.getByRole("checkbox", { name: `处置${SOURCE}` }));
   fireEvent.click(screen.getAllByRole("button", { name: "F-02" })[0]!);
   expect(mapQuery).toHaveBeenCalledTimes(2);
   expect(screen.getByRole("button", { name: "定位所选对象" })).toBeEnabled();
@@ -105,7 +115,9 @@ it("仅展示人工候选，默认全部保留，选择后只提交明确对象"
   );
   expect(screen.getByText(/196 项已核验处置沿用原授权/)).toBeVisible();
   expect(screen.queryByText("auto-0")).toBeNull();
-  const first = screen.getByRole("checkbox", { name: "处置F-01" });
+  expect(screen.getByText(`重新分类 → ${TARGET}`)).toBeVisible();
+  expect(screen.queryByText(/F00188|U034|U036/)).toBeNull();
+  const first = screen.getByRole("checkbox", { name: `处置${SOURCE}` });
   expect(first).not.toBeChecked();
   fireEvent.click(first);
   fireEvent.click(screen.getByRole("button", { name: "执行所选 1 项并继续" }));
@@ -128,14 +140,14 @@ it("真实几何可视化并可通过对象名展开依据", () => {
   expect(
     view.container.querySelectorAll("svg [data-feature-id]").length,
   ).toBeGreaterThan(0);
-  fireEvent.click(screen.getAllByRole("button", { name: "F-01" })[0]!);
+  fireEvent.click(screen.getAllByRole("button", { name: SOURCE })[0]!);
   expect(
     within(screen.getByRole("article", { name: "当前对象依据" })).getByRole(
       "heading",
-      { name: "F-01 · L-06" },
+      { name: `${SOURCE} · L-06` },
     ),
   ).toBeVisible();
-  expect(screen.queryByRole("checkbox", { name: "处置F-01" })).toBeNull();
+  expect(screen.queryByRole("checkbox", { name: `处置${SOURCE}` })).toBeNull();
 });
 it("未选择对象时确认只保留，不产生默认人工批准", () => {
   const onReview = vi.fn();
@@ -159,7 +171,7 @@ it("can select a candidate directly from its mapped evidence", () => {
       </MemoryRouter>
     </App>,
   );
-  fireEvent.click(screen.getAllByRole("button", { name: "F-01" })[0]!);
+  fireEvent.click(screen.getAllByRole("button", { name: SOURCE })[0]!);
   fireEvent.click(screen.getByRole("checkbox", { name: "选择当前待核查疑点" }));
   fireEvent.click(screen.getByRole("button", { name: "执行所选 1 项并继续" }));
   expect(onReview).toHaveBeenCalledExactlyOnceWith(
@@ -263,7 +275,7 @@ it("shows the full automatic scope as muted clusters without adding approval cho
       '[data-layer="automatic-dispositions"] circle',
     ),
   ).toHaveAttribute("fill", "#70867d");
-  fireEvent.click(screen.getByRole("checkbox", { name: "处置F-01" }));
+  fireEvent.click(screen.getByRole("checkbox", { name: `处置${SOURCE}` }));
   fireEvent.click(screen.getByRole("button", { name: "执行所选 1 项并继续" }));
   expect(onReview).toHaveBeenCalledExactlyOnceWith(
     "approve",

@@ -8,6 +8,13 @@ import { record } from "../map/geologyReviewData";
 import RetainedReviewMap from "./RetainedReviewMap";
 import type { LogicTaskProps } from "./logicTaskTypes";
 import { MultiElementEvidence } from "./MultiElementStory";
+import {
+  expertLithologyText,
+  issueLithologyDisplay,
+  issueObjectTitle,
+  issueReason,
+  issueTargetTitle,
+} from "./lithologyDisplay";
 
 type Actions = Record<string, "keep" | "exclude" | "downweight">;
 const labels: Record<string, string> = {
@@ -62,8 +69,8 @@ export default function RetainedIssueReview({
           rule_id: item.ruleId,
           status: item.status,
           element: item.element,
-          label: item.featureId,
-          name: item.featureId,
+          label: issueObjectTitle(item),
+          name: issueObjectTitle(item),
           _review_outlineOnly: item.element === "alteration",
         },
       })),
@@ -156,22 +163,22 @@ export default function RetainedIssueReview({
                   onChange: (keys) => setSelected(keys.map(String)),
                   getCheckboxProps: (item) => ({
                     disabled: busy || !selectable.has(item.id),
-                    "aria-label": `处置${item.featureId}`,
+                    "aria-label": `处置${issueObjectTitle(item)}`,
                   }),
                 }
           }
           columns={[
             {
-              title: "对象",
-              dataIndex: "featureId",
-              width: 150,
-              render: (value, item) => (
+              title: "核查对象",
+              key: "object",
+              width: 190,
+              render: (_, item) => (
                 <Button
                   type="link"
                   size="small"
                   onClick={() => setFocused(item.id)}
                 >
-                  {value}
+                  {issueObjectTitle(item)}
                 </Button>
               ),
             },
@@ -190,7 +197,7 @@ export default function RetainedIssueReview({
                     {item.ruleId} ·{" "}
                     {item.status === "exception" ? "规则例外" : "待核查"}
                   </Tag>
-                  <p>{item.reason}</p>
+                  <p>{issueReason(item)}</p>
                 </>
               ),
             },
@@ -201,7 +208,7 @@ export default function RetainedIssueReview({
               render: (_, item) =>
                 item.suggestedState === "已复核，未修改"
                   ? item.suggestedState
-                  : (labels[item.candidateAction ?? ""] ?? "保留核查"),
+                  : `${labels[item.candidateAction ?? ""] ?? "保留核查"}${issueTargetTitle(item) ? ` → ${issueTargetTitle(item)}` : ""}`,
             },
           ]}
         />
@@ -209,18 +216,20 @@ export default function RetainedIssueReview({
       {active && (
         <article className="logic-retained-evidence" aria-label="当前对象依据">
           <h4>
-            {active.featureId} · {active.ruleId}
+            {issueObjectTitle(active)} · {active.ruleId}
           </h4>
-          <p>{active.reason}</p>
+          <p>{issueReason(active)}</p>
           <p>
             <strong>当前识别：</strong>
-            {active.currentState}
+            {active.element === "lithology"
+              ? issueObjectTitle(active)
+              : active.currentState}
           </p>
           <p>
             <strong>执行动作：</strong>
             {labels[active.candidateAction ?? ""] ?? "保留核查"}
-            {active.candidateTargetCode
-              ? `，目标代号 ${active.candidateTargetCode}`
+            {issueTargetTitle(active)
+              ? `，目标 ${issueTargetTitle(active)}`
               : active.candidateAction === "downweight"
                 ? "，权重 0.5，保留对象"
                 : active.candidateAction === "exclude"
@@ -249,7 +258,11 @@ export default function RetainedIssueReview({
                 const hit = record(value);
                 return (
                   <li key={String(hit.id)}>
-                    {String(hit.rule_id)}：{String(hit.reason)}
+                    {String(hit.rule_id)}：
+                    {expertLithologyText(
+                      String(hit.reason),
+                      issueLithologyDisplay(active).codes,
+                    )}
                   </li>
                 );
               })}

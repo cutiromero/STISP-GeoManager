@@ -5,6 +5,8 @@ import json
 
 from apps.compute.packages import ComputeError
 
+from .geology_labels import expert_text, unit_label, unit_table, unit_targets
+
 ACTIONS = {
     "set_code": "改代号",
     "reclassify": "重分类",
@@ -37,6 +39,7 @@ def render_report(workflow, tasks):
     from .report_text import bound_report_scope
 
     names = display_input_names(workflow)
+    units = unit_table(workflow.plan)
     scope = bound_report_scope(workflow)
     by_id = {str(task.id): task for task in tasks}
     stages = {
@@ -201,22 +204,38 @@ def render_report(workflow, tasks):
             if row["action"] == "review"
             else "保留原状"
         )
-        target = action + ("为 " + row["new_code"] if row.get("target_code") else "")
-        scope = "本对象"
+        lithology = (
+            item.get("element") == "lithology" or row.get("element") == "lithology"
+        )
+        source = (
+            unit_label(row.get("old_code"), units)
+            if lithology
+            else item["currentState"]
+        )
+        title = source if lithology else item["featureId"]
+        target_label = (
+            unit_targets(row.get("new_code"), units)
+            if lithology
+            else row.get("new_code", "")
+        )
+        target = action + ("为 " + target_label if row.get("target_code") else "")
+        scope = "该岩性图斑" if lithology else "本对象"
         if (
             item.get("observations", {}).get("scope") == "anchored_cell_partition"
             and row["action"] == "reclassify"
         ):
             scope = "获批局部像元，未获批部分保留原分类"
-            if hosts := _archive_hosts(row):
-                scope += "；共边同单元承接图斑 " + "、".join(hosts)
-        if row.get("host_feature_id") and item["action"] == "merge":
-            scope += "及相邻承接图斑 " + str(row["host_feature_id"])
+        if row.get("host_feature_id") or _archive_hosts(row):
+            scope += (
+                f"；并入共边的{target_label}同单元图斑"
+                if lithology
+                else "；涉及相邻承接图斑"
+            )
         lines.extend(
             [
-                f"### {index}. {_text(action)}，对象 {_text(item['featureId'])}",
+                f"### {index}. {_text(action)}：{_text(title)}",
                 "",
-                f"{_text(item['currentState'])} → {_text(target)}。{'按本次启动授权执行' if automatic or mixed and item['id'] in set(next((s.get('modificationsApproval', {}).get('automaticSuggestionIds', []) for s in workflow.plan['stages'] if s.get('name') == 'apply'), [])) else '用户已批准'}，实际结果：{result}。",
+                f"{_text(source)} → {_text(target)}。{'按本次启动授权执行' if automatic or mixed and item['id'] in set(next((s.get('modificationsApproval', {}).get('automaticSuggestionIds', []) for s in workflow.plan['stages'] if s.get('name') == 'apply'), [])) else '用户已批准'}，实际结果：{result}。",
                 "",
                 "理由：" + _text(row.get("reason") or item["reason"], 500),
                 "",
@@ -436,7 +455,7 @@ def render_report(workflow, tasks):
             "",
         ]
     )
-    return ("\n".join(lines).rstrip() + "\n").encode("utf-8")
+    return (expert_text("\n".join(lines).rstrip(), units) + "\n").encode("utf-8")
 
 
 def _observations(values, text):

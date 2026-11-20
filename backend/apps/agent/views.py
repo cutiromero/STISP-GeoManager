@@ -1589,8 +1589,9 @@ def workflow_detail(request, workflow_id):
     workflow = get_object_or_404(
         AgentWorkflow.objects, pk=workflow_id, owner=request.user
     )
-    authorize_workflow_history(workflow)
+    authorized = authorize_workflow_history(workflow)
     if view in {"compare", "inspection"}:
+        from .geology_labels import read_bound_lithology
         from .workflow_projection import page_options, project_workflow
 
         part, offset, limit = page_options(request.GET, view)
@@ -1610,6 +1611,7 @@ def workflow_detail(request, workflow_id):
             limit,
             request.GET.get("suggestionId", "")[:100],
             element,
+            load_lithology=lambda ids: read_bound_lithology(workflow, *authorized, ids),
         )
     else:
         data = workflow_json(workflow, view=view)

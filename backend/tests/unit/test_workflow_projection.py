@@ -333,3 +333,65 @@ def test_auto_only_run_can_inspect_authorized_extent_and_nonactionable_findings(
     assert page["plan"]["reviewIndex"]["candidateIds"] == []
     assert page["plan"]["reviewIndex"]["automaticMap"]["locatedCount"] == 1
     assert plan["modificationReview"]["suggestions"] == [auto]
+
+
+def test_lithology_review_projects_exact_vector_attributes_without_changing_approval():
+    workflow = large_workflow(2)
+    item = workflow.plan["modificationReview"]["suggestions"][0]
+    item.update(
+        featureId="F00188",
+        ruleId="L-08",
+        status="review",
+        action="reclassify",
+        candidateAction="reclassify",
+        candidateTargetCode="U034",
+        title="邻域复核：需解释同一围岩",
+        reason="F00188 与 U034 共享边界",
+        observations={"host_code": "U034"},
+    )
+    workflow.plan["unitOverrides"] = {
+        "units": {
+            "U034": {"display_symbol": "Pt₁Jgn", "name": "金水口群灰色角闪斜长片麻岩"},
+        }
+    }
+    original = copy.deepcopy(workflow.plan)
+    loaded = []
+
+    def load(ids):
+        loaded.append(ids)
+        return {
+            "F00188": {
+                "geo_sym": "U036",
+                "display_symbol": "γδπT₃",
+                "name": "花岗闪长质片麻岩",
+            }
+        }
+
+    projected = project_workflow(
+        workflow, {}, "inspection", "suggestions", 0, 1, load_lithology=load
+    )
+    [page] = projected["modificationReview"]["suggestions"]
+    assert loaded == [["F00188"]]
+    assert page["currentState"] == "γδπT₃（花岗闪长质片麻岩）"
+    assert (
+        page["observations"]["lithology_display"]["target"]
+        == "Pt₁Jgn（金水口群灰色角闪斜长片麻岩）"
+    )
+    assert "F00188" not in page["reason"] and "U034" not in page["reason"]
+    assert page["candidateTargetCode"] == "U034" and page["featureId"] == "F00188"
+    assert workflow.plan == original
+
+
+def test_no_attribute_read_for_approval_index_or_page_of_non_lithology_items():
+    workflow = large_workflow(1)
+    workflow.plan["modificationReview"]["suggestions"][0]["element"] = "structure"
+
+    def forbidden(ids):
+        pytest.fail(f"unexpected vector read: {ids}")
+
+    project_workflow(
+        workflow, {}, "inspection", "suggestions", 0, 1, load_lithology=forbidden
+    )
+    project_workflow(
+        workflow, {}, "inspection", "suggestions", 0, 0, load_lithology=forbidden
+    )

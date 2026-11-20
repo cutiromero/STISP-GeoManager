@@ -9,6 +9,8 @@ import re
 from shapely.errors import GEOSException
 from shapely.geometry import mapping, shape
 
+from .geology_labels import decorate_lithology, unit_table
+
 PAGE_LIMIT = 50
 SUMMARY_KEYS = (
     "phase",
@@ -332,9 +334,28 @@ def _lithology_review_properties(suggestion, row, units):
 
 
 def project_workflow(
-    workflow, data, view, part, offset, limit, suggestion_id="", element="all"
+    workflow,
+    data,
+    view,
+    part,
+    offset,
+    limit,
+    suggestion_id="",
+    element="all",
+    *,
+    load_lithology=None,
 ):
     source = workflow.plan
+    units = unit_table(source)
+
+    def labels_for(items):
+        ids = [
+            item["featureId"]
+            for item in items
+            if item.get("element") == "lithology" and item.get("featureId")
+        ]
+        return load_lithology(ids) if ids and load_lithology else {}
+
     plan = {
         key: copy.deepcopy(source[key])
         for key in SUMMARY_KEYS
@@ -507,8 +528,13 @@ def project_workflow(
             page["groups"][-1]["count"] += 1
         selected = values[offset : offset + limit]
         suggestions = [
-            {**item, "preview": display_preview(item.get("preview"))}
-            for item, _ in selected
+            decorate_lithology(
+                {**item, "preview": display_preview(item.get("preview"))},
+                units,
+                current_code=row.get("old_code", ""),
+                target_code=row.get("new_code", ""),
+            )
+            for item, row in selected
         ]
         actual_suggestions = suggestions
         if (
@@ -526,9 +552,15 @@ def project_workflow(
                 candidates = [
                     item for item in candidates if item["id"] == suggestion_id
                 ]
+            page_items = candidates[offset : offset + limit]
+            attributes = labels_for(page_items)
             suggestions = [
-                {**item, "preview": display_preview(item.get("preview"))}
-                for item in candidates[offset : offset + limit]
+                decorate_lithology(
+                    {**item, "preview": display_preview(item.get("preview"))},
+                    units,
+                    attributes.get(item.get("featureId")),
+                )
+                for item in page_items
             ]
         change_outputs = {
             output["key"]: output.get("resourceId")
@@ -541,7 +573,6 @@ def project_workflow(
             "structure": "changes_fault_issues",
             "alteration": "changes_alteration_issues",
         }
-        units = (source.get("unitOverrides") or {}).get("units", {})
         if review:
             data["modificationReview"] = {
                 **{
@@ -627,14 +658,22 @@ def project_workflow(
             from .review_positions import automatic_positions
 
             plan["reviewIndex"]["automaticMap"] = automatic_positions(source)
+        page_items = (
+            suggestions[offset : offset + limit]
+            if part in {"suggestions", "retained"}
+            else []
+        )
+        attributes = labels_for(page_items)
         data["modificationReview"] = {
             **{key: value for key, value in review.items() if key != "suggestions"},
             "suggestions": [
-                _review_item(item, retained=part == "retained")
-                for item in suggestions[offset : offset + limit]
-            ]
-            if part in {"suggestions", "retained"}
-            else [],
+                decorate_lithology(
+                    _review_item(item, retained=part == "retained"),
+                    units,
+                    attributes.get(item.get("featureId")),
+                )
+                for item in page_items
+            ],
         }
         if part in {"suggestions", "retained"}:
             page["total"] = len(suggestions)

@@ -137,15 +137,17 @@ it.each([false, true])("归档改类按实际结果显示同单元融合（%s）
   );
   expect(
     screen.getByText(
-      /全新世冲积物（Qhᵃˡ） 16 像元、贵德群砂砾岩（NG₁） 254 像元/,
+      /Qhᵃˡ（全新世冲积物） 16 像元、NG₁（贵德群砂砾岩） 254 像元/,
     ),
   ).toBeVisible();
   expect(screen.getByText(/与现图分类不一致的像元占 100%/)).toBeVisible();
-  expect(screen.queryByText(/最长的宿主|岩性由 U009/)).toBeNull();
+  expect(
+    screen.queryByText(/最长的宿主|岩性由 U009|F-10|F-11|AR-0049/),
+  ).toBeNull();
   expect(screen.getByText(/未获批的部分保持原分类/)).toBeVisible();
   expect(
     screen.getByText(
-      fused ? /已融合，承接图斑：F-10、F-11/ : /该条修正记录未记录融合/,
+      fused ? /已融合，涉及 2 处承接图斑/ : /该条修正记录未记录融合/,
     ),
   ).toBeVisible();
 });
@@ -714,12 +716,12 @@ it("讲解页双图同类采用成果原色并支持线点面、Unicode代号与
   expect(
     screen.queryByText("地图渲染失败，请刷新或核对图件后重试。"),
   ).not.toBeInTheDocument();
-  expect(screen.getByText("八宝山组 / T₃b²")).not.toBeVisible();
+  expect(screen.getByText("T₃b²（八宝山组）")).not.toBeVisible();
   expect(
     screen.queryByRole("button", { name: "在地理工作台对比" }),
   ).not.toBeInTheDocument();
   fireEvent.click(screen.getByText("查看岩性配色"));
-  expect(screen.getByText("八宝山组 / T₃b²")).toBeVisible();
+  expect(screen.getByText("T₃b²（八宝山组）")).toBeVisible();
   expect(screen.getAllByRole("group", { name: "本地矢量图层" })).toHaveLength(
     2,
   );

@@ -9,6 +9,11 @@ import {
 } from "./multiElementTour";
 import { formatArea } from "../utils/area";
 import { record } from "./geologyReviewData";
+import {
+  expertLithologyText,
+  issueLithologyDisplay,
+  issueObjectTitle,
+} from "../agent/lithologyDisplay";
 
 function archiveHosts(properties: Record<string, unknown>, host: string) {
   try {
@@ -66,9 +71,9 @@ export default function MultiElementTourCard({
       : "本次结果未记录";
   const receivers = partition ? archiveHosts(p, host) : [];
   const operation = partition
-    ? `仅在获批范围内实际改类 ${metric("class_change_area_m2")}。原为${partition.before.label}；改为${partition.targets.map((unit) => `${unit.label}${unit.pixels ? ` ${unit.pixels.toLocaleString("zh-CN")} 像元` : ""}`).join("、") || "变更表所列分类"}。${receivers.length ? `改类范围中与同单元共边的部分已融合，承接图斑：${receivers.join("、")}。` : "该条修正记录未记录融合。"}未获批的部分保持原分类。`
+    ? `仅在获批范围内实际改类 ${metric("class_change_area_m2")}。原为${partition.before.label}；改为${partition.targets.map((unit) => `${unit.label}${unit.pixels ? ` ${unit.pixels.toLocaleString("zh-CN")} 像元` : ""}`).join("、") || "变更表所列分类"}。${receivers.length ? `改类范围中与同单元共边的部分已融合，涉及 ${receivers.length} 处承接图斑。` : "该条修正记录未记录融合。"}未获批的部分保持原分类。`
     : change.action === "set_code"
-      ? `地质代号由 ${labels.before} 更新为 ${labels.after}。${cleanResults && p.host_feature_id ? `已并入相邻同单元宿主 ${p.host_feature_id}，原编号记入修正记录。` : ""}`
+      ? `地质代号由 ${labels.before} 更新为 ${labels.after}。${cleanResults && p.host_feature_id ? "已并入共边的同单元图斑。" : ""}`
       : change.action === "exclude"
         ? cleanResults
           ? "已从最终成果删除；原始资料及修改前范围保留在输入和修正记录中。"
@@ -78,7 +83,7 @@ export default function MultiElementTourCard({
           : change.action === "merge"
             ? `按获批范围合并为 ${labels.after}，去除内部接边 ${length("removed_internal_boundary_m")}。`
             : change.action === "reclassify"
-              ? `岩性由 ${labels.before} 调整为 ${labels.after}。${cleanResults && host ? `实际接收图斑编号 ${host}，并入情况以变更记录为准。` : "更新类别及对应属性。"}`
+              ? `岩性由 ${labels.before} 调整为 ${labels.after}。${cleanResults && host ? "获批图斑已并入共边的同单元；实际边界见修正后图层。" : "更新类别及对应属性。"}`
               : `${labels.before} → ${labels.after}。`;
   return (
     <section className="multi-tour-card" aria-label="当前修改故事">
@@ -93,7 +98,10 @@ export default function MultiElementTourCard({
             <strong>发现了什么</strong>
             {partition
               ? `现图标为${partition.before.label}。${reportConflict ? `核查范围内，早期模型与现图分类不一致的像元占 ${(observedConflict * 100).toLocaleString("zh-CN", { maximumFractionDigits: 1 })}%。` : "早期模型与现图分类存在分歧。"}这说明两版分类有分歧，需要核对接触关系。`
-              : change.suggestion.title}
+              : change.suggestion.element === "lithology" &&
+                  !issueLithologyDisplay(change.suggestion).current
+                ? expertLithologyText(change.suggestion.title)
+                : change.suggestion.title}
           </p>
         </div>
         <div>
@@ -123,8 +131,12 @@ export default function MultiElementTourCard({
       <details className="multi-tour-evidence">
         <summary>展开知识来源、实际测量与任务依据</summary>
         <p>
-          对象 {change.suggestion.featureId}；实际算法 {algorithm.name}{" "}
-          {algorithm.version}；任务 {algorithm.taskId || "尚无任务编号"}。
+          对象{" "}
+          {change.suggestion.element === "lithology"
+            ? labels.before
+            : issueObjectTitle(change.suggestion)}
+          ；实际算法 {algorithm.name} {algorithm.version}；任务{" "}
+          {algorithm.taskId || "尚无任务编号"}。
         </p>
         <p>
           涉及对象面积：{metric("involved_area_m2")}

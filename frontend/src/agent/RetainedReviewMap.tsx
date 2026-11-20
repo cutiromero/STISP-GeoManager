@@ -317,10 +317,8 @@ export default function RetainedReviewMap({
                 after: spotlightFeatures,
                 beforeLabel: background
                   ? undefined
-                  : String(focus.features[0]?.properties.feature_id ?? ""),
-                afterLabel: String(
-                  focus.features[0]?.properties.feature_id ?? "",
-                ),
+                  : String(focus.features[0]?.properties.label ?? ""),
+                afterLabel: String(focus.features[0]?.properties.label ?? ""),
                 outlineOnly: true,
                 dimBackground: false,
               }

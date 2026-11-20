@@ -192,3 +192,33 @@ def test_selected_review_is_executed_without_claiming_a_data_change(monkeypatch)
     assert "复核并保留原样" in text
     assert "实际结果：已复核，未修改" in text
     assert "实际处置：改代号" not in text
+
+
+def test_report_uses_confirmed_lithology_symbols_and_keeps_ids_in_audit(monkeypatch):
+    workflow, task, rows = report_fixture(monkeypatch)
+    suggestion = workflow.plan["modificationReview"]["suggestions"][0]
+    suggestion.update(element="lithology", featureId="F00188", action="reclassify")
+    edit = workflow.plan["stages"][0]["approvedEdits"][0]
+    edit.update(feature_id="F00188", target_code="U034")
+    rows[0].update(
+        feature_id="F00188",
+        element="lithology",
+        action="reclassify",
+        old_code="U036",
+        new_code="U034",
+        target_code="U034",
+        reason="F00188 由 U036 调整为 U034",
+        host_feature_id="F00221",
+        area_m2="12000",
+    )
+    workflow.plan["unitOverrides"] = {
+        "units": {
+            "U036": {"name": "花岗闪长质片麻岩", "display_symbol": "γδπT₃"},
+            "U034": {"name": "角闪斜长片麻岩", "display_symbol": "Pt₁Jgn"},
+        }
+    }
+    output = render_report(workflow, [task]).decode()
+    assert "γδπT₃（花岗闪长质片麻岩）" in output
+    assert "Pt₁Jgn（角闪斜长片麻岩）" in output
+    assert all(value not in output for value in ("F00188", "F00221", "U036", "U034"))
+    assert rows[0]["feature_id"] == "F00188" and rows[0]["target_code"] == "U034"

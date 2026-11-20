@@ -128,6 +128,8 @@ GET `/api/catalog/resources/{id}/vector-tiles/{revision}/{z}/{x}/{y}.pbf`沿用q
 
 工作流详情支持 `view=compare`（摘要默认 `limit=0`）和 `view=inspection`（默认50项），`offset` 从0开始，`limit` 为0–50。inspection 的 `part=suggestions|steps` 分别读取审批对象与执行步骤；compare 仅支持 `part=changes`，按要素、规则、动作排序，只返回已批准且实际执行成功的对象。`plan.pagination` 包含 total、offset、limit 和分组索引（key、element、ruleId、action、offset、count）；`plan.compareFeatures` 是当前页显示几何，不能用于计算。inspection 的 `plan.reviewIndex` 提供 suggestedIds、candidateIds，前者默认勾选，后者只有用户明确选择才可提交。完整原因随对象页返回，完整执行输出仍保存在计算成果中。所有投影沿用本人、当前项目和资源授权，不扩大数据可见范围。
 
+岩性审批页使用 `observations.lithology_display` 的当前单元、目标单元和本项关联符号标签说明实际地质对象。既有要素编号、冻结目标和规则键仍供地图定位、审批及数据导出，不能用显示名称替代执行键。审批索引与过程页不读取图斑属性；对象页在已授权的本次原工作副本中按页一次性读取符号属性，不取几何。
+
 `card` 与 `inspection` 均保留 `plan.fieldMappingReview` 和 `plan.reusedConfiguration`，用于字段确认卡与沿用配置提示；沿用不等于已批准本次计划。普通计划确认不自动读取过程，只有修改审批自动读取建议；展开过程时读取步骤。对比摘要就绪后自动按需读取首个实际修改页并定位；单页展示“全部修改”，多页展示“本页修改”并提供全量分组和翻页。
 
 `displayGeometry=true` 采用5位坐标及自适应保拓扑简化，压缩响应目标为280 KiB；最大容差0.001度，无法达到预算时保留最后一档，不删除对象或继续降低精度。无过滤显示查询持久缓存于 TOML 业务数据根目录下的 `cache/vector-display/`，按项目 GeoPackage 路径、资源 ID、查询参数及资源 `updated_at`、存储图层和压缩算法版本隔离；版本变更后原缓存不再命中，相同查询原子替换缓存。命中时不重读原始几何或重复简化，仍由查询入口先执行权限校验。成果登记 worker 预热工作台的10000对象显示查询，不占用地图 HTTP 请求；预热失败不阻止成果登记。过滤查询及原精度查询不复用显示缓存。该选项不修改存储数据，编辑、计算、精确导出必须使用默认原精度查询。

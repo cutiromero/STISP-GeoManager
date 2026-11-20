@@ -20,6 +20,12 @@ import {
   presentationGroups,
   selectableModification,
 } from "./modificationPresentation";
+import {
+  expertLithologyText,
+  issueLithologyDisplay,
+  issueObjectTitle,
+  issueReason,
+} from "./lithologyDisplay";
 
 const elements: Record<string, string> = {
   lithology: "岩性",
@@ -135,16 +141,32 @@ export function MultiElementEvidence({
 }: {
   suggestion: AgentModificationSuggestion;
 }) {
+  const geology = issueLithologyDisplay(suggestion);
   return (
     <div className="multi-element-evidence">
       <strong>实际观测和测量值</strong>
       <dl>
-        {Object.entries(suggestion.observations ?? {}).map(([key, value]) => (
-          <div key={key}>
-            <dt>{observationLabels[key] ?? key}</dt>
-            <dd>{formatMultiElementObservation(value, key)}</dd>
-          </div>
-        ))}
+        {Object.entries(suggestion.observations ?? {})
+          .filter(
+            ([key]) =>
+              ![
+                "lithology_display",
+                "host_feature_id",
+                "host_feature_ids",
+                "related_rule_hits",
+              ].includes(key),
+          )
+          .map(([key, value]) => (
+            <div key={key}>
+              <dt>{observationLabels[key] ?? key}</dt>
+              <dd>
+                {expertLithologyText(
+                  formatMultiElementObservation(value, key),
+                  geology.codes,
+                )}
+              </dd>
+            </div>
+          ))}
       </dl>
       <strong>命中的知识与规则</strong>
       {(suggestion.ruleRefs ?? []).map((ref) => (
@@ -484,16 +506,17 @@ export default function MultiElementStory({
                 const chosenCount = [...eligibleIds].filter((id) =>
                   selectedIds.has(id),
                 ).length;
-                const matches = members.filter((item) =>
-                  item.featureId
-                    .toLowerCase()
-                    .includes(
-                      (groupSearch[groupId] ?? "").trim().toLowerCase(),
-                    ),
-                );
+                const search = (groupSearch[groupId] ?? "")
+                  .trim()
+                  .toLowerCase();
+                const matches = search
+                  ? members.filter((item) =>
+                      issueObjectTitle(item).toLowerCase().includes(search),
+                    )
+                  : members;
                 return (
                   <div key={groupId}>
-                    <p>{first.reason}</p>
+                    <p>{issueReason(first)}</p>
                     {editable && eligible.length > 0 && (
                       <Checkbox
                         disabled={busy}
@@ -530,10 +553,12 @@ export default function MultiElementStory({
                           : modificationAction({
                               ...first,
                               suggestedState: first.action ?? "",
+                              observations: undefined,
+                              candidateTargetCode: undefined,
                             })}{" "}
                         · {Number(indexed?.count ?? members.length)} 个对象
                       </summary>
-                      <p>{first.reason}</p>
+                      <p>{issueReason(first)}</p>
                       <p>
                         {[
                           ...members.reduce((counts, item) => {
@@ -547,8 +572,12 @@ export default function MultiElementStory({
                       </p>
                       {expandedGroups.includes(groupId) && (
                         <Input
-                          aria-label={`搜索对象编号 ${first.ruleId}`}
-                          placeholder="搜索组内对象编号"
+                          aria-label={`搜索核查对象 ${first.ruleId}`}
+                          placeholder={
+                            first.element === "lithology"
+                              ? "搜索地质符号或单元名称"
+                              : "搜索组内对象"
+                          }
                           value={groupSearch[groupId] ?? ""}
                           onChange={(event) => {
                             setGroupSearch((current) => ({
@@ -573,9 +602,12 @@ export default function MultiElementStory({
                               <summary>
                                 <span>
                                   {elements[item.element ?? ""] ?? "检查"} /{" "}
-                                  {item.title}
+                                  {item.element === "lithology" &&
+                                  !issueLithologyDisplay(item).current
+                                    ? expertLithologyText(item.title)
+                                    : item.title}
                                 </span>
-                                <small>对象：{item.featureId}</small>
+                                <small>对象：{issueObjectTitle(item)}</small>
                                 <Tag
                                   color={
                                     approved.includes(item.id)
@@ -851,12 +883,13 @@ export default function MultiElementStory({
                             .map((item) => (
                               <details key={item.id}>
                                 <summary>
-                                  {item.featureId} / {suggestionTier(item)} /{" "}
+                                  {issueObjectTitle(item)} /{" "}
+                                  {suggestionTier(item)} /{" "}
                                   {modificationAction(item)}
                                 </summary>
                                 <Select
                                   style={{ width: "100%" }}
-                                  aria-label={`${item.featureId}待核查处置`}
+                                  aria-label={`${issueObjectTitle(item)}待核查处置`}
                                   value={
                                     selectedIds.has(item.id)
                                       ? "candidate"
@@ -913,7 +946,7 @@ export default function MultiElementStory({
                                     />
                                   )}
                                 <MultiElementEvidence suggestion={item} />
-                                <p>{item.reason}</p>
+                                <p>{issueReason(item)}</p>
                                 <Link
                                   target="_blank"
                                   rel="noopener"

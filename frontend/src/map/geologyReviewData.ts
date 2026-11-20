@@ -1,3 +1,9 @@
+import {
+  geologyUnitName,
+  issueObjectTitle,
+  issueReason,
+  issueTargetTitle,
+} from "../agent/lithologyDisplay";
 import { requestJson } from "../api/client";
 import { getActiveProject, projectSignal } from "../projects/session";
 import type {
@@ -209,9 +215,16 @@ export function previewSuggestions(
           suggestion_id: item.id,
           feature_id: item.featureId,
           kind: item.kind,
-          current_label: item.currentState,
-          suggested_label: item.suggestedState,
-          reason: item.reason,
+          element: item.element,
+          current_label:
+            item.element === "lithology"
+              ? issueObjectTitle(item)
+              : item.currentState,
+          suggested_label:
+            item.element === "lithology"
+              ? issueTargetTitle(item)
+              : item.suggestedState,
+          reason: issueReason(item),
           area_m2: item.areaM2,
           status: workflow.modificationReview?.approvedSuggestionIds.includes(
             item.id,
@@ -314,7 +327,7 @@ export function reviewLegend(...data: GeoJsonFeatureCollection[]) {
         key,
         name: p.unit_color_by_name
           ? String(p.legend_label ?? p.name)
-          : `${String(p.name ?? "地质单元")} / ${String(p.display_symbol ?? p.geo_sym ?? p.code ?? key)}`,
+          : geologyUnitName(p.display_symbol, p.name, p.geo_sym ?? p.code),
         color:
           typeof p.fill_color === "string" &&
           /^#[\da-f]{6}$/i.test(p.fill_color)

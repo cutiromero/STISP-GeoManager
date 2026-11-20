@@ -18,6 +18,13 @@ import {
   formatMultiElementObservation,
 } from "../agent/MultiElementStory";
 import WorkflowReportFile from "../agent/WorkflowReportFile";
+import {
+  expertLithologyText,
+  geologyUnitName,
+  issueLithologyDisplay,
+  issueObjectTitle,
+  issueTargetTitle,
+} from "../agent/lithologyDisplay";
 import { computeApi } from "../api/compute";
 import GeologyReviewMaps from "./GeologyReviewMaps";
 import {
@@ -102,7 +109,6 @@ type MultiMaps = {
 };
 const displayFields: Record<string, string> = {
   name: "岩性名称",
-  geo_sym: "地质代号",
   element: "要素",
   rule_id: "命中规则",
   rule_version: "规则版本",
@@ -967,6 +973,17 @@ export default function MultiElementWorkspace({
         (item.featureId === String(selected.properties.feature_id) &&
           item.ruleId === selected.properties.rule_id)),
   );
+  const selectedProperties = selected?.properties;
+  const selectedUnit =
+    selectedProperties &&
+    (selectedProperties.display_symbol || selectedProperties.geo_sym)
+      ? geologyUnitName(
+          selectedProperties.display_symbol,
+          selectedProperties.name,
+          selectedProperties.geo_sym,
+        )
+      : undefined;
+  const selectedDisplay = issueLithologyDisplay(suggestion);
   return (
     <main className="geology-review-workspace multi-element-workspace">
       <header className="geology-review-workspace-header">
@@ -1363,15 +1380,39 @@ export default function MultiElementWorkspace({
                 {selected ? (
                   <section className="geology-review-selected-change">
                     <dl>
+                      {selectedUnit && (
+                        <div>
+                          <dt>地质符号与岩性</dt>
+                          <dd>{selectedUnit}</dd>
+                        </div>
+                      )}
+                      {!selectedUnit && suggestion?.element === "lithology" && (
+                        <div>
+                          <dt>地质符号与岩性</dt>
+                          <dd>
+                            {issueObjectTitle(suggestion)}
+                            {issueTargetTitle(suggestion)
+                              ? ` → ${issueTargetTitle(suggestion)}`
+                              : ""}
+                          </dd>
+                        </div>
+                      )}
                       {Object.entries(selected.properties)
-                        .filter(([key]) => key in displayFields)
+                        .filter(
+                          ([key]) =>
+                            key in displayFields &&
+                            !(selectedUnit && key === "name"),
+                        )
                         .map(([key, value]) => (
                           <div key={key}>
                             <dt>{displayFields[key]}</dt>
                             <dd>
-                              {key === "measurements_json"
-                                ? formatMultiElementObservation(value)
-                                : readable(value)}
+                              {expertLithologyText(
+                                key === "measurements_json"
+                                  ? formatMultiElementObservation(value)
+                                  : readable(value),
+                                selectedDisplay.codes,
+                              )}
                             </dd>
                           </div>
                         ))}

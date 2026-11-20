@@ -1,3 +1,4 @@
+import { geologyUnitName } from "../agent/lithologyDisplay";
 import AutomaticReviewMarkers from "./AutomaticReviewMarkers";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type {
@@ -131,11 +132,18 @@ const VectorFeatures = memo(function VectorFeatures({
             tabIndex={onFeature ? 0 : undefined}
             aria-label={
               onFeature
-                ? String(
-                    feature.properties.name ??
-                      feature.properties.feature_id ??
-                      `图斑 ${index + 1}`,
-                  )
+                ? feature.properties.display_symbol ||
+                  feature.properties.geo_sym
+                  ? geologyUnitName(
+                      feature.properties.display_symbol,
+                      feature.properties.name,
+                      feature.properties.geo_sym,
+                    )
+                  : String(
+                      feature.properties.label ??
+                        feature.properties.name ??
+                        `图斑 ${index + 1}`,
+                    )
                 : undefined
             }
             onKeyDown={

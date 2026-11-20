@@ -53,6 +53,11 @@ it("组摘要按原因计数，全量候选仅经用户勾选纳入，确认分�
     ...ordinary,
     id: `held-${index}`,
     featureId: `H${index}`,
+    observations: {
+      lithology_display: {
+        current: index === 0 ? "Qh（全新世堆积）" : "Pt₁（片麻岩）",
+      },
+    },
     status: index < 8 ? ("review" as const) : ("exception" as const),
     candidateAction: "remove",
     reason: `对象H${index}独有的完整核查原因，不应拼接到组摘要`,
@@ -111,7 +116,7 @@ it("组摘要按原因计数，全量候选仅经用户勾选纳入，确认分�
   for (const node of await screen.findAllByText(held[0]!.reason))
     expect(node).not.toBeVisible();
   fireEvent.click(
-    screen.getByText(/H0 \/ 需地质判断/, { selector: "summary" }),
+    screen.getByText(/Qh（全新世堆积） \/ 需地质判断/, { selector: "summary" }),
   );
   expect(
     screen.getAllByText(held[0]!.reason).some((node) => {
@@ -146,6 +151,9 @@ it("模型建议默认选择，待裁定候选仅在用户明确选择后批准"
       suggestedState: "reclassify D₁γ",
       candidateAction: "reclassify",
       candidateTargetCode: "D₁γ",
+      observations: {
+        lithology_display: { current: "Pt₁（片麻岩）", target: "D₁γ" },
+      },
     },
   ];
   const review = vi.fn();
@@ -165,9 +173,13 @@ it("模型建议默认选择，待裁定候选仅在用户明确选择后批准"
     screen.getByText(/岩性 \/ L-02 · 1 个对象/, { selector: "summary" }),
   );
   fireEvent.click(
-    await screen.findByText(/H1 \/ 规则例外/, { selector: "summary" }),
+    await screen.findByText(/Pt₁（片麻岩） \/ 规则例外/, {
+      selector: "summary",
+    }),
   );
-  const retained = screen.getByText(/H1 \/ 规则例外/).closest("details")!;
+  const retained = screen
+    .getByText(/Pt₁（片麻岩） \/ 规则例外/)
+    .closest("details")!;
   fireEvent.mouseDown(
     screen.getByRole("combobox", { name: "L-02组待核查处置" }),
   );
@@ -423,7 +435,7 @@ it("系统数据连续快速鼠标点选不会覆盖之前选项", async () => {
   );
 });
 
-it("5552对象默认零对象行，展开每次50条，可搜索编号并取消后提交完整集合", async () => {
+it("5552对象默认零对象行，展开每次50条，可搜索地质符号并取消后提交完整集合", async () => {
   const workflow = reviewWorkflow();
   workflow.workflowType = "geology_generic";
   const first = workflow.modificationReview!.suggestions[0]!;
@@ -433,6 +445,11 @@ it("5552对象默认零对象行，展开每次50条，可搜索编号并取消�
       ...first,
       id: `object-${index}`,
       featureId: `F${index}`,
+      observations: {
+        lithology_display: {
+          current: index === 5551 ? "T₃b²（八宝山组）" : "Qh（全新世堆积）",
+        },
+      },
       element: "lithology",
       ruleId: "L-01",
       action: "reclassify",
@@ -458,15 +475,17 @@ it("5552对象默认零对象行，展开每次50条，可搜索编号并取消�
       mounted.container.querySelectorAll(".multi-element-suggestion"),
     ).toHaveLength(50),
   );
-  fireEvent.change(screen.getByLabelText("搜索对象编号 L-01"), {
-    target: { value: "F5551" },
+  fireEvent.change(screen.getByLabelText("搜索核查对象 L-01"), {
+    target: { value: "T₃b²" },
   });
   await waitFor(() =>
     expect(
       mounted.container.querySelectorAll(".multi-element-suggestion"),
     ).toHaveLength(1),
   );
-  fireEvent.click(screen.getByText("对象：F5551").closest("summary")!);
+  fireEvent.click(
+    screen.getByText("对象：T₃b²（八宝山组）").closest("summary")!,
+  );
   fireEvent.click(screen.getByRole("checkbox", { name: /批准此对象/ }));
   fireEvent.click(summary);
   await waitFor(() =>

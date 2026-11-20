@@ -163,6 +163,52 @@ def _quote_sql_identifier(identifier: str) -> str:
     return '"' + identifier.replace('"', '""') + '"'
 
 
+def feature_display_attributes(resource: DataResource, identities) -> dict:
+    """Read only named attributes for a bounded page of authorized features."""
+    keys = list(dict.fromkeys(key for key in identities if isinstance(key, str)))[:50]
+    if not keys or resource.data_type != DataResource.DataType.VECTOR:
+        return {}
+    try:
+        name = validate_vector_layer_name(resource.storage_path)
+        path = vector_geopackage_path()
+        with closing(
+            sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True)
+        ) as conn:
+            if not conn.execute(
+                "SELECT 1 FROM gpkg_contents WHERE data_type='features' AND table_name=?",
+                (name,),
+            ).fetchone():
+                return {}
+            table = _quote_sql_identifier(name)
+            columns = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+            if "feature_id" not in columns:
+                return {}
+            fields = [
+                key
+                for key in ("feature_id", "geo_sym", "display_symbol", "name")
+                if key in columns
+            ]
+            selected = ",".join(_quote_sql_identifier(key) for key in fields)
+            placeholders = ",".join("?" for _ in keys)
+            rows = conn.execute(
+                f'SELECT {selected} FROM {table} WHERE "feature_id" IN ({placeholders})',
+                keys,
+            ).fetchall()
+    except (StoragePathError, OSError, sqlite3.Error) as exc:
+        raise DataQueryError("原图斑的地质符号属性暂不可用") from exc
+    result, ambiguous = {}, set()
+    for row in rows:
+        identity = str(row[0])
+        if identity in result:
+            ambiguous.add(identity)
+        result[identity] = dict(zip(fields[1:], row[1:], strict=True))
+    return {
+        identity: values
+        for identity, values in result.items()
+        if identity not in ambiguous
+    }
+
+
 def resource_profile(resource: DataResource) -> ResourceProfile:
     if resource.data_type != DataResource.DataType.VECTOR or not resource.storage_path:
         return ResourceProfile(

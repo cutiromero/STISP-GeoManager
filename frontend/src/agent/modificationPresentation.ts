@@ -1,5 +1,6 @@
 import type { AgentModificationSuggestion } from "../api/generated/types.gen";
 import { record } from "../map/geologyReviewData";
+import { issueTargetTitle } from "./lithologyDisplay";
 
 export const modificationActions: Record<string, string> = {
   fix_symbol: "改代号",
@@ -16,15 +17,24 @@ export const modificationActions: Record<string, string> = {
   review: "复核并保留原样",
 };
 
-export function modificationAction(item: {
-  action?: string;
-  suggestedState: string;
-}) {
+export function modificationAction(
+  item: Pick<
+    AgentModificationSuggestion,
+    | "action"
+    | "suggestedState"
+    | "element"
+    | "observations"
+    | "candidateTargetCode"
+  >,
+) {
   const action = item.action ?? "";
   const label = modificationActions[action] ?? item.suggestedState;
-  const target = item.suggestedState.startsWith(`${action} `)
-    ? item.suggestedState.slice(action.length + 1).trim()
-    : "";
+  const target =
+    item.element === "lithology"
+      ? issueTargetTitle(item)
+      : item.suggestedState.startsWith(`${action} `)
+        ? item.suggestedState.slice(action.length + 1).trim()
+        : "";
   return target &&
     ["reclassify", "set_code", "fix_symbol", "set_symbol"].includes(action)
     ? `${label}为 ${target}`

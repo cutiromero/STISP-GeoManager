@@ -4,6 +4,12 @@ import type {
   GeoJsonFeatureCollection,
 } from "../api/generated/types.gen";
 import { record, reviewBounds } from "./geologyReviewData";
+import {
+  geologyUnitName,
+  issueLithologyDisplay,
+  issueReason,
+  missingSymbol,
+} from "../agent/lithologyDisplay";
 
 type Feature = GeoJsonFeatureCollection["features"][number];
 const sameId = (a: unknown, b: unknown) =>
@@ -244,11 +250,8 @@ function archiveUnit(change: TourChange, code: string) {
   const name = typeof unit.name === "string" ? unit.name.trim() : "";
   return {
     code,
-    label:
-      name && symbol
-        ? `${name}（${symbol}）`
-        : name || symbol || `分类编号 ${code}`,
-    mapLabel: symbol || code,
+    label: geologyUnitName(symbol, name, code),
+    mapLabel: symbol || name || geologyUnitName("", "", code),
   };
 }
 
@@ -302,29 +305,36 @@ export function tourLabels(
   switch (change.action) {
     case "reclassify":
     case "merge":
-      return {
-        title: change.action === "merge" ? "同单元图斑整理" : "岩性类别修正",
-        before: String(
-          before?.properties.display_symbol ??
-            before?.properties.geo_sym ??
-            p.old_code ??
-            change.suggestion.currentState,
-        ),
-        after: String(
-          after?.properties.display_symbol ??
-            after?.properties.geo_sym ??
-            p.new_code ??
-            change.suggestion.suggestedState,
-        ),
-        note: change.suggestion.reason,
+    case "set_code": {
+      const labels = issueLithologyDisplay(change.suggestion);
+      const unit = (
+        feature: Feature | undefined,
+        original: unknown,
+        frozen: string,
+      ) => {
+        const attributes = feature?.properties;
+        if (attributes?.display_symbol)
+          return geologyUnitName(attributes.display_symbol, attributes.name);
+        if (frozen && frozen !== missingSymbol) return frozen;
+        const label = archiveUnit(change, String(original ?? "")).label;
+        if (label !== missingSymbol) return label;
+        return geologyUnitName("", attributes?.name, attributes?.geo_sym);
       };
-    case "set_code":
       return {
-        title: "地质代号修正",
-        before: String(before?.properties.geo_sym ?? p.old_code ?? "未记录"),
-        after: String(after?.properties.geo_sym ?? p.new_code ?? "未记录"),
-        note: "名称与代号不一致，按本案例对照知识修正。",
+        title:
+          change.action === "merge"
+            ? "同单元图斑整理"
+            : change.action === "set_code"
+              ? "地质符号修正"
+              : "岩性类别修正",
+        before: unit(before, p.old_code, labels.current),
+        after: unit(after, p.new_code, labels.target),
+        note:
+          change.action === "set_code"
+            ? "名称与地质符号不一致，按本次核实的图例修正。"
+            : issueReason(change.suggestion),
       };
+    }
     case "exclude":
       return {
         title:
