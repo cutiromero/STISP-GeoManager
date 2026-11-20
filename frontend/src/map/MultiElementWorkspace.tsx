@@ -1321,7 +1321,7 @@ export default function MultiElementWorkspace({
                 <Tag color="blue">真实任务图层</Tag>
                 <h2>对象与依据</h2>
                 <p>
-                  变化高亮来自实际差异；批准前显示建议范围。实心点为几何交汇，空心点为推测交汇；灰色虚线为本轮不参与的构造，原线仍保留。
+                  “修正记录”叠加实际修改范围，修正后岩性底图显示真实地质边界，两者不等同。批准前地图显示建议范围。实心点为几何交汇，空心点为推测交汇；灰色虚线为本轮不参与的构造，原线仍保留。
                 </p>
                 <details className="multi-element-map-objects">
                   <summary>

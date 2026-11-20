@@ -490,36 +490,95 @@ def _validate_edit_rows(edits, results, *, issues=None):
     return accepted
 
 
+def _held_entries(workflow, issues, *, unified):
+    held = [row for row in issues.values() if row["status"] in {"review", "exception"}]
+    knowledge = {
+        (binding["ruleId"], binding["ruleVersion"]): entry
+        for entry in workflow.evidence
+        if (binding := entry.get("trialBinding"))
+    }
+    groups = {}
+    for row in held:
+        key = (row["element"], row["feature_id"]) if unified else row["issue_id"]
+        groups.setdefault(key, []).append(row)
+    for members in groups.values():
+        choices = []
+        for row in members:
+            action = row.get("candidate_action")
+            if not action:
+                continue
+            target = row.get("candidate_target_code", "")
+            entry = knowledge.get((row["rule_id"], row["rule_version"]))
+            valid = action in json.loads(row["allowed_actions_json"]) and (
+                action not in {"reclassify", "merge", "set_code"}
+                or bool(target)
+                and (not unified or target == row.get("target_code"))
+            )
+            if not valid and not unified:
+                raise ComputeError("检查快照中的候选动作或目标无效")
+            if valid and (
+                not unified
+                or entry is not None
+                and str(entry["id"]) == str(row.get("knowledge_id"))
+                and str(entry["revision"]) == str(row.get("knowledge_revision"))
+            ):
+                choices.append((row, action, target))
+        signatures = {(action, target) for _, action, target in choices}
+        if len(signatures) == 1 and (not unified or len(choices) == len(members)):
+            row, action, target = choices[0]
+            reason = row["reason"]
+        elif not unified:
+            continue
+        else:
+            # Review is an executable, non-mutating disposition. No supplied
+            # target or competing rule is ever turned into a guessed edit.
+            row = next(
+                (
+                    item
+                    for item in members
+                    if "review" in json.loads(item["allowed_actions_json"])
+                ),
+                None,
+            )
+            if row is None:
+                raise ComputeError("检查快照未允许保留现状复核，请检查算子输出", 409)
+            action, target = "review", ""
+            reason = row["reason"] + (
+                "；同一对象命中不同处置，复核并保留原状。"
+                if len(signatures) > 1
+                else "；没有核实的修改动作，复核并保留原状。"
+            )
+        yield (
+            row,
+            members,
+            {
+                **{key: str(row[key]) for key in CHANGE_FIELDS[:5]},
+                "action": action,
+                "target_code": target,
+                "weight": {"exclude": 0, "downweight": 0.5}.get(action, 1),
+                "reason": reason,
+            },
+        )
+
+
 def proposal(workflow, stage, results, *, issues=None, knowledge_entry=None):
     if issues is None:
         issues = {row["issue_id"]: row for row in issue_rows(results)}
-    rows = _validate_edit_rows(stage.get("edits", []), results, issues=issues)
+    unified = stage.get("unifiedIssueReview") is True
+    held = list(_held_entries(workflow, issues, unified=unified))
+    held_objects = (
+        {(row["element"], row["feature_id"]) for row, _, _ in held}
+        if unified
+        else set()
+    )
     rows = [
         row
-        for row in rows
+        for row in _validate_edit_rows(stage.get("edits", []), results, issues=issues)
         if issues[row["issue_id"]]["status"] not in {"review", "exception"}
+        and (issues[row["issue_id"]]["element"], row["feature_id"]) not in held_objects
     ]
-    for issue in issues.values():
-        action = issue.get("candidate_action")
-        if issue["status"] not in {"review", "exception"} or not action:
-            continue
-        if action not in json.loads(issue["allowed_actions_json"]) or (
-            action == "reclassify" and not issue.get("candidate_target_code")
-        ):
-            raise ComputeError("检查快照中的候选动作或目标无效")
-        rows.append(
-            {
-                **{key: str(issue[key]) for key in CHANGE_FIELDS[:5]},
-                "action": action,
-                "target_code": issue.get("candidate_target_code", ""),
-                "weight": 0
-                if action == "exclude"
-                else 0.5
-                if action == "downweight"
-                else 1,
-                "reason": issue["reason"],
-            }
-        )
+    rows.extend(edit for _, _, edit in held)
+    related = {row["issue_id"]: members for row, members, _ in held if len(members) > 1}
     suggestions = []
     group_ids = {
         row["issue_id"]: identity
@@ -539,8 +598,8 @@ def proposal(workflow, stage, results, *, issues=None, knowledge_entry=None):
                 ),
                 None,
             )
-            if entry is None:
-                raise ComputeError("候选处置缺少本次规则对应的知识修订")
+            if entry is None and not (unified and edit["action"] == "review"):
+                raise ComputeError("待核查疑点的修改动作缺少对应知识修订")
         else:
             entry = knowledge_entry or _required_knowledge(
                 workflow, stage["decision"], edit
@@ -560,10 +619,25 @@ def proposal(workflow, stage, results, *, issues=None, knowledge_entry=None):
             if not isinstance(measurements, dict):
                 raise ValueError("invalid measurements")
         except (ValueError, KeyError, TypeError, GEOSException) as exc:
-            raise ComputeError("建议缺少可定位的范围或实际测量值") from exc
+            if not (unified and held and edit["action"] == "review"):
+                raise ComputeError("建议缺少可定位的范围或实际测量值") from exc
+            preview, bounds, measurements = (
+                {"type": "Polygon", "coordinates": []},
+                [0, 0, 0, 0],
+                {},
+            )
+        if siblings := related.get(edit["issue_id"]):
+            measurements["related_rule_hits"] = [
+                {
+                    "id": issue["issue_id"],
+                    "rule_id": issue["rule_id"],
+                    "reason": issue["reason"],
+                }
+                for issue in siblings
+            ]
         sources = "；".join(
             str(source.get("title", "")) + " " + str(source.get("locator", ""))
-            for source in entry["sources"]
+            for source in (entry or {}).get("sources", [])
         )
         suggestions.append(
             {
@@ -608,8 +682,8 @@ def proposal(workflow, stage, results, *, issues=None, knowledge_entry=None):
                 ),
                 "ruleId": edit["rule_id"],
                 "observations": measurements,
-                "ruleConditions": entry["conditions"],
-                "exceptions": entry["exceptions"],
+                "ruleConditions": (entry or {}).get("conditions", []),
+                "exceptions": (entry or {}).get("exceptions", []),
                 "ruleRefs": [
                     {
                         "id": edit["rule_id"],
@@ -619,14 +693,18 @@ def proposal(workflow, stage, results, *, issues=None, knowledge_entry=None):
                         "revision": entry["revision"],
                         "source": sources,
                     }
-                ],
+                ]
+                if entry
+                else [],
                 "knowledgeRefs": [
                     {
                         "id": entry["id"],
                         "revision": entry["revision"],
                         "title": entry["title"],
                     }
-                ],
+                ]
+                if entry
+                else [],
                 "preview": preview,
                 "bounds": bounds,
             }
@@ -646,6 +724,8 @@ def proposal(workflow, stage, results, *, issues=None, knowledge_entry=None):
 
 
 def freeze_proposal(workflow, stage):
+    # A persisted flag preserves hashes and original permissions of older plans.
+    stage["unifiedIssueReview"] = True
     review, rows = proposal(workflow, stage, check_stage(workflow)["results"])
     workflow.plan["modificationReview"] = review
     stage["proposedEdits"] = rows
@@ -668,7 +748,7 @@ def freeze_proposal(workflow, stage):
     stage["status"] = "needs_review"
     workflow.plan.update(phase="review_modifications", reviewOutputs=[])
     workflow.status, workflow.current_step = "waiting_approval", "review_modifications"
-    workflow.detail = "请选择需要批准的处置；未选中、待裁定项保留，降权仍保留原识别对象"
+    workflow.detail = "请选择要执行的处置和待核查疑点；未选对象保持原样"
 
 
 def _fresh(workflow, user, policy, stage):
@@ -802,6 +882,7 @@ def validate_alteration_actions(review, selected, actions):
         for item in review["suggestions"]
         if item["id"] in selected
         and item.get("element") == "alteration"
+        and item.get("action") != "review"
         and item.get("featureId", "").startswith("AG-")
     }
     if set(actions) - set(allowed) or any(

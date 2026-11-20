@@ -111,7 +111,7 @@ it("默认处置计算期间可以查看授权范围，没有人工审批表单"
   fireEvent.click(screen.getByRole("button", { name: "查看处理范围" }));
   const drawer = await screen.findByRole("dialog", { name: "本次处理范围" });
   await within(drawer).findByText(/已授权处置\s*1\s*项/);
-  expect(within(drawer).getByLabelText("地质底图与待核查对象")).toBeVisible();
+  expect(within(drawer).getByLabelText("地质底图与待核查疑点")).toBeVisible();
   expect(within(drawer).queryByRole("checkbox")).toBeNull();
   expect(agentApi.workflow).toHaveBeenCalledExactlyOnceWith(
     workflow.id,
@@ -176,7 +176,7 @@ it("完成首屏显示实际结果和四阶段，无预取或重复确认；成�
   const metrics = within(screen.getByLabelText("实际结果统计"));
   for (const number of ["196", "142", "0"])
     expect(metrics.getByText(number)).toBeVisible();
-  expect(screen.getByText("45 条待裁定与例外已保留")).toBeVisible();
+  expect(screen.getByText("45 条待核查规则命中未修改")).toBeVisible();
   expect(screen.getByRole("link", { name: "查看前后对比" })).toHaveAttribute(
     "target",
     "_blank",

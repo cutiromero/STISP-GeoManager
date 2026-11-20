@@ -153,7 +153,7 @@ def review_index(suggestions):
         if held:
             measurements = item.get("observations", {})
             confidence = measurements.get("confidence", measurements.get("conf"))
-            tier = "规则例外候选" if item.get("status") == "exception" else "需专家裁定"
+            tier = "规则例外" if item.get("status") == "exception" else "待核查疑点"
             if isinstance(confidence, (int, float)):
                 reason = f"置信度{'≥0.8' if confidence >= 0.8 else '0.6–0.8' if confidence >= 0.6 else '<0.6'}，{tier}"
             else:
@@ -608,14 +608,9 @@ def project_workflow(
     if review:
         suggestions = review.get("suggestions", [])
         if part == "retained":
-            from .retained_review import held_suggestions, inspection_held_suggestions
+            from .retained_review import inspection_held_suggestions
 
-            suggestions = (
-                held_suggestions(source)
-                if source.get("phase") == "review_modifications"
-                and source.get("retainedReview", {}).get("active")
-                else inspection_held_suggestions(source)
-            )
+            suggestions = inspection_held_suggestions(source)
         position = next(
             (
                 position

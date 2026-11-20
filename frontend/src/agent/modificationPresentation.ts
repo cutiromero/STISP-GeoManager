@@ -13,7 +13,7 @@ export const modificationActions: Record<string, string> = {
   downweight: "降权",
   retain: "保留",
   keep: "保留",
-  review: "待裁定",
+  review: "复核并保留原样",
 };
 
 export function modificationAction(item: {

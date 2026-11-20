@@ -51,3 +51,9 @@ python examples/compute/geology-multi-core/build.py <本机输出目录>
 回归测试：`backend/tests/unit/test_raster_streaming.py`将全部汇总、修正/权重/变更栅格的逐字节像元指纹及远景矢量/证据与16347ed的1.1.0结果比较，并检查跨块边、角点、阈值和面积并列。
 
 内存验收须在Linux使用平台相同解释器运行：`cd backend && python -m pytest tests/unit/test_raster_memory.py -q -s`。合成影像为2000×2000，分别以5种和10种矿物启动独立check、apply、prospect进程；子进程在导入地理依赖前设置RLIMIT_AS=1024 MiB，输出有效限制、峰值RSS和VmPeak，并断言10种相对5种的两项峰值增量均不超过32 MiB。macOS不支持该限制，测试明确跳过；直接运行该测试文件可测不带硬限制的本机RSS，不能当作Linux硬限制验收。
+
+### 归档对照局部改类
+
+`geology-multi-apply` 1.7.4 在通过 1.7.3 的范围、类别和覆盖校验后，仅以获批新增面为起点，融合正长度共边的同一归档分类单元。不通过不同类别、点接触或分离的多面部件扩展范围。变更表保留实际改类面积和范围，记录承接编号（多个编号在 `measurements_json.archive_dissolved_host_ids`）、完全吸收的原编号和移除的内部边界长度（不重复计数）。既有分类覆盖逐类保持不变。
+
+从算子登记下载冻结的 1.7.3 包，设置 `../geology-multi-apply/build_archive_dissolve.py` 顶部的输入及输出路径，用项目 Python 执行。脚本核对基包 SHA-256，不取代正式的算子自检、隔离试运行与版本发布；归档证据不进入 Git。

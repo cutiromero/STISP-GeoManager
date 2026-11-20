@@ -178,8 +178,9 @@ def test_stale_browser_entry_is_rejected_without_affecting_api_clients(tmp_path)
 
 
 @pytest.mark.django_db
-def test_automatic_execution_writes_only_authorized_rule_rows_and_requires_its_proof(
-    generic, monkeypatch
+@pytest.mark.parametrize("select_all", [False, True])
+def test_automatic_execution_waits_and_accepts_all_unified_issue_actions(
+    generic, monkeypatch, select_all
 ):
     import csv
     from apps.agent.demo_workflow import prepare_demo, _save
@@ -198,7 +199,7 @@ def test_automatic_execution_writes_only_authorized_rule_rows_and_requires_its_p
     prepare_demo(workflow, generic["owner"], generic["policy"])
     workflow.refresh_from_db()
     entry = workflow.evidence[0]
-    _, _, results = measured(2)
+    _, _, results = measured(3)
     for row in results[0]["rows"]:
         row.update(
             rule_id=entry["trialBinding"]["ruleId"],
@@ -212,6 +213,14 @@ def test_automatic_execution_writes_only_authorized_rule_rows_and_requires_its_p
         candidate_action="set_code",
         candidate_target_code="T3",
     )
+    results[0]["rows"][2].update(
+        status="review",
+        suggested_action="review",
+        allowed_actions_json='["keep","review"]',
+    )
+    # A missing optional action or target does not drop the measured issue.
+    results[0]["rows"][2].pop("candidate_action", None)
+    results[0]["rows"][2].pop("candidate_target_code", None)
     check, stage = workflow.plan["stages"][:2]
     check.update(taskId="task", results=results)
     workflow.plan.update(stageIndex=1)
@@ -222,6 +231,15 @@ def test_automatic_execution_writes_only_authorized_rule_rows_and_requires_its_p
         workflow, generic["owner"], generic["policy"], stage
     )
     assert not workflow.steps.filter(kind="modifications_approved").exists()
+    assert "approvedEdits" not in stage and "taskId" not in stage
+    from apps.agent.workflow_projection import project_workflow
+
+    projection = project_workflow(workflow, {}, "inspection", "retained", 0, 25)
+    held = projection["modificationReview"]["suggestions"]
+    assert [row["candidateAction"] for row in held] == ["set_code", "review"]
+    assert projection["plan"]["reviewIndex"]["candidateIds"] == [
+        row["id"] for row in held
+    ]
     _save(workflow)
     monkeypatch.setattr(
         "apps.agent.geology_multi_review.read_results", lambda *a, **k: results
@@ -230,7 +248,11 @@ def test_automatic_execution_writes_only_authorized_rule_rows_and_requires_its_p
     from apps.agent.geology_multi_review import approve_modifications
 
     approve_modifications(
-        workflow, generic["owner"], generic["policy"], [], workflow.plan_hash
+        workflow,
+        generic["owner"],
+        generic["policy"],
+        [row["id"] for row in held] if select_all else [],
+        workflow.plan_hash,
     )
     workflow.status = "queued"
     _save(workflow)
@@ -242,8 +264,15 @@ def test_automatic_execution_writes_only_authorized_rule_rows_and_requires_its_p
             table_data_path(resource.storage_path.removeprefix("table/")).open()
         )
     )
-    assert len(records) == 1 and records[0]["issue_id"] == "issue-0"
-    assert records[0]["action"] == "set_code"
+    assert records[0]["issue_id"] == "issue-0" and records[0]["action"] == "set_code"
+    if select_all:
+        assert [(row["issue_id"], row["action"]) for row in records[1:]] == [
+            ("issue-1", "set_code"),
+            ("issue-2", "review"),
+        ]
+        assert records[-1]["target_code"] == "" and records[-1]["weight"] == "1"
+    else:
+        assert len(records) == 1
     workflow.steps.filter(kind="modifications_approved").delete()
     with pytest.raises(ComputeError, match="有效批准"):
         create_approved_changes(workflow, generic["owner"], generic["policy"], stage)
@@ -510,3 +539,25 @@ def test_report_facts_resolve_minerals_for_each_corrected_zone_and_keep_rule_sco
             actualChangedCount=7,
         ),
     ]
+
+
+def test_unified_issue_groups_preserve_all_rule_hits_and_never_guess_a_mutation():
+    from apps.agent.geology_multi_review import freeze_proposal
+
+    workflow, stage, results = measured(2)
+    for row, code in zip(results[0]["rows"], ("T3", "Q"), strict=True):
+        row.update(
+            feature_id="same-object",
+            status="exception",
+            suggested_action="review",
+            candidate_action="set_code",
+            candidate_target_code=code,
+            target_code=code,
+            allowed_actions_json='["review","set_code"]',
+        )
+    freeze_proposal(workflow, stage)
+    [item] = workflow.plan["modificationReview"]["suggestions"]
+    assert item["candidateAction"] == "review"
+    assert "命中不同处置" in item["reason"]
+    assert len(item["observations"]["related_rule_hits"]) == 2
+    assert stage["proposedEdits"][0]["target_code"] == ""

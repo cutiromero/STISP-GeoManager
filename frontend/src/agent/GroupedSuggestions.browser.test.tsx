@@ -87,7 +87,7 @@ it("组摘要按原因计数，全量候选仅经用户勾选纳入，确认分�
   );
   expect(screen.getByText(/已选择 1/)).toBeVisible();
   const all = screen.getByRole("checkbox", {
-    name: "全部待裁定与例外按候选处置",
+    name: "选择全部待核查疑点",
   });
   expect(all).not.toBeChecked();
   fireEvent.click(all);
@@ -100,9 +100,7 @@ it("组摘要按原因计数，全量候选仅经用户勾选纳入，确认分�
   expect(review.mock.calls[0]![2]).toHaveLength(12);
   fireEvent.click(all);
   expect(screen.getByText(/已选择 1/)).toBeVisible();
-  fireEvent.click(
-    screen.getByText(/待裁定与例外（共/, { selector: "summary" }),
-  );
+  fireEvent.click(screen.getByText(/待核查疑点（共/, { selector: "summary" }));
   fireEvent.click(
     screen.getByText(new RegExp(`岩性 / ${first.ruleId} · 11 个对象`), {
       selector: "summary",
@@ -160,22 +158,20 @@ it("模型建议默认选择，待裁定候选仅在用户明确选择后批准"
   );
   expect(screen.getByText(/已选择 1/)).toBeVisible();
   expect(
-    screen.getByRole("checkbox", { name: /全部待裁定与例外按候选处置/ }),
+    screen.getByRole("checkbox", { name: /选择全部待核查疑点/ }),
   ).not.toBeChecked();
-  fireEvent.click(
-    screen.getByText(/待裁定与例外（共/, { selector: "summary" }),
-  );
+  fireEvent.click(screen.getByText(/待核查疑点（共/, { selector: "summary" }));
   fireEvent.click(
     screen.getByText(/岩性 \/ L-02 · 1 个对象/, { selector: "summary" }),
   );
   fireEvent.click(
-    await screen.findByText(/H1 \/ 规则例外候选/, { selector: "summary" }),
+    await screen.findByText(/H1 \/ 规则例外/, { selector: "summary" }),
   );
-  const retained = screen.getByText(/H1 \/ 规则例外候选/).closest("details")!;
+  const retained = screen.getByText(/H1 \/ 规则例外/).closest("details")!;
   fireEvent.mouseDown(
-    screen.getByRole("combobox", { name: "L-02组待裁定处置" }),
+    screen.getByRole("combobox", { name: "L-02组待核查处置" }),
   );
-  fireEvent.click(await screen.findByText("按本组候选处置：重分类为 D₁γ"));
+  fireEvent.click(await screen.findByText("执行本组动作：重分类为 D₁γ"));
   expect(screen.getByText(/已选择 2/)).toBeVisible();
   view.rerender(
     <App>
@@ -303,7 +299,7 @@ it("全部分组待裁定时仍显示组卡片，不提供自动批准", async (
       </MemoryRouter>
     </App>,
   );
-  const held = await screen.findByText("待裁定与例外（共 1 组 / 12 个对象）");
+  const held = await screen.findByText("待核查疑点（共 1 组 / 12 个对象）");
   expect(held.closest("details")).not.toHaveAttribute("open");
   fireEvent.click(held);
   expect(screen.getByText(/岩性 \/ L-01 · 12 个对象/)).toBeVisible();
@@ -363,7 +359,7 @@ it.each([1461, 360])(
         "岩性 / L-01 / 重分类 · 60 个对象",
         { selector: "summary" },
       );
-      const held = screen.getByText("待裁定与例外（共 1 组 / 40 个对象）", {
+      const held = screen.getByText("待核查疑点（共 1 组 / 40 个对象）", {
         selector: "summary",
       });
       expect(

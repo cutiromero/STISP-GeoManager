@@ -32,7 +32,7 @@ const deterministicRules = new Set(["L-03", "L-05", "A-05"]);
 
 /** Which disposal tier a suggestion belongs to. */
 export function suggestionTier(item: { status?: string; ruleId?: string }) {
-  if (item.status === "exception") return "规则例外候选";
+  if (item.status === "exception") return "规则例外";
   if (item.status === "review") return "需地质判断，暂保留";
   if (deterministicRules.has(item.ruleId ?? ""))
     return "确定性问题（规则发布后可自动处理）";
@@ -380,8 +380,8 @@ export default function MultiElementStory({
               <ul>
                 {workflow.plan.trialRuleBindings?.map((rule) => (
                   <li key={`${rule.id}:${rule.revision}`}>
-                    {rule.ruleId} / {rule.title.replace("（本案例试用）", "")} / 版本 {rule.ruleVersion} /
-                    修订 {rule.revision}
+                    {rule.ruleId} / {rule.title.replace("（本案例试用）", "")} /
+                    版本 {rule.ruleVersion} / 修订 {rule.revision}
                   </li>
                 ))}
               </ul>
@@ -423,7 +423,7 @@ export default function MultiElementStory({
           <div className="geology-suggestions-heading">
             <h3>
               {focus === "retained"
-                ? "待裁定与例外"
+                ? "待核查疑点"
                 : `发现的问题与建议 / ${focus === "all" ? suggestions.length : Number(reviewIndex.total ?? suggestions.length)} 项`}
             </h3>
             <Select
@@ -459,7 +459,7 @@ export default function MultiElementStory({
                 )
               }
             >
-              全部待裁定与例外按候选处置
+              选择全部待核查疑点
             </Checkbox>
           )}
           <div className="multi-element-suggestion-list">
@@ -586,15 +586,16 @@ export default function MultiElementStory({
                                   {approved.includes(item.id)
                                     ? "已批准"
                                     : item.status === "review"
-                                      ? "待裁定"
+                                      ? "待核查"
                                       : item.status === "exception"
-                                        ? "例外候选"
+                                        ? "规则例外"
                                         : modificationAction(item)}
                                 </Tag>
                               </summary>
                               <div className="multi-element-suggestion-body">
                                 {editable &&
-                                  item.featureId?.startsWith("AG-") && (
+                                  item.featureId?.startsWith("AG-") &&
+                                  item.candidateAction !== "review" && (
                                     <Select
                                       aria-label={`蚀变组动作 ${item.featureId}`}
                                       value={
@@ -752,7 +753,7 @@ export default function MultiElementStory({
                 open={focus === "retained" ? true : undefined}
               >
                 <summary>
-                  {focus === "retained" ? "初检待裁定与例外" : "待裁定与例外"}
+                  {focus === "retained" ? "初检待核查疑点" : "待核查疑点"}
                   （共 {retainedGroups.length} 组 /{" "}
                   {retainedGroups.reduce(
                     (count, group) => count + group.count,
@@ -806,13 +807,13 @@ export default function MultiElementStory({
                         )}
                       </ul>
                       <p>
-                        默认保留；仅您明确选择后按冻结候选处置，规则状态及例外原因不变。
+                        默认保留；仅您明确选择后执行所列动作，规则状态及例外原因不变。
                       </p>
                       {expandedGroups.includes(groupKey) && (
                         <>
                           <Select
                             style={{ width: "100%" }}
-                            aria-label={`${group.ruleId}组待裁定处置`}
+                            aria-label={`${group.ruleId}组待核查处置`}
                             value={
                               [...candidateIds].every((id) =>
                                 selectedIds.has(id),
@@ -829,7 +830,7 @@ export default function MultiElementStory({
                               { value: "keep", label: "保留本组" },
                               {
                                 value: "candidate",
-                                label: `按本组候选处置：${candidateLabel}`,
+                                label: `执行本组动作：${candidateLabel}`,
                               },
                               {
                                 value: "mixed",
@@ -855,7 +856,7 @@ export default function MultiElementStory({
                                 </summary>
                                 <Select
                                   style={{ width: "100%" }}
-                                  aria-label={`${item.featureId}待裁定处置`}
+                                  aria-label={`${item.featureId}待核查处置`}
                                   value={
                                     selectedIds.has(item.id)
                                       ? "candidate"
@@ -868,7 +869,7 @@ export default function MultiElementStory({
                                     { value: "keep", label: "保留" },
                                     {
                                       value: "candidate",
-                                      label: `按候选处置：${modificationAction(item)}`,
+                                      label: `执行所列动作：${modificationAction(item)}`,
                                     },
                                   ]}
                                   onChange={(value) =>
@@ -880,7 +881,8 @@ export default function MultiElementStory({
                                   }
                                 />
                                 {editable &&
-                                  item.featureId?.startsWith("AG-") && (
+                                  item.featureId?.startsWith("AG-") &&
+                                  item.candidateAction !== "review" && (
                                     <Select
                                       aria-label={`蚀变组动作 ${item.featureId}`}
                                       value={
@@ -930,7 +932,7 @@ export default function MultiElementStory({
                                 }))
                               }
                             >
-                              查看更多待裁定对象
+                              查看更多待核查对象
                             </Button>
                           )}
                         </>
@@ -964,7 +966,7 @@ export default function MultiElementStory({
                 已选择 {ids.length} 项（有效建议{" "}
                 {ids.filter((id) => modelIds.has(id)).length} 项、用户裁定{" "}
                 {ids.filter((id) => userIds.has(id)).length} 项）。
-                仅执行当前勾选的对象与动作，保存新成果版本；未选中和待裁定项保持原样。
+                仅执行当前勾选的对象与动作，保存新成果版本；未选中的建议和疑点保持原样。
               </p>
               <div className="geology-review-buttons">
                 <Button

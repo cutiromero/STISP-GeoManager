@@ -254,7 +254,7 @@ export default function RetainedReviewMap({
     if (target) onFocus(String(target.id));
   };
   return (
-    <div className="logic-retained-map" aria-label="地质底图与待核查对象">
+    <div className="logic-retained-map" aria-label="地质底图与待核查疑点">
       <div className="logic-retained-map-toolbar">
         <span>结合当前地质背景核查所选对象。</span>
         <Button size="small" onClick={() => setLocate(false)}>
@@ -306,7 +306,7 @@ export default function RetainedReviewMap({
         inspectionOnly
         overlays={overlays}
         afterLabel={
-          after.lithology ? "当前成果与待核查对象" : "待核查对象（尚未执行）"
+          after.lithology ? "当前成果与待核查疑点" : "待核查疑点（尚未执行）"
         }
         automaticPositions={workflow.plan.reviewIndex?.automaticMap?.points}
         compactLegend

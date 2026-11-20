@@ -338,6 +338,8 @@ pnpm run api:docs
 
 ### API 契约规范
 
+逻辑推理审核的 `reviewIndex.candidateIds` 保存统一待核查疑点的冻结 ID；分页时以索引维持全选。`candidateAction: review` 表示所选对象由实际算子重新核对并保持原状，不计为数据修改。未选择对象不产生处置授权。
+
 Agent能力准入、参数与执行规则见[平台API与Agent能力开放规范](agent-api-governance.md)。`GET /api/agent/capabilities/`要求正式登录、当前单项目及智能体权限，返回经当前策略过滤的工具合同，不读取业务资料或执行业务操作。目录中的参数Schema和运行合同由OpenAPI的`x-agent-tools`生成，构建必须通过`agent:contracts:check`，发现能力不授予执行或对象访问权。
 
 `GET /api/agent/runs/{runId}/tool-calls/`按offset和limit读取本人的当前项目调用回执，limit为1至100。回执不返回实际参数值；成功调用仍通过resultRefs指向真实任务或对象。通用工具执行使用同一生成参数合同及可用性判断，失败提供兼容detail的code、retryable、requestId和fieldErrors；参数修正与同参数重试分别处理，权限和结构故障不盲目重试。动态算法输入继续由冻结manifest校验。

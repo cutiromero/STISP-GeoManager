@@ -1,6 +1,7 @@
 """Concise audience report; complete approvals and evidence remain downloadable."""
 
 from collections import Counter
+import json
 
 from apps.compute.packages import ComputeError
 
@@ -11,8 +12,20 @@ ACTIONS = {
     "exclude": "剔除（从修正后成果删除）",
     "downweight": "降权",
     "keep": "保留",
-    "review": "保留待核查",
+    "review": "复核并保留原样",
 }
+
+
+def _archive_hosts(row):
+    if row.get("action") != "reclassify":
+        return []
+    try:
+        value = json.loads(row.get("measurements_json") or "{}")
+    except (TypeError, ValueError):
+        return []
+    return (
+        value.get("archive_dissolved_host_ids", []) if isinstance(value, dict) else []
+    )
 
 
 def render_report(workflow, tasks):
@@ -184,10 +197,19 @@ def render_report(workflow, tasks):
         result = (
             "已执行"
             if row.get("actual_changed", "").casefold() == "true"
+            else "已复核，未修改"
+            if row["action"] == "review"
             else "保留原状"
         )
         target = action + ("为 " + row["new_code"] if row.get("target_code") else "")
         scope = "本对象"
+        if (
+            item.get("observations", {}).get("scope") == "anchored_cell_partition"
+            and row["action"] == "reclassify"
+        ):
+            scope = "获批局部像元，未获批部分保留原分类"
+            if hosts := _archive_hosts(row):
+                scope += "；共边同单元承接图斑 " + "、".join(hosts)
         if row.get("host_feature_id") and item["action"] == "merge":
             scope += "及相邻承接图斑 " + str(row["host_feature_id"])
         lines.extend(
@@ -205,7 +227,12 @@ def render_report(workflow, tasks):
             ]
         )
     retained = Counter(
-        (item["ruleId"], ACTIONS.get(item["action"], item["action"]))
+        (
+            item["ruleId"],
+            "待核查疑点"
+            if item["action"] == "review"
+            else ACTIONS.get(item["action"], item["action"]),
+        )
         for item in suggestions
         if item["id"] not in approved_ids
     )
@@ -273,8 +300,22 @@ def render_report(workflow, tasks):
                         "",
                     ]
                 )
+    archive_merges = [row for row in changes if _archive_hosts(row)]
+    if archive_merges:
+        length = sum(
+            float(row.get("removed_internal_boundary_m") or 0) for row in archive_merges
+        )
+        lines.extend(
+            [
+                f"归档局部改类后，{len(archive_merges)} 条记录涉及同单元共边融合，移除内部边界 {length:.2f} 米。融合不额外改类，不改变获批分类覆盖范围。",
+                "",
+            ]
+        )
     merges = [
-        row for row in changes if row["action"] == "merge" or row.get("host_feature_id")
+        row
+        for row in changes
+        if (row["action"] == "merge" or row.get("host_feature_id"))
+        and not _archive_hosts(row)
     ]
     if merges:
         involved = sum(

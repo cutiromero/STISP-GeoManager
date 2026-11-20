@@ -85,6 +85,7 @@ def fake():
         owner_id=1,
         workflow_type="geology_generic",
         status="succeeded",
+        parameters={},
         plan=plan,
         plan_hash=_state_hash(plan),
         operator_steps=3,

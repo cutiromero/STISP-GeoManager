@@ -13655,8 +13655,8 @@ components:
           items: {type: string, description: 模型建议对象ID}
         candidateIds:
           type: array
-          description: 只有用户明确选择才可批准的冻结待裁定或例外候选
-          items: {type: string, description: 用户裁定候选对象ID}
+          description: 统一待核查疑点的冻结编号，仅在用户明确选择后执行对应动作
+          items: {type: string, description: 待核查疑点ID}
         groups:
           type: array
           description: 完整审批分组与分类原因计数
@@ -18279,12 +18279,11 @@ components:
               source: {type: string, description: 原来源及核实程度}
         lengthM: {type: number, minimum: 0, description: 构造对象实测米制长度；不以面积代替线长度}
         status: {type: string, description: 检查规则的建议、待裁定、例外、保留、降权或剔除状态；用户选候选不会改变规则判断}
-        candidateAction: {type: string, enum: [reclassify, exclude, downweight], description: 本次冻结检查快照的候选动作；仅待裁定或例外对象提供，默认保留且不得被模型或建议全选纳入，须用户明确选择其建议编号}
+        candidateAction: {type: string, enum: [set_code, reclassify, merge, exclude, downweight, keep, review], description: 待核查疑点的冻结执行动作；证据不足时执行review并保留原状；所有疑点默认不选，只有用户选择后才执行}
         candidateTargetCode: {type: string, description: 候选重分类的实测相邻目标代号；非类别动作为空，不接受用户或模型另填目标}
         knowledgeRefs:
           type: array
-          minItems: 1
-          description: 当前检索实际返回的知识与修订，权限继续按原项目检查。
+          description: 当前检索实际返回的知识与修订，权限继续按原项目检查。只有复核、不修改资料时允许无对应知识。
           items:
             type: object
             additionalProperties: false

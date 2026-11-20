@@ -33,7 +33,8 @@ def _edited_pairs(plan, *, require_complete):
 
 def _held_suggestions(plan, edited):
     review = plan.get("modificationReview") or {}
-    scope = plan.get("retainedReview", {}).get("retainedSuggestionIds")
+    identities = plan.get("retainedReview", {}).get("retainedSuggestionIds")
+    scope = None if identities is None else set(identities)
     return [
         item
         for item in review.get("suggestions", [])
@@ -63,6 +64,29 @@ def inspection_held_suggestions(plan):
     """
     edited = _edited_pairs(plan, require_complete=False)
     held = _held_suggestions(plan, edited)
+    apply = next((s for s in plan.get("stages", []) if s.get("name") == "apply"), {})
+    if apply.get("unifiedIssueReview") is True:
+        reviewed = {
+            (str(row["feature_id"]), str(row["rule_id"]))
+            for row in full_rows(output(apply, "changes")) or []
+            if row.get("action") == "review"
+            and row.get("feature_id")
+            and row.get("rule_id")
+            and str(row.get("actual_changed")).lower() in {"false", "0", "0.0"}
+        }
+        return [
+            {**item, "suggestedState": "已复核，未修改"}
+            if (str(item["featureId"]), str(item["ruleId"])) in reviewed
+            else item
+            for item in held
+        ]
+    # Keep prior frozen plans readable without creating new authorization IDs.
+    review_scope = plan.get("retainedReview") or {}
+    allowed = (
+        set(review_scope["retainedSuggestionIds"])
+        if review_scope.get("active") and "retainedSuggestionIds" in review_scope
+        else None
+    )
     seen = {(str(item["featureId"]), str(item["ruleId"])) for item in held} | edited
     check = next((s for s in plan.get("stages", []) if s.get("name") == "check"), {})
     for row in full_rows(output(check, "issues")) or []:
@@ -75,6 +99,9 @@ def inspection_held_suggestions(plan):
             or identity in seen
         ):
             continue
+        identity_id = digest({"inspectionIssue": row["issue_id"]})[:24]
+        if allowed is not None and identity_id not in allowed:
+            continue
         measurements = _json_record(row.get("measurements_json"))
         try:
             area = float(row.get("area_m2") or measurements.get("area_m2") or 0)
@@ -83,7 +110,7 @@ def inspection_held_suggestions(plan):
         reason = str(row.get("reason") or "证据不足，保留核查。")
         held.append(
             {
-                "id": digest({"inspectionIssue": row["issue_id"]})[:24],
+                "id": identity_id,
                 "kind": "multi_element",
                 "element": row.get("element"),
                 "featureId": feature,
@@ -105,21 +132,22 @@ def inspection_held_suggestions(plan):
 
 
 def open_initial_review(workflow, stage, automatic_ids):
-    candidates = held_suggestions(workflow.plan)
-    if not candidates:
+    held = held_suggestions(workflow.plan)
+    if not held:
         return False
     workflow.plan["retainedReview"] = {
         "automaticSuggestionIds": automatic_ids,
-        "candidateIds": [
-            item["id"] for item in candidates if item.get("candidateAction")
-        ],
-        "retainedSuggestionIds": [item["id"] for item in candidates],
+        "candidateIds": [item["id"] for item in held if item.get("candidateAction")],
+        "retainedSuggestionIds": [item["id"] for item in held],
         "kind": "initial",
         "active": True,
     }
     workflow.plan.update(phase="review_modifications", reviewOutputs=[])
     workflow.status, workflow.current_step = "waiting_approval", "review_modifications"
-    workflow.detail = f"{len(automatic_ids)}项规则处置按原授权执行；请核查{len(candidates)}条待裁定与例外，未选对象保留"
+    workflow.detail = (
+        f"请确认{len(held)}项待核查疑点；确认后执行所选疑点的处理和{len(automatic_ids)}项已授权处置。"
+        "未选疑点保持原样。"
+    )
     stage["status"] = "needs_review"
     return True
 
@@ -136,7 +164,7 @@ def merge_selection(workflow, user, policy, selected):
         raise PermissionDenied("本次自动处置授权已失效")
     candidates = set(state["candidateIds"])
     if set(selected) - candidates:
-        raise ComputeError("只能选择本次保留对象的明确候选处置", 409)
+        raise ComputeError("只能选择本次冻结的待核查疑点", 409)
     automatic = state["automaticSuggestionIds"]
     if set(automatic) & candidates:
         raise ComputeError("自动处置与人工候选范围冲突", 409)
@@ -145,6 +173,7 @@ def merge_selection(workflow, user, policy, selected):
         "automaticSuggestionIds": automatic,
         "manualSuggestionIds": selected,
         "retainedReviewKind": state["kind"],
+        "acknowledgedRetainedCount": len(state.get("retainedSuggestionIds", [])),
         "automaticAlterationActions": state.get("automaticAlterationActions", {}),
     }
 
@@ -239,6 +268,7 @@ def reopen(workflow, user, policy, expected):
                 "proposedEdits",
                 "executionMode",
                 "ruleDispositionSummary",
+                "unifiedIssueReview",
             }
         }
         stages[i]["status"] = "needs_review" if i == index else "pending"
@@ -269,9 +299,7 @@ def reopen(workflow, user, policy, expected):
     )
     workflow.plan["modificationReview"]["approvedSuggestionIds"] = []
     workflow.status, workflow.current_step = "waiting_approval", "review_modifications"
-    workflow.detail = (
-        f"请核查{len(candidates)}条保留对象；原成果已保存，确认后生成新一轮处置与复查"
-    )
+    workflow.detail = f"请选择{len(candidates)}项待核查疑点中的处理范围；原成果已保存，确认后生成新一轮处置与复查"
     step(
         workflow,
         "retained_review_opened",

@@ -1,5 +1,18 @@
 # API Change Requests
 
+## API-20261120-001 - 逻辑推理统一待核查疑点
+
+- Status: BackendReady
+- Owner: codex/xintao。
+- Endpoints: GET /api/agent/workflows/{workflowId}/；POST /api/agent/workflows/{workflowId}/confirm/。
+- Change type: 不更改请求字段；扩展冻结动作枚举以支持原状复核和已有处置。
+- OpenAPI change: `AgentModificationSuggestion.candidateAction` 支持 `review` 及已存在的处置动作；仅复核时 `knowledgeRefs` 可为空。`reviewIndex.candidateIds` 为统一待核查疑点编号。
+- Mock examples: 沿用已有响应结构。
+- Frontend reason: 同一列表可以明确选择每个疑点，并在确认后执行；不能用只读标记代替复核。
+- Backend implementation notes: 保留原 `planHash`、冻结输出、所属项目和用户批准校验；保留原样的复核不计实际修改。
+- Verification: 未确认不调 Apply；混合动作与复核的全选、空选、冲突合并和禁止超范围提交。
+- Result: 待核查疑点默认不选；证据不足也可以执行保留原状的复核，不增加修改权限。
+
 ## API-20261119-001 - 科研用户新建和编辑业务流及算子登记
 
 - Status: BackendReady
@@ -900,6 +913,7 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| API-20261120-001 | BackendReady | 逻辑推理统一待核查疑点与保留原状复核 |
 | API-20261119-001 | BackendReady | 科研用户维护业务流与算子登记 |
 | API-20261118-001 | BackendReady | 主 Agent 监测执行与成果正式登记 |
 | API-20261117-004 | Verified | agent/operations | 新增真实确认与操作面板 | AgentOperation系列 | 183 | 已实现 | 并发、版本、权限及CSRF | 不注册模型确认能力 |

@@ -3761,7 +3761,7 @@ export type AgentWorkflowReviewIndex = {
      */
     suggestedIds: Array<string>;
     /**
-     * 只有用户明确选择才可批准的冻结待裁定或例外候选
+     * 统一待核查疑点的冻结编号，仅在用户明确选择后执行对应动作
      */
     candidateIds: Array<string>;
     /**
@@ -8360,15 +8360,15 @@ export type AgentModificationSuggestion = {
      */
     status?: string;
     /**
-     * 本次冻结检查快照的候选动作；仅待裁定或例外对象提供，默认保留且不得被模型或建议全选纳入，须用户明确选择其建议编号
+     * 待核查疑点的冻结执行动作；证据不足时执行review并保留原状；所有疑点默认不选，只有用户选择后才执行
      */
-    candidateAction?: 'reclassify' | 'exclude' | 'downweight';
+    candidateAction?: 'set_code' | 'reclassify' | 'merge' | 'exclude' | 'downweight' | 'keep' | 'review';
     /**
      * 候选重分类的实测相邻目标代号；非类别动作为空，不接受用户或模型另填目标
      */
     candidateTargetCode?: string;
     /**
-     * 当前检索实际返回的知识与修订，权限继续按原项目检查。
+     * 当前检索实际返回的知识与修订，权限继续按原项目检查。只有复核、不修改资料时允许无对应知识。
      */
     knowledgeRefs: Array<{
         /**

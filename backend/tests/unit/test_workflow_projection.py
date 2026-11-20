@@ -216,7 +216,7 @@ def test_inspection_pages_do_not_mutate_frozen_suggestions():
     index = projected["plan"]["reviewIndex"]
     assert len(index["suggestedIds"]) == 59
     assert index["candidateIds"] == [held["id"]]
-    assert index["groups"][-1]["reasons"] == {"置信度≥0.8，规则例外候选": 1}
+    assert index["groups"][-1]["reasons"] == {"置信度≥0.8，规则例外": 1}
     assert len(projected["modificationReview"]["suggestions"]) == 10
     assert (
         projected["modificationReview"]["suggestions"][0]["preview"]["coordinates"]

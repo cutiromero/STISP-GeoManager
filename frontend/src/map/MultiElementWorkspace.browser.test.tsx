@@ -81,7 +81,7 @@ beforeEach(() => {
   });
 });
 
-it("在真实变更卡片区分地质符号、分区改类和图斑合并", () => {
+it.each([false, true])("归档改类按实际结果显示同单元融合（%s）", (fused) => {
   const suggestion = {
     ...reviewWorkflow(true).modificationReview!.suggestions[0]!,
     action: "reclassify",
@@ -118,6 +118,11 @@ it("在真实变更卡片区分地质符号、分区改类和图斑合并", () =
               old_code: "U009",
               new_code: "U005 / U030",
               host_feature_id: "",
+              measurements_json: fused
+                ? JSON.stringify({
+                    archive_dissolved_host_ids: ["F-10", "F-11"],
+                  })
+                : "{}",
               class_change_area_m2: 227070,
               lithology_unit_labels: {
                 U009: { name: "八宝山组碎屑岩", display_symbol: "Tb" },
@@ -137,6 +142,12 @@ it("在真实变更卡片区分地质符号、分区改类和图斑合并", () =
   ).toBeVisible();
   expect(screen.getByText(/与现图分类不一致的像元占 100%/)).toBeVisible();
   expect(screen.queryByText(/最长的宿主|岩性由 U009/)).toBeNull();
+  expect(screen.getByText(/未获批的部分保持原分类/)).toBeVisible();
+  expect(
+    screen.getByText(
+      fused ? /已融合，承接图斑：F-10、F-11/ : /该条修正记录未记录融合/,
+    ),
+  ).toBeVisible();
 });
 
 function rasterWorkflow(mineral = "calcite") {

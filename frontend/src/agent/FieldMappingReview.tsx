@@ -240,7 +240,9 @@ export default function FieldMappingReview({
           >
             自动执行已核验的规则建议（仅工作副本）
           </Checkbox>
-          <small>待裁定、例外和冲突对象保留；取消勾选可先审阅处置建议。</small>
+          <small>
+            有待核查疑点时，仍需先确认疑点的处理范围；取消勾选则先审阅全部处置建议。
+          </small>
         </div>
       )}
       <div

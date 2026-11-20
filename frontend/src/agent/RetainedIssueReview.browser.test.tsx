@@ -71,12 +71,12 @@ it("核查仅加载当前成果单图，切换对象和勾选不重新请求底�
       </MemoryRouter>
     </App>,
   );
-  await screen.findByText("待核查对象（尚未执行）");
+  await screen.findByText("待核查疑点（尚未执行）");
   expect(
     view.container.querySelectorAll(".geology-review-map-pair section"),
   ).toHaveLength(1);
   expect(screen.queryByText("本次检查采用的地质资料")).toBeNull();
-  expect(screen.getByText("待核查对象（尚未执行）")).toBeVisible();
+  expect(screen.getByText("待核查疑点（尚未执行）")).toBeVisible();
   expect(
     view.container.querySelectorAll('[data-layer="geological-units"] path')
       .length,
@@ -146,7 +146,7 @@ it("未选择对象时确认只保留，不产生默认人工批准", () => {
       </MemoryRouter>
     </App>,
   );
-  fireEvent.click(screen.getByRole("button", { name: "保留未选对象并继续" }));
+  fireEvent.click(screen.getByRole("button", { name: "保留未选疑点并继续" }));
   expect(onReview).toHaveBeenCalledExactlyOnceWith("approve", "", [], {});
 });
 
@@ -160,9 +160,7 @@ it("can select a candidate directly from its mapped evidence", () => {
     </App>,
   );
   fireEvent.click(screen.getAllByRole("button", { name: "F-01" })[0]!);
-  fireEvent.click(
-    screen.getByRole("checkbox", { name: "选择当前对象的候选处置" }),
-  );
+  fireEvent.click(screen.getByRole("checkbox", { name: "选择当前待核查疑点" }));
   fireEvent.click(screen.getByRole("button", { name: "执行所选 1 项并继续" }));
   expect(onReview).toHaveBeenCalledExactlyOnceWith(
     "approve",
@@ -191,9 +189,7 @@ it("蚀变对象勾选后显示实际候选动作，保留后再选不会沿用�
     </App>,
   );
   fireEvent.click(screen.getAllByRole("button", { name: "AG-01" })[0]!);
-  fireEvent.click(
-    screen.getByRole("checkbox", { name: "选择当前对象的候选处置" }),
-  );
+  fireEvent.click(screen.getByRole("checkbox", { name: "选择当前待核查疑点" }));
   const action = screen.getByRole("combobox", { name: "当前蚀变对象处置" });
   expect(action.closest(".ant-select")).toHaveTextContent("剔除");
   fireEvent.mouseDown(action);
@@ -203,11 +199,9 @@ it("蚀变对象勾选后显示实际候选动作，保留后再选不会沿用�
     }),
   );
   expect(
-    screen.getByRole("checkbox", { name: "选择当前对象的候选处置" }),
+    screen.getByRole("checkbox", { name: "选择当前待核查疑点" }),
   ).not.toBeChecked();
-  fireEvent.click(
-    screen.getByRole("checkbox", { name: "选择当前对象的候选处置" }),
-  );
+  fireEvent.click(screen.getByRole("checkbox", { name: "选择当前待核查疑点" }));
   expect(action.closest(".ant-select")).toHaveTextContent("剔除");
   fireEvent.click(screen.getByRole("button", { name: "执行所选 1 项并继续" }));
   expect(onReview).toHaveBeenCalledExactlyOnceWith(
@@ -242,7 +236,7 @@ it("shows the full automatic scope as muted clusters without adding approval cho
       </MemoryRouter>
     </App>,
   );
-  await screen.findByText("待核查对象（尚未执行）");
+  await screen.findByText("待核查疑点（尚未执行）");
   expect(screen.getByText(/已授权处置 196 项/)).toBeVisible();
   await waitFor(() =>
     expect(
@@ -278,4 +272,40 @@ it("shows the full automatic scope as muted clusters without adding approval cho
     {},
   );
   expect(mapQuery).toHaveBeenCalledTimes(2);
+});
+
+it("复核与改类疑点共用同一列表，均可全选并明确执行", () => {
+  const workflow = task();
+  workflow.plan.retainedReview = {
+    ...workflow.plan.retainedReview,
+    kind: "initial",
+    active: true,
+  };
+  const [first, second] = workflow.modificationReview!.suggestions;
+  workflow.modificationReview!.suggestions = [
+    first!,
+    { ...second!, candidateAction: "review", action: "review" },
+  ];
+  const onReview = vi.fn();
+  render(
+    <App>
+      <MemoryRouter>
+        <RetainedIssueReview workflow={workflow} onReview={onReview} />
+      </MemoryRouter>
+    </App>,
+  );
+  expect(screen.getByText(/在本页确认后执行/)).toBeVisible();
+  expect(screen.getByRole("checkbox", { name: "处置F-02" })).toBeEnabled();
+  expect(screen.getByText("复核并保留原样", { exact: true })).toBeVisible();
+  expect(onReview).not.toHaveBeenCalled();
+  fireEvent.click(
+    screen.getByRole("checkbox", { name: "选择全部待核查疑点（2 项）" }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "执行所选 2 项并继续" }));
+  expect(onReview).toHaveBeenCalledExactlyOnceWith(
+    "approve",
+    "",
+    ["held-1", "held-2"],
+    {},
+  );
 });

@@ -237,7 +237,7 @@ export default function LogicTaskWorkspace(props: LogicTaskProps) {
       ) : needsApproval ? (
         <>
           <p className="logic-description">
-            请核对当前建议和执行范围；未选择及待裁定的对象保持原样。
+            请核对当前建议和执行范围；只有勾选的疑点才会执行所列动作。
           </p>
           {loading && !approvalReady ? (
             <div className="logic-loading">
@@ -260,7 +260,7 @@ export default function LogicTaskWorkspace(props: LogicTaskProps) {
                     loading={loading}
                     onClick={() => void load("retained", true)}
                   >
-                    读取更多待核查对象
+                    读取更多待核查疑点
                   </Button>
                 )}
             </>
@@ -330,7 +330,7 @@ export default function LogicTaskWorkspace(props: LogicTaskProps) {
       ) : done ? (
         <>
           <p className="logic-description">
-            修正成果已另存，待核查对象见下方清单。
+            修正成果已另存，待核查疑点见下方清单。
           </p>
           {metrics.some((m) => m.value != null) && (
             <div className="logic-result-metrics" aria-label="实际结果统计">
@@ -364,7 +364,7 @@ export default function LogicTaskWorkspace(props: LogicTaskProps) {
             <div className="logic-retained-summary">
               <QuestionCircleOutlined />
               <div>
-                <strong>{retainedCount} 条待裁定与例外已保留</strong>
+                <strong>{retainedCount} 条待核查规则命中未修改</strong>
                 <p>查看具体对象和依据，再决定后续核查。</p>
               </div>
               <Button type="link" onClick={() => setDrawer("retained")}>
@@ -627,8 +627,7 @@ export default function LogicTaskWorkspace(props: LogicTaskProps) {
           {
             data: "本次资料与设置",
             records: "完整运行记录",
-            retained:
-              done && retainedCount > 0 ? "待裁定与例外依据" : "本次处理范围",
+            retained: done && retainedCount > 0 ? "待核查疑点" : "本次处理范围",
             thinking: "分析过程",
             calculations: "实际计算记录",
           }[drawer ?? "data"]
@@ -703,9 +702,9 @@ export default function LogicTaskWorkspace(props: LogicTaskProps) {
           <>
             {summary?.retainedIssueCount != null && (
               <p>
-                当前保留 {summary.retainedIssueCount} 条：待裁定{" "}
-                {summary.reviewIssueCount ?? "—"} 条，例外{" "}
-                {summary.exceptionIssueCount ?? "—"} 条。
+                检查清单中有 {summary.retainedIssueCount}{" "}
+                条待核查规则命中：待核查 {summary.reviewIssueCount ?? "—"}{" "}
+                条，例外 {summary.exceptionIssueCount ?? "—"} 条。
               </p>
             )}
             {snapshotReady ? (
@@ -726,7 +725,7 @@ export default function LogicTaskWorkspace(props: LogicTaskProps) {
                         onReviewRetained();
                       }}
                     >
-                      核查并选择处置
+                      选择待核查疑点
                     </Button>
                   )}
                 {detail.modificationReview &&
@@ -736,7 +735,7 @@ export default function LogicTaskWorkspace(props: LogicTaskProps) {
                       loading={loading}
                       onClick={() => void load("retained", true)}
                     >
-                      读取更多保留对象
+                      读取更多待核查疑点
                     </Button>
                   )}
               </>

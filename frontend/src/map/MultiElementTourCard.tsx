@@ -8,6 +8,22 @@ import {
   type TourChange,
 } from "./multiElementTour";
 import { formatArea } from "../utils/area";
+import { record } from "./geologyReviewData";
+
+function archiveHosts(properties: Record<string, unknown>, host: string) {
+  try {
+    const measurements = record(
+      JSON.parse(String(properties.measurements_json ?? "{}")),
+    );
+    if (Array.isArray(measurements.archive_dissolved_host_ids))
+      return measurements.archive_dissolved_host_ids.filter(
+        (value): value is string => typeof value === "string" && !!value.trim(),
+      );
+  } catch {
+    // A historical change output may not have structured measurements.
+  }
+  return host ? [host] : [];
+}
 
 type Feature = GeoJsonFeatureCollection["features"][number];
 export default function MultiElementTourCard({
@@ -48,8 +64,9 @@ export default function MultiElementTourCard({
     recorded(key)
       ? `${Number(p[key]).toLocaleString("zh-CN", { maximumFractionDigits: 1 })} 米`
       : "本次结果未记录";
+  const receivers = partition ? archiveHosts(p, host) : [];
   const operation = partition
-    ? `在获批范围内实际改类 ${metric("class_change_area_m2")}。原为${partition.before.label}；改为${partition.targets.map((unit) => `${unit.label}${unit.pixels ? ` ${unit.pixels.toLocaleString("zh-CN")} 像元` : ""}`).join("、") || "变更表所列分类"}。此处没有并入宿主图斑。`
+    ? `仅在获批范围内实际改类 ${metric("class_change_area_m2")}。原为${partition.before.label}；改为${partition.targets.map((unit) => `${unit.label}${unit.pixels ? ` ${unit.pixels.toLocaleString("zh-CN")} 像元` : ""}`).join("、") || "变更表所列分类"}。${receivers.length ? `改类范围中与同单元共边的部分已融合，承接图斑：${receivers.join("、")}。` : "该条修正记录未记录融合。"}未获批的部分保持原分类。`
     : change.action === "set_code"
       ? `地质代号由 ${labels.before} 更新为 ${labels.after}。${cleanResults && p.host_feature_id ? `已并入相邻同单元宿主 ${p.host_feature_id}，原编号记入修正记录。` : ""}`
       : change.action === "exclude"

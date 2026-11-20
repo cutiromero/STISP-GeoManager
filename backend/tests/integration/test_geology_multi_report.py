@@ -99,7 +99,7 @@ def test_compact_report_groups_unapproved_and_links_complete_evidence(monkeypatc
     assert "用户批准1项，其余25项保持原样" in text
     assert text.count("### 1.") == 1
     assert "未批准细节" not in text
-    assert "A-01 | 保留待核查 | 25 | 保留原数据" in text
+    assert "A-01 | 待核查疑点 | 25 | 保留原数据" in text
     assert "实际结果：已执行" in text
     assert "改代号为 " in text
     assert "暂不参与" not in text and "不参与分析" not in text
@@ -177,3 +177,18 @@ def test_report_header_is_bound_to_original_lithology_not_the_rule_source(monkey
     assert "研究区资料：北岭 v7 岩性资料（资源 72）" in text
     assert "研究区资料：南沟旧示范区" not in text
     assert "仅适用于南沟旧示范区" in text
+
+
+def test_selected_review_is_executed_without_claiming_a_data_change(monkeypatch):
+    workflow, task, rows = report_fixture(monkeypatch)
+    item = workflow.plan["modificationReview"]["suggestions"][0]
+    item.update(action="review", status="review")
+    stage = workflow.plan["stages"][0]
+    stage["approvedEdits"][0]["target_code"] = ""
+    rows[0].update(
+        action="review", target_code="", new_code="Q", actual_changed="False"
+    )
+    text = render_report(workflow, [task]).decode()
+    assert "复核并保留原样" in text
+    assert "实际结果：已复核，未修改" in text
+    assert "实际处置：改代号" not in text

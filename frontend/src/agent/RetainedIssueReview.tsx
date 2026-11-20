@@ -18,7 +18,7 @@ const labels: Record<string, string> = {
   downweight: "降权",
   remove: "剔除",
   keep: "保留",
-  review: "继续核查",
+  review: "复核并保留原样",
 };
 const elements: Record<string, string> = {
   lithology: "岩性",
@@ -74,27 +74,30 @@ export default function RetainedIssueReview({
     ? scope.automaticSuggestionIds.length
     : 0;
   const total = Number(index.total ?? items.length);
+  const selectable = new Set(candidateIds);
+  const hasCandidates = selectable.size > 0;
+  const initialReview = scope.kind === "initial";
   return (
-    <section className="logic-retained-review" aria-label="保留对象核查">
+    <section className="logic-retained-review" aria-label="待核查疑点">
       {!readonly && (
         <p className="logic-description">
           {automatic > 0
-            ? `${automatic} 项已核验处置沿用原授权，无需逐项确认。`
+            ? `${automatic} 项已核验处置沿用原授权，在本页确认后执行，无需逐项勾选。`
             : ""}
-          请查看以下待裁定与例外，勾选需要执行候选处置的对象；未选对象保持原样。
+          请根据地图和依据勾选要处理的疑点。确认后按各项所列动作执行，未选疑点保持原样。
         </p>
       )}
       <Alert
         type="info"
         title={
           total > 0
-            ? `共 ${total} 条保留对象，已读取 ${items.length} 条`
-            : "本次没有待裁定与例外对象"
+            ? `共 ${total} 项待核查疑点，已读取 ${items.length} 项`
+            : "本次没有待核查疑点"
         }
         description={
           readonly
             ? "地图展示已授权的处置位置和待核查范围。标记表示授权或核查范围，实际修改请查看清洗成果。"
-            : "地图展示已读取对象的实际位置，蚀变组以定位范围表示。可缩放、平移并点击查看依据。候选动作仅在您明确选择后执行；没有有效候选的对象只能保留核查。"
+            : "点击疑点查看位置和依据。勾选“复核并保留原样”的疑点会执行实际复核并记录结果，不改变原资料。"
         }
       />
       {workflow.plan.reviewIndex?.automaticMap &&
@@ -102,7 +105,7 @@ export default function RetainedIssueReview({
           <p className="logic-automatic-map-note">
             <i aria-hidden="true" /> 已授权处置{" "}
             {workflow.plan.reviewIndex.automaticMap.total}{" "}
-            项，以浅灰绿圆点显示，邻近位置自动合并；待人工核查项使用醒目标记。
+            项，以浅灰绿圆点显示，邻近位置自动合并；待核查疑点使用醒目标记。
             {workflow.plan.reviewIndex.automaticMap.locatedCount <
             workflow.plan.reviewIndex.automaticMap.total
               ? `其中 ${workflow.plan.reviewIndex.automaticMap.locatedCount} 项具备可定位范围。`
@@ -130,7 +133,7 @@ export default function RetainedIssueReview({
             setSelected(event.target.checked ? candidateIds : [])
           }
         >
-          选择全部有效候选（{candidateIds.length} 项）
+          选择全部待核查疑点（{candidateIds.length} 项）
         </Checkbox>
       )}
       {items.length > 0 && (
@@ -145,14 +148,14 @@ export default function RetainedIssueReview({
           }}
           scroll={{ x: 600 }}
           rowSelection={
-            readonly
+            readonly || !hasCandidates
               ? undefined
               : {
                   selectedRowKeys: selected,
                   preserveSelectedRowKeys: true,
                   onChange: (keys) => setSelected(keys.map(String)),
                   getCheckboxProps: (item) => ({
-                    disabled: busy || !item.candidateAction,
+                    disabled: busy || !selectable.has(item.id),
                     "aria-label": `处置${item.featureId}`,
                   }),
                 }
@@ -185,20 +188,20 @@ export default function RetainedIssueReview({
                 <>
                   <Tag color={item.status === "exception" ? "orange" : "gold"}>
                     {item.ruleId} ·{" "}
-                    {item.status === "exception" ? "规则例外" : "待裁定"}
+                    {item.status === "exception" ? "规则例外" : "待核查"}
                   </Tag>
                   <p>{item.reason}</p>
                 </>
               ),
             },
             {
-              title: "候选处置",
+              title: "执行动作",
               key: "action",
               width: 110,
               render: (_, item) =>
-                item.candidateAction
-                  ? (labels[item.candidateAction] ?? item.candidateAction)
-                  : "保留核查",
+                item.suggestedState === "已复核，未修改"
+                  ? item.suggestedState
+                  : (labels[item.candidateAction ?? ""] ?? "保留核查"),
             },
           ]}
         />
@@ -214,7 +217,7 @@ export default function RetainedIssueReview({
             {active.currentState}
           </p>
           <p>
-            <strong>候选处置：</strong>
+            <strong>执行动作：</strong>
             {labels[active.candidateAction ?? ""] ?? "保留核查"}
             {active.candidateTargetCode
               ? `，目标代号 ${active.candidateTargetCode}`
@@ -224,9 +227,9 @@ export default function RetainedIssueReview({
                   ? "，从修正后成果剔除"
                   : ""}
           </p>
-          {!readonly && active.candidateAction && (
+          {!readonly && selectable.has(active.id) && (
             <Checkbox
-              aria-label="选择当前对象的候选处置"
+              aria-label="选择当前待核查疑点"
               checked={selected.includes(active.id)}
               disabled={busy}
               onChange={(event) =>
@@ -237,13 +240,26 @@ export default function RetainedIssueReview({
                 )
               }
             >
-              选择当前对象的候选处置
+              选择当前待核查疑点
             </Checkbox>
+          )}
+          {Array.isArray(active.observations?.related_rule_hits) && (
+            <ul aria-label="同一疑点命中的规则">
+              {active.observations.related_rule_hits.map((value) => {
+                const hit = record(value);
+                return (
+                  <li key={String(hit.id)}>
+                    {String(hit.rule_id)}：{String(hit.reason)}
+                  </li>
+                );
+              })}
+            </ul>
           )}
           <MultiElementEvidence suggestion={active} />
           {!readonly &&
             active.featureId?.startsWith("AG-") &&
-            active.candidateAction && (
+            active.candidateAction &&
+            active.candidateAction !== "review" && (
               <Select
                 aria-label="当前蚀变对象处置"
                 value={
@@ -284,11 +300,13 @@ export default function RetainedIssueReview({
       {!readonly && onReview && (
         <div className="geology-review-controls">
           <p>
-            已选择 {selected.length}{" "}
-            项人工处置，其余保留。确认后将重新生成处置结果、复查和前后对比，上一轮成果保留。
+            已选择 {selected.length} 项待核查疑点，其余保留。
+            {initialReview
+              ? "确认后开始处置，再生成复查和前后对比。"
+              : "确认后生成新一轮处置、复查和前后对比，上一轮成果保留。"}
           </p>
           <Input.TextArea
-            aria-label="保留对象裁定意见"
+            aria-label="疑点核查意见"
             value={feedback}
             onChange={(event) => setFeedback(event.target.value)}
             disabled={busy}
@@ -319,7 +337,7 @@ export default function RetainedIssueReview({
           >
             {selected.length
               ? `执行所选 ${selected.length} 项并继续`
-              : "保留未选对象并继续"}
+              : "保留未选疑点并继续"}
           </Button>
         </div>
       )}
