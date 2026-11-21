@@ -104,11 +104,11 @@ def test_sources_have_actual_evidence_citations_and_no_catalog_ids(knowledge_age
         assert [item["id"] for item in additions] == [2, 3]
         assert all(item["resourceId"] is None for item in additions)
         run.evidence += additions
-        check_evidence(run, s["user"], {})
+        check_evidence(run, s["user"], default_policy())
         doc.visibility = "owner_only"
         doc.save(update_fields=["visibility"])
         with pytest.raises(PermissionDenied, match="知识资料"):
-            check_evidence(run, s["user"], {})
+            check_evidence(run, s["user"], default_policy())
 
 
 def test_changed_document_or_rule_invalidates_history(knowledge_agent):
@@ -119,13 +119,13 @@ def test_changed_document_or_rule_invalidates_history(knowledge_agent):
         doc.sha256 = "b" * 64
         doc.save(update_fields=["sha256"])
         with pytest.raises(PermissionDenied, match="知识资料"):
-            check_evidence(run, s["user"], {})
+            check_evidence(run, s["user"], default_policy())
         doc.sha256 = "a" * 64
         doc.save(update_fields=["sha256"])
         entry.revision += 1
         entry.save(update_fields=["revision"])
         with pytest.raises(PermissionDenied, match="知识依据"):
-            check_evidence(run, s["user"], {})
+            check_evidence(run, s["user"], default_policy())
 
 
 def test_saved_knowledge_snapshots_survive_revision_but_not_access_changes(
@@ -140,14 +140,14 @@ def test_saved_knowledge_snapshots_survive_revision_but_not_access_changes(
         doc.save(update_fields=["sha256"])
         entry.revision += 1
         entry.save(update_fields=["revision"])
-        check_evidence(run, s["user"], {}, history=True)
+        check_evidence(run, s["user"], default_policy(), history=True)
         assert run.evidence == snapshot
         with pytest.raises(PermissionDenied):
-            check_evidence(run, s["user"], {})
+            check_evidence(run, s["user"], default_policy())
         doc.visibility = "owner_only"
         doc.save(update_fields=["visibility"])
         with pytest.raises(PermissionDenied, match="知识资料"):
-            check_evidence(run, s["user"], {}, history=True)
+            check_evidence(run, s["user"], default_policy(), history=True)
 
 
 def test_document_passages_are_bounded_and_outage_is_explicit(
@@ -243,6 +243,8 @@ def test_knowledge_full_document_policy_and_invalid_parameters(knowledge_agent):
         assert not tool_enabled(TOOLS["read_knowledge_document"], p, run)
         with pytest.raises(PermissionDenied, match="文档正文"):
             execute(run, "read_knowledge_document", {"documentId": doc.id})
+        result, _ = execute(run, "search_knowledge", {"query": "矿物"})
+        assert result["items"] and result["documents"] == []
         run.evidence = [{"tool": "read_knowledge_document", "result": {}}]
         with pytest.raises(PermissionDenied, match="文档读取"):
             check_evidence(run, s["user"], p)
