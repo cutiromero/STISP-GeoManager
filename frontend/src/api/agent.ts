@@ -29,6 +29,7 @@ import type {
   AgentRunInput,
   AgentRunPoll,
   AgentResourceList,
+  AgentResourceSource,
   AgentWorkflowCatalogPage,
   AgentLogicConfigurationResult,
   AgentAdmin,
@@ -194,12 +195,15 @@ export const agentApi = {
     ),
   workflowCatalogResources: (
     q = "",
-    options: { signal?: AbortSignal } = {},
+    {
+      source,
+      ...options
+    }: { signal?: AbortSignal; source?: AgentResourceSource } = {},
     page = 1,
     directoryId?: number,
   ) =>
     requestJson<AgentWorkflowCatalogPage>(
-      `/api/agent/workflow-uploads/references/?q=${encodeURIComponent(q)}&page=${page}&pageSize=20${directoryId === undefined ? "" : `&directoryId=${directoryId}`}`,
+      `/api/agent/workflow-uploads/references/?q=${encodeURIComponent(q)}&page=${page}&pageSize=20${directoryId === undefined ? "" : `&directoryId=${directoryId}`}${source ? `&source=${source}` : ""}`,
       options,
     ),
   restoreLogicConfiguration: (batchId: string, signal?: AbortSignal) =>
@@ -262,9 +266,15 @@ export const agentApi = {
       body,
       validate: assertAgentRun,
     }),
-  resources: (q = "", options: { signal?: AbortSignal } = {}) =>
+  resources: (
+    q = "",
+    {
+      source,
+      ...options
+    }: { signal?: AbortSignal; source?: AgentResourceSource } = {},
+  ) =>
     requestJson<AgentResourceList>(
-      `/api/agent/resources/?q=${encodeURIComponent(q)}`,
+      `/api/agent/resources/?q=${encodeURIComponent(q)}${source ? `&source=${source}` : ""}`,
       { ...options, validate: assertAgentResources },
     ),
   admin: () => requestJson<AgentAdmin>("/api/agent/admin/"),

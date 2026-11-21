@@ -61,6 +61,42 @@ def test_catalog_requires_project_login_and_management_is_separate(setup_agent):
     assert create(client, env).status_code == 409
 
 
+def test_authoring_requires_research_purpose_and_each_node_objective(setup_agent):
+    env = setup_agent
+    client = manager_client(env)
+    definition = deepcopy(builtin_flows()[1]["definition"])
+    skill = definition.pop("skill")
+    missing = create(client, env, definition=definition)
+    assert missing.status_code == 400
+    assert "科研问题" in missing.json()["detail"]
+    definition["skill"] = skill
+    node = definition["nodes"][0]
+    objective = node["description"]
+    node["description"] = ""
+    missing = create(client, env, definition=definition)
+    assert missing.status_code == 400
+    assert node["title"] in missing.json()["detail"]
+    node["description"] = objective
+    created = create(client, env, definition=definition)
+    assert created.status_code == 201, created.content
+    detail = created.json()
+    definition["outputRequirements"] = []
+    result = client.post(
+        f"/api/business-flows/{detail['flow']['id']}/versions/",
+        json.dumps(
+            {"definition": definition, "updatedAt": detail["flow"]["updatedAt"]}
+        ),
+        content_type="application/json",
+        **env["header"],
+    )
+    assert result.status_code == 400
+    assert "交付成果" in result.json()["detail"]
+    assert (
+        BusinessFlowVersion._base_manager.filter(flow_id=detail["flow"]["id"]).count()
+        == 1
+    )
+
+
 def test_flow_versions_publish_new_snapshots_and_require_current_revision(setup_agent):
     env = setup_agent
     client = manager_client(env)

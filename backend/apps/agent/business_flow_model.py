@@ -195,12 +195,23 @@ def request_node_result(
     required_evidence_ids=None,
     protocol_repair=False,
     structured=True,
+    _discovery=None,
+    _deadline=None,
 ):
     """Run a fresh request; persistence and all actual operations stay in the runtime."""
     if role not in {"executor", "reviewer"}:
         raise ComputeError("业务流模型角色无效")
+    from apps.business_flows.knowledge import authorized_entries, evidence_rows
+    from .workflow_discovery import GUIDANCE, WorkflowDiscovery
+
+    base_instruction, base_tools = instruction, tools
+    discovery = _discovery
+    if discovery is None and isinstance(workflow, AgentWorkflow):
+        discovery = WorkflowDiscovery(workflow, allowed=not protocol_repair)
+
+    knowledge = evidence_rows(workflow)
     node_id = _text(node.get("id"), "node.id", 80)
-    items, available = _evidence(evidence)
+    items, available = _evidence([*evidence, *knowledge] if knowledge else evidence)
     alias = model_alias or workflow.model
     if not isinstance(alias, str) or alias not in registry():
         raise PermissionDenied("业务流节点模型模型已不可用")
@@ -232,6 +243,15 @@ def request_node_result(
         "humanApprovalRequired": human_required,
         "evidence": items,
     }
+    search = discovery.packet() if discovery else {}
+    if search.get("tools") or search.get("observations"):
+        packet["discovery"] = search
+        instruction += GUIDANCE
+        if tools:
+            tools = deepcopy(tools)
+            tools[0]["function"]["parameters"]["properties"]["action"]["enum"].extend(
+                search["tools"]
+            )
     if required_evidence_ids is not None:
         packet["requiredEvidenceIds"] = required_evidence_ids
     if feedback is not None:
@@ -257,6 +277,8 @@ def request_node_result(
     if execution:
         packet["executionSession"] = execution
         instruction += guidance(workflow, guidance_node, role)
+    if knowledge:
+        instruction += "\n知识证据用于有依据的解释。说明引用条目或原文的适用范围，在结论中使用相应证据编号；执行按本任务冻结的科研判据。"
     try:
         payload = _json(packet)
     except (ValueError, TypeError) as error:
@@ -327,13 +349,18 @@ def request_node_result(
 
     def authorize():
         guard()
+        if discovery:
+            discovery.authorize()
+        if knowledge:
+            authorized_entries(workflow)
         _live_policy(workflow, alias, effective, source_bindings)
         if registry().get(alias) != model:
             raise PermissionDenied("业务流模型配置已变化")
 
+    deadline = _deadline or started + effective["maxRunSeconds"]
     checked = ModelStreamGuard(
         authorize,
-        started + effective["maxRunSeconds"],
+        min(deadline, started + effective["maxRunSeconds"]),
         timeout_message="报告审核请求达到单次时限，已保留已完成成果"
         if not structured and role == "reviewer"
         else "场景分析已停止或达到本步时限",
@@ -434,6 +461,7 @@ def request_node_result(
             on_thinking(text)
 
     raw = ""
+    lookup = None
     try:
         checked.poll()
         window = provider.model_window(model)
@@ -782,38 +810,45 @@ def request_node_result(
             if structured
             else "text",
         )
-        try:
-            result = validate(normalized, available)
-        except ComputeError as error:
-            if (
-                managed
-                and bound
-                and role == "executor"
-                and not tools
-                and not (context or {}).get("executionScope")
-                and "contract" not in (context or {})
-            ):
-                from apps.business_flows.model_recovery import model_wait
+        action = discovery.parse(normalized, search.get("tools")) if discovery else None
+        if action:
+            lookup = discovery.lookup(action, checked.poll)
+            publish("completed", discovery=lookup)
+        else:
+            try:
+                result = validate(normalized, available)
+            except ComputeError as error:
+                if (
+                    managed
+                    and bound
+                    and role == "executor"
+                    and not tools
+                    and not (context or {}).get("executionScope")
+                    and "contract" not in (context or {})
+                ):
+                    from apps.business_flows.model_recovery import model_wait
 
-                raise model_wait(node_id, error) from error
-            raise
-        if managed and packet.get("contextNotice") and "limitations" in result:
-            result["limitations"] = [
-                *result["limitations"],
-                "本节点仅使用实际发送的资料；输入整理和用户跳过范围见contextNotice（"
-                + "、".join(sorted({row["action"] for row in packet["contextNotice"]}))
-                + "），未读取被省略内容。",
-            ]
-        checked.poll()
-        publish(
-            ("accepted" if result["decision"] == "accept" else "changes_requested")
-            if role == "reviewer"
-            else "completed"
-        )
-        return {
-            **result,
-            "audit": deepcopy(record),
-        }
+                    raise model_wait(node_id, error) from error
+                raise
+            if managed and packet.get("contextNotice") and "limitations" in result:
+                result["limitations"] = [
+                    *result["limitations"],
+                    "本节点仅使用实际发送的资料；输入整理和用户跳过范围见contextNotice（"
+                    + "、".join(
+                        sorted({row["action"] for row in packet["contextNotice"]})
+                    )
+                    + "），未读取被省略内容。",
+                ]
+            checked.poll()
+            publish(
+                ("accepted" if result["decision"] == "accept" else "changes_requested")
+                if role == "reviewer"
+                else "completed"
+            )
+            return {
+                **result,
+                "audit": deepcopy(record),
+            }
     except ContextReviewRequired as error:
         if snapshot and managed and "inputBudgetTokens" in error.details:
             sent_tokens = snapshot.get("contextManagement", {}).get("afterTokens", 0)
@@ -878,3 +913,28 @@ def request_node_result(
                 scope=(context or {}).get("executionScope", "node"),
             ) from error
         raise
+    return request_node_result(
+        workflow,
+        node,
+        attempt,
+        evidence,
+        role=role,
+        instruction=base_instruction,
+        validate=validate,
+        caps=caps,
+        guard=guard,
+        model_alias=model_alias,
+        policy=policy,
+        feedback=feedback,
+        context=context,
+        human_required=human_required,
+        on_progress=on_progress,
+        on_thinking=on_thinking,
+        on_record=on_record,
+        tools=base_tools,
+        required_evidence_ids=required_evidence_ids,
+        protocol_repair=protocol_repair,
+        structured=structured,
+        _discovery=discovery,
+        _deadline=deadline,
+    )

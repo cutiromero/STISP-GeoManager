@@ -912,13 +912,23 @@ def compute_intent(request, run_id):
     return JsonResponse(run_json(run, request.user))
 
 
+def _resource_source(request):
+    value = request.GET.get("source")
+    if value is not None and value not in {"registered", "computed"}:
+        raise ApiProblem("资料来源筛选无效")
+    return value
+
+
 @endpoint(["GET"])
 def resource_list(request):
     from .resource_search import search_brief, search_resources
 
     p = require_access(request.user, "agent")
     query = request.GET.get("q", "")[:200]
-    found = search_resources(resources(request.user, p), query)[:50]
+    available = resources(request.user, p, source=_resource_source(request)).only(
+        "id", "name", "description", "data_type", "is_compute_result"
+    )
+    found = search_resources(available, query)[:50]
     return JsonResponse(
         {"items": [search_brief(resource, query) for resource in found]}
     )
@@ -1190,7 +1200,9 @@ def workflow_catalog_references(request):
     project = request.headers.get("X-Project-Id")
     if request.method == "GET":
         query = request.GET.get("q", "")[:200]
-        available = catalog_resources(request.user, project)
+        available = catalog_resources(
+            request.user, project, source=_resource_source(request)
+        )
         try:
             page = int(request.GET.get("page", "1"))
             size = int(request.GET.get("pageSize", "20"))
@@ -1209,7 +1221,19 @@ def workflow_catalog_references(request):
             .values_list("inventory_group_id", "inventory_group__name")
             .distinct()
         )
-        found = search_resources(available.select_related("inventory_group"), query)
+        found = search_resources(
+            available.select_related("inventory_group").only(
+                "id",
+                "name",
+                "description",
+                "data_type",
+                "is_compute_result",
+                "inventory_group__name",
+                "created_at",
+                "updated_at",
+            ),
+            query,
+        )
         if directory is not None:
             found = found.filter(inventory_group_id=directory or None)
         total = found.count()

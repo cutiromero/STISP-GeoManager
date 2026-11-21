@@ -61,7 +61,9 @@ class Command(BaseCommand):
                 with project_scope(
                     ProjectScope((flow.project_tag_id,), flow.project_tag_id, user.pk)
                 ):
-                    spec = normalize_definition(definition(flow.code, ident))
+                    spec = normalize_definition(
+                        definition(flow.code, ident), authored=True
+                    )
                     validate_bindings(spec, flow.project_tag_id)
                     if current.definition == spec:
                         self.stdout.write(
@@ -76,6 +78,7 @@ class Command(BaseCommand):
                             spec,
                             expected=flow.updated_at.isoformat(),
                             metadata={"description": GOALS[flow.code]},
+                            authored=True,
                         )
                     self.stdout.write(
                         f"{flow.pk} {flow.code} 算子={ident} "

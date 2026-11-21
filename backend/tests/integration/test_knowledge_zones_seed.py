@@ -104,11 +104,8 @@ def test_existing_public_seeds_move_without_losing_edits_and_follow_project_acl(
         assert revision.snapshot == {**snapshot, "projectTagId": project.pk}
         headers = {"HTTP_X_PROJECT_ID": str(project.pk)}
         result = client.get("/api/knowledge/entries/", **headers).json()
-        assert {item["id"] for item in result["items"]} == {
-            entry.pk,
-            original["remote_sensing"][0].pk,
-        }
-        for other in projects.keys() - {domain, "remote_sensing"}:
+        assert {item["id"] for item in result["items"]} == {entry.pk}
+        for other in projects.keys() - {domain}:
             other_id = original[other][0].pk
             assert (
                 client.get(f"/api/knowledge/entries/{other_id}/", **headers).status_code

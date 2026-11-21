@@ -133,6 +133,11 @@ def model_targets(workflow, policy, roles, *, on_thinking=None, on_progress=None
     deadline = time.monotonic() + policy["maxRunSeconds"]
     rule_context = MappingRuleContext(workflow, roles)
 
+    from .workflow_discovery import GUIDANCE, WorkflowDiscovery
+    from .business_flow_model import _structured_text
+
+    discovery = WorkflowDiscovery(workflow)
+
     def authorize():
         current = AgentWorkflow.objects.filter(pk=workflow.pk).first()
         if current is None:
@@ -170,6 +175,7 @@ def model_targets(workflow, policy, roles, *, on_thinking=None, on_progress=None
         ):
             raise PermissionDenied("模型思考设置或预算已变化，请重新发起字段判断")
         rule_context.authorize(current, user, fresh_policy)
+        discovery.authorize()
 
     guard = ModelStreamGuard(authorize, deadline)
     activity = WorkflowModelActivity(
@@ -199,8 +205,16 @@ def model_targets(workflow, policy, roles, *, on_thinking=None, on_progress=None
 
             payload.update(executionSession=execution, taskGoal=workflow.goal)
             payload["task"] = specialized_context(workflow, "inputs")
+        search = discovery.packet()
+        if search.get("tools"):
+            payload["discovery"] = search
         messages = [
-            {"role": "system", "content": INSTRUCTION + guidance(workflow, "inputs")},
+            {
+                "role": "system",
+                "content": INSTRUCTION
+                + guidance(workflow, "inputs")
+                + (GUIDANCE if search.get("tools") else ""),
+            },
             {
                 "role": "user",
                 "content": json.dumps(payload, ensure_ascii=False),
@@ -211,7 +225,8 @@ def model_targets(workflow, policy, roles, *, on_thinking=None, on_progress=None
         except provider.ModelError as exc:
             guard.poll()
             raise ComputeError(str(exc)) from exc
-        for attempt in range(1, 3):
+        attempt = 1
+        while attempt <= 2:
             try:
                 guard.poll()
                 messages, management = prepare_auxiliary_request(
@@ -250,10 +265,22 @@ def model_targets(workflow, policy, roles, *, on_thinking=None, on_progress=None
                 guard.poll()
                 raise ComputeError(str(exc)) from exc
             progress("validating", outputChars=output_chars)
+            action = discovery.parse(_structured_text(raw), search.get("tools"))
+            if action:
+                from uuid import uuid4
+                from apps.business_flows.model_requests import admit
+
+                admit(workflow, uuid4().hex, node_scoped=False)
+                discovery.lookup(action, guard.poll)
+                search = discovery.packet()
+                payload["discovery"] = search
+                messages[1]["content"] = json.dumps(payload, ensure_ascii=False)
+                continue
             try:
                 result = _validate(raw, roles)
             except ComputeError as exc:
                 error = exc
+                attempt += 1
                 progress("failed")
                 messages += [
                     {"role": "assistant", "content": raw},

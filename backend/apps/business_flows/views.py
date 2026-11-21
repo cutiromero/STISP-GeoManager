@@ -85,7 +85,7 @@ def detail_value(flow, user):
 def flows(request):
     if request.method == "POST":
         value = body(request, {"code", "name", "description", "isActive", "definition"})
-        flow, _ = catalog.register_flow(request.user, value)
+        flow, _ = catalog.register_flow(request.user, value, authored=True)
         return JsonResponse(detail_value(flow, request.user), status=201)
     try:
         offset = int(request.GET.get("offset", "0"))
@@ -146,6 +146,7 @@ def versions(request, flow_id):
         value.get("definition"),
         expected=value["updatedAt"],
         metadata=value,
+        authored=True,
     )
     return JsonResponse(detail_value(flow, request.user), status=201)
 

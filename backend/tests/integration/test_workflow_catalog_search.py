@@ -9,7 +9,7 @@ from django.test.utils import CaptureQueriesContext
 from apps.agent import resource_discovery
 from apps.agent.models import AgentPolicy
 from apps.agent.resource_search import description_excerpt
-from apps.catalog.models import DataResource
+from apps.catalog.models import DataResource, DataResourceGroup
 from tests.integration.test_agent_resource_discovery import imported, workflow
 
 
@@ -88,6 +88,78 @@ def test_empty_or_out_of_range_page_does_not_read_page_rows(search_env):
             '"catalog_dataresource"' in row["sql"] and "LIMIT 20" in row["sql"]
             for row in captured
         )
+
+
+@pytest.mark.efficiency
+def test_source_filters_share_provenance_and_live_access(search_env, monkeypatch):
+    env = search_env
+    registered_group = DataResourceGroup.objects.create(name="已登记资料")
+    computed_group = DataResourceGroup.objects.create(name="入库成果")
+    registered = entry(env, "同名登记数据", inventory_group=registered_group)
+    old_import, _, _, _ = imported(env, name="同名旧版入库成果")
+    DataResource.objects.filter(pk=old_import.pk).update(
+        is_compute_result=False, source="", inventory_group=computed_group
+    )
+    final, task, output, _ = imported(env, name="同名终端成果", key="intersections")
+    workflow(env, final, task, output, stage="relations")
+    intermediate, task, output, _ = imported(env, name="同名过程产物", key="checks")
+    workflow(env, intermediate, task, output, stage="check")
+    imported(env, name="同名试运行", trial=True)
+    entry(env, "同名伪造报告", source="workflow-report:invalid")
+    entry(env, "同名私有数据", owner_only=True, maintainer=env["other"])
+
+    def search_for_source(url, source):
+        response = env["client"].get(
+            url, {"q": "同名", "source": source}, **env["header"]
+        )
+        assert response.status_code == 200, response.content
+        return response.json()
+
+    urls = ("/api/agent/resources/", "/api/agent/workflow-uploads/references/")
+    with monkeypatch.context() as patch:
+        for name in ("_final_resource_ids", "_report_resource_ids"):
+            patch.setattr(
+                resource_discovery,
+                name,
+                lambda *_: pytest.fail("登记数据搜索不应进入成果溯源"),
+            )
+        for url in urls:
+            rows = search_for_source(url, "registered")["items"]
+            assert [(row["id"], row["origin"]) for row in rows] == [
+                (registered.pk, "uploaded_data")
+            ]
+        page = search(env, "同名", source="registered", directoryId=registered_group.pk)
+        assert page["total"] == 1
+        assert computed_group.pk not in {group["id"] for group in page["directories"]}
+        assert (
+            search(env, "同名", source="registered", directoryId=computed_group.pk)[
+                "total"
+            ]
+            == 0
+        )
+
+    for url in urls:
+        rows = search_for_source(url, "computed")["items"]
+        assert {row["id"] for row in rows} == {old_import.pk, final.pk}
+        assert all(row["origin"] == "compute_results" for row in rows)
+        assert (
+            env["client"].get(url, {"source": "unknown"}, **env["header"]).status_code
+            == 400
+        )
+    page = search(env, "同名", source="computed", directoryId=computed_group.pk)
+    assert page["total"] == 1
+    assert page["items"][0]["directoryName"] == computed_group.name
+    assert registered_group.pk not in {group["id"] for group in page["directories"]}
+
+    old_import.owner_only, old_import.maintainer = True, env["other"]
+    old_import.save(update_fields=["owner_only", "maintainer"])
+    registered.status = "inactive"
+    registered.save(update_fields=["status"])
+    for url in urls:
+        assert not search_for_source(url, "registered")["items"]
+        assert [row["id"] for row in search_for_source(url, "computed")["items"]] == [
+            final.pk
+        ]
 
 
 @pytest.mark.efficiency
@@ -268,7 +340,12 @@ def test_catalog_search_measurements(search_env, monkeypatch):
                 )
 
         monkeypatch.setattr(resource_discovery, name, measured)
-    for query in ("", "成果资料 77", "233"):
+    for key, query, parameters in (
+        ("", "", {}),
+        ("成果资料 77", "成果资料 77", {}),
+        ("233", "233", {}),
+        ("registered", "", {"source": "registered"}),
+    ):
         records = []
         for _ in range(BENCHMARK_REPEATS):
             current = {}
@@ -297,7 +374,7 @@ def test_catalog_search_measurements(search_env, monkeypatch):
                 CaptureQueriesContext(connection) as captured,
                 connection.execute_wrapper(measure_sql),
             ):
-                result = search(env, query)
+                result = search(env, query, **parameters)
             elapsed = (perf_counter() - started) * 1000
             record = {
                 **current,
@@ -313,9 +390,12 @@ def test_catalog_search_measurements(search_env, monkeypatch):
             assert record["resource_queries"] <= 6
             assert record["discovery_calls"] == 1
             records.append(record)
-        stages[query] = {
+        stages[key] = {
             key: round(median(record[key] for record in records), 3)
             for key in records[0]
         }
     print("\nCATALOG_SEARCH_MEASUREMENTS=" + json.dumps(stages, ensure_ascii=False))
     assert stages[""]["total"] == ORIGINAL_COUNT + FINAL_COUNT + 1
+    assert stages["registered"]["total"] == ORIGINAL_COUNT + 1
+    assert "_final_resource_ids" not in stages["registered"]
+    assert "_report_resource_ids" not in stages["registered"]

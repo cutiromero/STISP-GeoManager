@@ -100,7 +100,7 @@ def workflow_task_ids():
     ).values("compute_task_id")
 
 
-def discover_resources(user, policy, selected=()):
+def discover_resources(user, policy, selected=(), *, source=None):
     """One current-project set for search, counts, selectors and direct reads."""
     scope = _INTERNAL_SCOPE.get()
     key = (
@@ -109,17 +109,18 @@ def discover_resources(user, policy, selected=()):
         user.pk,
         tuple(policy["dataTypes"]),
         tuple(selected),
+        source,
     )
     if scope is not None and key in scope:
         # Clone the plan, never reuse evaluated rows or a previous poll's ACL.
         return scope[key].all()
-    query = _discover_resources(user, policy, selected)
+    query = _discover_resources(user, policy, selected, source=source)
     if scope is not None:
         scope[key] = query
     return query
 
 
-def _discover_resources(user, policy, selected):
+def _discover_resources(user, policy, selected, *, source):
     from apps.raster.models import RasterDataset
 
     ready_rasters = RasterDataset.objects.filter(
@@ -142,6 +143,13 @@ def _discover_resources(user, policy, selected):
         .exclude(pk__in=_internal_resource_ids())
     )
     imports = ComputeImport.objects.filter(resource_id__isnull=False)
+    # The stored flag alone does not identify historical imports and reports.
+    originals = Q(is_compute_result=False) & ~Q(pk__in=imports.values("resource_id"))
+    originals &= ~Q(source__startswith="compute-output:")
+    originals &= ~Q(source__startswith="workflow-report:")
+    if source == "registered":
+        return query.filter(originals).annotate(_agent_compute_result=Value(False))
+
     ordinary = (
         imports.filter(
             status="ready",
@@ -155,11 +163,9 @@ def _discover_resources(user, policy, selected):
     finals = _final_resource_ids(
         query, imports.filter(resource__in=query)
     ) | _report_resource_ids(query, user)
-    # Bare legacy flags and unverified system markers are not provenance.
-    originals = Q(is_compute_result=False) & ~Q(pk__in=imports.values("resource_id"))
-    originals &= ~Q(source__startswith="compute-output:")
-    originals &= ~Q(source__startswith="workflow-report:")
     computed = Q(pk__in=ordinary.values("resource_id")) | Q(pk__in=finals)
+    if source == "computed":
+        return query.filter(computed).annotate(_agent_compute_result=Value(True))
     return query.filter(originals | computed).annotate(
         _agent_compute_result=Case(
             When(computed, then=Value(True)),

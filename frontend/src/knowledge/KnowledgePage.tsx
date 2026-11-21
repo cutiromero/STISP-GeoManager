@@ -195,11 +195,9 @@ function KnowledgeWorkspace({
           },
         ]
       : []),
-    {
-      id: "public",
-      label: "公开知识库",
-      entries: visible.filter((entry) => entry.projectTagId === 1),
-    },
+    ...(currentProject === 1
+      ? [{ id: "public", label: "公开知识库", entries: visible }]
+      : []),
   ];
   const sourceCount = new Set(
     items.flatMap((entry) =>
@@ -242,7 +240,7 @@ function KnowledgeWorkspace({
               {currentProject !== 1 && (
                 <Tag color="blue">项目知识库：{projectName ?? "当前项目"}</Tag>
               )}
-              <Tag>公开知识库</Tag>
+              {currentProject === 1 && <Tag>公开知识库</Tag>}
               <Button
                 type="link"
                 onClick={() => handoff()}

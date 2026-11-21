@@ -7,7 +7,7 @@ from django.core.validators import URLValidator
 from django.db.models import Q
 
 from apps.projects.context import is_superadmin, selected_project_id
-from apps.projects.access import can_access_project, public_project_allowed
+from apps.projects.access import can_access_project
 from .models import KnowledgeEntry
 from .domains import domain_options, search_terms, validate_domain, validate_domains
 
@@ -41,13 +41,9 @@ def require_project(user):
 
 def visible_entries(user, manage=False, domains=None):
     pid = require_project(user)
-    own = Q(project_tag_id=pid)
+    qs = KnowledgeEntry._base_manager.filter(project_tag_id=pid)
     if not (manage and can_edit(user)):
-        own &= Q(status="published")
-    # Public material is an explicit reusable source, not an all-project query.
-    if public_project_allowed(user):
-        own |= Q(project_tag_id=1, status="published")
-    qs = KnowledgeEntry._base_manager.filter(own)
+        qs = qs.filter(status="published")
     return (
         qs.filter(domain__in=validate_domains(domains)) if domains is not None else qs
     )

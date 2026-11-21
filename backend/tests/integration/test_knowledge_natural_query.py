@@ -55,7 +55,7 @@ def test_actual_long_query_promotes_concepts_over_low_id_coordinate_matches(user
         assert limited["total"] == result["total"]
 
 
-def test_concept_matching_retains_projects_domains_public_reuse_and_drafts(users):
+def test_concept_matching_retains_project_domain_and_draft_boundaries(users):
     _, _, reader, project = users
     other = Project.objects.create(name="其他项目", code="natural-query-other")
     public = Project.objects.get(pk=1)
@@ -65,6 +65,7 @@ def test_concept_matching_retains_projects_domains_public_reuse_and_drafts(users
         own = relevant(project)
         hidden = [
             inaccessible,
+            shared,
             entry(project, "未发布完整覆盖", "内部漏填", ["完整覆盖"], status="draft"),
             entry(
                 project, "生态完整覆盖", "内部漏填", ["完整覆盖"], domain="arid_ecology"
@@ -72,7 +73,7 @@ def test_concept_matching_retains_projects_domains_public_reuse_and_drafts(users
         ]
         result = search_entries(reader, QUERY, domains=["geology"])
         ids = {row["id"] for row in result["items"]}
-        assert ids == {shared.id, *(item.id for item in own)}
+        assert ids == {item.id for item in own}
         assert not ids.intersection(item.id for item in hidden)
         ProjectMembership.objects.filter(project=project, user=reader).delete()
         from django.core.exceptions import PermissionDenied

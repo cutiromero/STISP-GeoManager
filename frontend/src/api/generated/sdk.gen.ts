@@ -2781,7 +2781,7 @@ export const confirmAgentWorkflow = <ThrowOnError extends boolean = false>(optio
 /**
  * 搜索可供逻辑推理引用的系统数据
  *
- * 当前单项目与资源ACL内active且准备ready的业务矢量、栅格、表格和明确入库成果，与普通智能体发现共用边界。排除trial、临时任务资料、工作副本、冻结规则、修改表、过程结果及评价真值，不按演示或测试名称过滤。按更新时间、登记时间、ID倒序分页；目录选项来自可发现基础集合，总数反映关键词与目录筛选后的匹配数。基础集合为空时items/directories为空及total为0，筛选无匹配时items为空及total为0，不回退通用目录。需要智能体、工作流、算子和数据登记权限。
+ * 在当前项目与资源ACL内搜索已启用且就绪的矢量、栅格、表格及可复用成果，与普通智能体共用数据发现边界。目录选项来自所选来源的可发现集合，总数反映来源、关键词和目录筛选后的匹配数。需要智能体、工作流、算子和数据登记权限。
  */
 export const listAgentWorkflowCatalogResources = <ThrowOnError extends boolean = false>(options: Options<ListAgentWorkflowCatalogResourcesData, ThrowOnError>): RequestResult<ListAgentWorkflowCatalogResourcesResponses, ListAgentWorkflowCatalogResourcesErrors, ThrowOnError> => (options.client ?? client).get<ListAgentWorkflowCatalogResourcesResponses, ListAgentWorkflowCatalogResourcesErrors, ThrowOnError>({
     security: [{
@@ -3497,7 +3497,7 @@ export const listBusinessFlows = <ThrowOnError extends boolean = false>(options:
 /**
  * 登记业务流并发布第一版
  *
- * 具有业务流新建编辑权限的用户可在当前项目登记业务流并发布第一版。当前项目、真实用户、策略和数据访问权由服务端检查；定义发布不授予执行或数据修改权限。
+ * 具有业务流新建编辑权限的用户可在当前项目登记业务流并发布第一版。当前项目、真实用户、策略和数据访问权由服务端检查；定义发布不授予执行或数据修改权限。 主智能体通用流程须填写科研目的、节点目的、判断与交付要求及最终交付项。缺项返回400。
  */
 export const registerBusinessFlow = <ThrowOnError extends boolean = false>(options: Options<RegisterBusinessFlowData, ThrowOnError>): RequestResult<RegisterBusinessFlowResponses, RegisterBusinessFlowErrors, ThrowOnError> => (options.client ?? client).post<RegisterBusinessFlowResponses, RegisterBusinessFlowErrors, ThrowOnError>({
     security: [{
@@ -3550,7 +3550,7 @@ export const updateBusinessFlow = <ThrowOnError extends boolean = false>(options
 /**
  * 发布业务流新版本
  *
- * 具有业务流新建编辑权限的用户可为当前项目业务流发布不可变新版本。当前项目、真实用户、策略和数据访问权由服务端检查；定义发布不授予执行或数据修改权限。
+ * 具有业务流新建编辑权限的用户可为当前项目业务流发布不可变新版本。当前项目、真实用户、策略和数据访问权由服务端检查；定义发布不授予执行或数据修改权限。 主智能体通用流程须填写科研目的、节点目的、判断与交付要求及最终交付项。缺项返回400。
  */
 export const publishBusinessFlowVersion = <ThrowOnError extends boolean = false>(options: Options<PublishBusinessFlowVersionData, ThrowOnError>): RequestResult<PublishBusinessFlowVersionResponses, PublishBusinessFlowVersionErrors, ThrowOnError> => (options.client ?? client).post<PublishBusinessFlowVersionResponses, PublishBusinessFlowVersionErrors, ThrowOnError>({
     security: [{

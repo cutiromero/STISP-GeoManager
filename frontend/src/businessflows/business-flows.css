@@ -556,6 +556,45 @@
   grid-template-columns: minmax(0, 1fr) 230px;
   gap: 14px;
 }
+.business-flow-authoring-panel {
+  margin-top: 18px;
+}
+.business-flow-authoring-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(350px, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+.business-flow-authoring-graph {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid #e1e9eb;
+  border-radius: 12px;
+  background: #f4f8f7;
+}
+.business-flow-authoring-graph > .ant-select {
+  width: min(100%, 260px);
+  margin-top: 10px;
+}
+.business-flow-authoring .business-flow-editor-node-head {
+  color: #29464f;
+  font-size: 15px;
+  font-weight: 650;
+}
+.business-flow-authoring .business-flow-editor-field {
+  color: #49636c;
+}
+.business-flow-authoring .business-flow-editor-advanced {
+  margin-top: 0;
+}
+.business-flow-authoring .business-flow-editor-advanced summary {
+  color: #49636c;
+}
+@media (max-width: 900px) {
+  .business-flow-authoring-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
 @media (max-width: 600px) {
   .business-flow-editor-meta {
     grid-template-columns: minmax(0, 1fr);

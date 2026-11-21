@@ -70,3 +70,46 @@ def catalog(user, project_id):
         ],
         "limitations": "能力目录不授予资料、算法或对象访问权；每次执行仍核对当前账号、项目、任务绑定、策略、预算和必要人工决定。联网能力须在具体会话另行开启。",
     }
+
+
+def search(user, policy, run, args, *, allowed=None):
+    """Return concise, pageable descriptions for the current execution scope."""
+    from django.core.exceptions import ValidationError
+
+    query, offset, limit = (
+        args.get("query", ""),
+        args.get("offset", 0),
+        args.get("limit", 8),
+    )
+    if (
+        not isinstance(query, str)
+        or len(query) > 120
+        or type(offset) is not int
+        or offset < 0
+        or type(limit) is not int
+        or not 1 <= limit <= 12
+    ):
+        raise ValidationError("工具检索词最多120字，分页上限为12项")
+    query = query.strip().casefold()
+    exact = query if query in contracts() else None
+    terms = query.split()
+    rows = [
+        {
+            "name": name,
+            "purpose": contract["description"][:170],
+            "arguments": list(contract["inputSchema"].get("properties", {})),
+            "effect": contract["effect"],
+        }
+        for name, contract in contracts().items()
+        if (allowed is None or name in allowed)
+        and enabled(name, user, policy, run=run)
+        and (exact is None or name == exact)
+        and all(
+            term in (name + " " + contract["description"]).casefold() for term in terms
+        )
+    ]
+    return {
+        "items": rows[offset : offset + limit],
+        "total": len(rows),
+        "nextOffset": offset + limit if offset + limit < len(rows) else None,
+    }

@@ -80,6 +80,12 @@ TOOLS = {
             ),
         ),
         ToolSpec(
+            "search_tools",
+            "read_data",
+            "按名称或用途查找本轮可用的平台工具，query可为空，limit最多12项，按nextOffset继续。",
+            ("query", "offset", "limit"),
+        ),
+        ToolSpec(
             "search_resources",
             "read_data",
             "分页查找当前项目数据，query可为空；category为all/compute_results/uploaded_data；offset从0开始，limit默认50，按nextOffset继续；total是真实总数",
@@ -452,25 +458,14 @@ def _check_evidence(run, user, p, *, history=False):
         if (knowledge_refs or document_refs) and run.knowledge_selection
         else None
     )
-    if knowledge_refs:
-        from apps.knowledge.services import visible_entries
+    if document_refs and not p["allowDocuments"]:
+        raise PermissionDenied("文档读取权限已关闭")
+    if knowledge_refs or document_refs:
+        from .knowledge_tools import check_knowledge_evidence
 
-        visible = set(
-            visible_entries(user, domains=domains)
-            .filter(pk__in=[identity for identity, _ in knowledge_refs])
-            .values_list("id", "revision")
+        check_knowledge_evidence(
+            user, knowledge_refs, document_refs, domains=domains, history=history
         )
-        if not (
-            {identity for identity, _ in knowledge_refs}
-            <= {identity for identity, _ in visible}
-            if history
-            else knowledge_refs <= visible
-        ):
-            raise PermissionDenied("知识依据已更新或访问权限已变化，请重新检索")
-    if document_refs:
-        from .knowledge_tools import check_document_evidence
-
-        check_document_evidence(user, document_refs, domains=domains, history=history)
 
 
 def _q(name):
@@ -1170,7 +1165,7 @@ def _operator_submit(run, user, p, args):
     return result, [(resource, result) for resource, _ in pairs] or [(None, result)]
 
 
-def execute(run, name, args):
+def execute(run, name, args, *, workflow_catalog=False):
     from .capability_catalog import contracts, enabled
     from .models import AgentToolCall
     from .tool_contract_runtime import (
@@ -1219,7 +1214,9 @@ def execute(run, name, args):
                 require_knowledge(run)
             raise PermissionDenied("当前账号、会话或策略未开放该工具")
         validate_arguments(name, args)
-        result, pairs = _execute_authorized(run, name, args, user, p, call)
+        result, pairs = _execute_authorized(
+            run, name, args, user, p, call, workflow_catalog
+        )
         AgentToolCall.objects.filter(pk=call.pk).update(
             status="succeeded",
             result_refs=result_refs(result),
@@ -1234,7 +1231,7 @@ def execute(run, name, args):
         raise
 
 
-def _execute_authorized(run, name, args, user, p, call):
+def _execute_authorized(run, name, args, user, p, call, workflow_catalog=False):
     from .selections import (
         KNOWLEDGE_TOOLS,
         algorithm_ids,
@@ -1353,10 +1350,20 @@ def _execute_authorized(run, name, args, user, p, call):
         from .compute_result_tools import read_output
 
         return read_output(run, user, p, args)
+    if name == "search_tools":
+        from .capability_catalog import search
+
+        result = search(user, p, run, args)
+        return result, [(None, result)]
     if name == "list_compute_algorithms":
         query = args.get("query", "")
         if not isinstance(query, str) or len(query) > 200:
             raise ValidationError("query 必须为不超过200字的算法关键词")
+        if workflow_catalog:
+            from .workflow_discovery import compact_algorithms
+
+            result = compact_algorithms(user, query.strip(), run)
+            return result, [(None, result)]
         result = clean(
             _algorithm_list(user, query.strip(), version_ids=algorithm_ids(run))
         )
@@ -1381,7 +1388,9 @@ def _execute_authorized(run, name, args, user, p, call):
         query = args.get("query", "")
         if not isinstance(query, str) or not 1 <= len(query.strip()) <= 300:
             raise ValidationError("query 必须为1至300字")
-        return search_knowledge(run, user, query.strip())
+        return search_knowledge(
+            run, user, query.strip(), allow_documents=p["allowDocuments"]
+        )
     if name == "read_knowledge_document":
         from .knowledge_tools import read_knowledge_document
 
@@ -1433,7 +1442,12 @@ def _execute_authorized(run, name, args, user, p, call):
             catalog_summary,
         )
 
-        queryset = catalog_query(resources(user, p, run.resource_ids), args)
+        selected = (
+            []
+            if workflow_catalog and run.data_selection_mode == "auto"
+            else run.resource_ids
+        )
+        queryset = catalog_query(resources(user, p, selected), args)
         if name == "summarize_resource_catalog":
             result = catalog_summary(queryset)
             return result, [(None, result)]

@@ -60,6 +60,40 @@ beforeEach(() => {
 });
 afterEach(() => vi.restoreAllMocks());
 
+it("opens on registered data and keeps checked inputs when switching sources", async () => {
+  const read = vi.mocked(agentApi.workflowCatalogResources);
+  read.mockImplementation(async (_query, options) => {
+    const result = page(options?.source === "computed" ? "计算" : "登记");
+    if (options?.source === "computed")
+      result.items = result.items.map((item) => ({
+        ...item,
+        id: item.id + 100,
+      }));
+    return result;
+  });
+  const add = vi
+    .spyOn(agentApi, "addWorkflowCatalogReferences")
+    .mockResolvedValue({ items: [] });
+  show();
+  fireEvent.click(screen.getByRole("button", { name: "选择系统数据" }));
+  expect(screen.getByRole("radio", { name: "登记数据" })).toBeChecked();
+  fireEvent.click(
+    await screen.findByRole("checkbox", { name: "选择登记资料 1" }),
+  );
+  expect(read.mock.calls[0]?.[1]?.source).toBe("registered");
+  fireEvent.click(screen.getByRole("radio", { name: "计算成果" }));
+  fireEvent.click(
+    await screen.findByRole("checkbox", { name: "选择计算资料 1" }),
+  );
+  expect(read.mock.calls[1]?.[1]?.source).toBe("computed");
+  expect(
+    screen.queryByRole("checkbox", { name: "选择登记资料 1" }),
+  ).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "加入本次任务" }));
+  await waitFor(() => expect(add).toHaveBeenCalledOnce());
+  expect(add.mock.calls[0]?.[1]).toEqual([1, 101]);
+});
+
 it("uses the same IME and visible-description behavior in the default picker", async () => {
   vi.mocked(agentApi.workflowCatalogResources).mockImplementation(
     async (query) => ({

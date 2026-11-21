@@ -1438,6 +1438,29 @@ def _decide_once(
             + instruction
         )
         instruction += guidance(workflow, node_id)
+    from .models import AgentWorkflow
+    from .business_flow_model import _structured_text
+    from .workflow_discovery import GUIDANCE, WorkflowDiscovery
+
+    discovery = (
+        WorkflowDiscovery(workflow) if isinstance(workflow, AgentWorkflow) else None
+    )
+    search = {}
+    if discovery and (
+        not stage.get("modelAttempts")
+        or "discovery" in stage.get("modelRequestPayload", {})
+    ):
+        discovery.restore(stage.get("discoveryState", {}))
+        search = discovery.packet(policy)
+        if search.get("tools") or search.get("observations"):
+            payload["discovery"] = search
+            instruction += GUIDANCE
+
+    def authorize_search():
+        guard()
+        if discovery:
+            discovery.authorize()
+
     messages = [
         {"role": "system", "content": instruction},
         {
@@ -1510,8 +1533,10 @@ def _decide_once(
     messages = [dict(message) for message in base_messages]
     current = messages[1]
     repair_level = 0
-    for attempt in range(2):
-        guard()
+    attempt = 0
+    planned_request = _expected_request_sha
+    while attempt < 2:
+        authorize_search()
         while True:
             guard()
             try:
@@ -1612,13 +1637,13 @@ def _decide_once(
         }
         if (
             not attempt
-            and _expected_request_sha
-            and record["requestSha256"] != _expected_request_sha
+            and planned_request
+            and record["requestSha256"] != planned_request
         ):
             stage["contextBudgetReview"] = {
                 "kind": "preflight_request_changed",
                 "requested": False,
-                "expectedRequestSha256": _expected_request_sha,
+                "expectedRequestSha256": planned_request,
                 "actualRequestSha256": record["requestSha256"],
                 "inputTokens": tokens,
             }
@@ -1634,9 +1659,14 @@ def _decide_once(
         output_chars = 0
         progress("requesting", attempt=attempt + 1, outputChars=0)
         request_guard = guard
+        if discovery and (search.get("tools") or search.get("observations")):
+            request_guard = ModelStreamGuard(
+                authorize_search,
+                time.monotonic() + policy["maxRunSeconds"],
+            )
         if professional_report:
             request_guard = ModelStreamGuard(
-                guard.poll if isinstance(guard, ModelStreamGuard) else guard,
+                authorize_search,
                 time.monotonic() + policy["maxRunSeconds"],
                 timeout_message="报告撰写请求达到单次时限，已保留计算及本节点记录",
             )
@@ -1682,10 +1712,38 @@ def _decide_once(
         record["response"] = _response_text(record["responseArtifact"]["content"])
         record["status"] = "response_received"
         progress("validating", outputChars=output_chars)
+        action = (
+            discovery.parse(_structured_text(raw), search.get("tools"))
+            if discovery and not attempt
+            else None
+        )
+        if action:
+            outcome = discovery.lookup(action, authorize_search)
+            stage["discoveryState"] = discovery.snapshot()
+            search = discovery.packet(policy)
+            payload["discovery"] = search
+            record.update(status="accepted", accepted=True, discovery=outcome)
+            stage["modelAttempts"].pop()
+            if on_attempt:
+                on_attempt(record)
+            original_messages[1]["content"] = json.dumps(
+                payload,
+                ensure_ascii=False,
+                **(
+                    {"separators": (",", ":")}
+                    if workflow.workflow_type in {"geology_map_review", *MULTI_FAMILY}
+                    else {}
+                ),
+            )
+            base_messages = projected_messages(original_messages, payload, budget_level)
+            messages = [dict(message) for message in base_messages]
+            current = messages[1]
+            planned_request = None
+            continue
         if on_response:
             on_response()
         try:
-            guard()
+            authorize_search()
         except Exception as exc:
             record.update(
                 status="failed",
@@ -1742,6 +1800,7 @@ def _decide_once(
             feedback_text = _repair_feedback(stage, payload, exc)
             messages = _retry_messages(base_messages, raw, feedback_text, 0)
             current = messages[1]
+            attempt += 1
             continue
         record.update(status="accepted", accepted=True)
         if on_attempt:

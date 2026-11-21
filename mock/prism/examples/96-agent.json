@@ -63,7 +63,16 @@
   },
   "GET /api/agent/resources/": {
     "200": {
-      "items": []
+      "items": [
+        {
+          "id": 812,
+          "name": "八宝山幅地质图",
+          "dataType": "vector",
+          "description": "已登记的岩性资料",
+          "isComputeResult": false,
+          "origin": "uploaded_data"
+        }
+      ]
     }
   },
   "POST /api/agent/attachments/": {

@@ -162,6 +162,7 @@ def _control(workflow, user, policy, nodes, *, closing=False, summary=""):
         persist(workflow)
 
     try:
+        guard = live_guard(workflow)
         result = take_action(
             workflow,
             fallback,
@@ -182,7 +183,7 @@ def _control(workflow, user, policy, nodes, *, closing=False, summary=""):
                     else ""
                 ),
             },
-            guard=live_guard(workflow),
+            guard=guard,
             policy=policy,
             on_record=record,
         )
@@ -283,7 +284,9 @@ def compile_node(node):
     else:
         executable["contract"] = normalize_contract(
             {
-                "goal": node.get("instruction") or node["description"] or node["title"],
+                "goal": node.get("description")
+                or node.get("instruction")
+                or node["title"],
                 "acceptance": ["依据实际证据完成当前目标并说明局限"],
                 "requiredOutputs": [{"name": "analysis", "semanticType": "analysis"}],
                 "tools": [

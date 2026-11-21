@@ -14,6 +14,7 @@ from apps.business_flows.execution_session import (
     task_record,
 )
 from apps.business_flows.ledger import professional_ledger, size, MAX_LEDGER_BYTES
+from apps.business_flows.knowledge import initial_knowledge_selection
 from apps.business_flows.logic_nodes import (
     check_submission,
     node_definition,
@@ -66,6 +67,7 @@ def test_same_executor_uses_only_current_skill_note_and_frozen_copy():
         {"instructions": "长" * 601},
         {"nodeInstructions": {"missing-node": "无对应节点"}},
         {"nodeInstructions": {"check": "长" * 301}},
+        {"knowledgeQuestions": ["问题一", "问题二", "问题三", "问题四"]},
         {"path": "/arbitrary/file.md"},
     ],
 )
@@ -74,6 +76,18 @@ def test_skill_rejects_unbounded_or_unregistered_guidance(change):
     definition["skill"].update(change)
     with pytest.raises(ValidationError):
         normalize_definition(definition)
+
+
+def test_workflow_knowledge_respects_existing_chat_selection_and_empty_questions():
+    definition = geology_definition(main_agent=True)
+    explicit = SimpleNamespace(knowledge_selection={"mode": "none", "domains": []})
+    result = initial_knowledge_selection(definition, explicit, "地质填图")
+    assert result["mode"] == "none"
+    result = initial_knowledge_selection(definition, None, "地质填图")
+    assert result["mode"] == "auto" and result["_resolvedDomains"] == ["geology"]
+    definition["skill"]["knowledgeQuestions"] = []
+    result = initial_knowledge_selection(definition, None, "地质填图")
+    assert result["mode"] == "auto" and result["_resolvedDomains"] == ["geology"]
 
 
 def test_professional_memory_recalls_real_executor_summaries_without_file_bodies():

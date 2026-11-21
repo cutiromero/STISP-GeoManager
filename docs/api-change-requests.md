@@ -1,5 +1,30 @@
 # API Change Requests
 
+## API-20261121-002 - 业务流科研目的校验
+
+- Status: BackendReady
+- Owner: codex/xintao。
+- Endpoints: POST /api/business-flows/；POST /api/business-flows/{flowId}/versions/。
+- Change type: 对登记和发布的主智能体通用流程补充既有字段校验。
+- OpenAPI change: 缺流程科研目的、节点目的、判断与交付要求或最终交付项时返回400。可选 `BusinessFlowSkill.knowledgeQuestions` 保存最多三条任务特定检索问题，使用既有错误结构。
+- Mock examples: 185-business-flow-authoring.json。
+- Frontend reason: 按节点编辑时引导填写科研目的并定位不完整节点。
+- Backend implementation notes: 使用既有冻结版本以及节点合同，目录和运行时读取仍支持历史定义。
+- Verification: 新建与发布缺项、修订后成功创建、节点图编辑、已发布版本保护、真实知识检索与撤权核对。
+- Result: 本地实现，正式站验收随发布执行。
+
+## API-20261121-001 - 业务流系统数据来源筛选
+
+- Status: BackendReady
+- Owner: codex/xintao。
+- Endpoints: GET /api/agent/resources/；GET /api/agent/workflow-uploads/references/。
+- Change type: 可选查询参数与来源响应字段。
+- OpenAPI change: 可选 `source=registered|computed`，省略时查询两类；补录既有响应的来源字段。分页目录和总数按当前来源计算。
+- Mock examples: 96-agent.json；104-agent-upload-bundle.json。
+- Frontend reason: 业务流首次查找优先展示登记数据，按需切换可复用的计算成果。
+- Backend implementation notes: 在共同发现边界内提前按来源筛选，登记数据查询跳过成果溯源；加入任务时重新核对资源。
+- Verification: 来源分类、目录和分页、权限收回、历史入库标记、普通流程及批量弹窗切换。
+- Result: 已通过后端定点回归。正式网站验收随发布执行。
 ## API-20261120-001 - 逻辑推理统一待核查疑点
 
 - Status: BackendReady
@@ -913,6 +938,8 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| API-20261121-002 | BackendReady | 业务流科研目的校验与节点图编辑 |
+| API-20261121-001 | BackendReady | 业务流选数来源筛选与登记数据查询优化 |
 | API-20261120-001 | BackendReady | 逻辑推理统一待核查疑点与保留原状复核 |
 | API-20261119-001 | BackendReady | 科研用户维护业务流与算子登记 |
 | API-20261118-001 | BackendReady | 主 Agent 监测执行与成果正式登记 |
@@ -2183,3 +2210,10 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 - 合同：项目监测场景和只读监测查询新增 `glacier`。原有默认场景不变；实时计算成果登记接口不增加冰川场景。
 - `getOfficialMonitoring` 在冰川场景返回可用的配对原始影像 `comparison` 和已授权参考资料 `references`；原有响应字段保留。主图层与任一关联来源的项目和访问校验仍在读取边界执行。
 - 交接分类按历史成果登记，有效覆盖率和类别码占比不赋予冰川面积、变化趋势或预警语义。
+
+
+## API-20261121 业务流编排与项目内检索
+
+- 合同：业务流版本新增可选 `skill.knowledgeQuestions`，用于记录需要查证的科研问题。业务流输入搜索支持按登记数据和计算成果筛选。
+- 能力目录：增加只读 `search_tools`，复用 `listAgentCapabilities` 的工具注册和策略授权。通用和专业业务流在实际模型请求内共享工具、数据和知识检索。
+- 项目范围：知识条目、文献原文、图谱、Wiki 与智能体引用均按当前项目查询，公开项目使用独立选定范围。知识及数据在提交给模型前重新核验权限；算子计算和审核沿用冻结的流程合同。

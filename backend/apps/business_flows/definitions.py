@@ -67,7 +67,7 @@ def node_roles(node):
     )
 
 
-def normalize_definition(value):
+def normalize_definition(value, *, authored=False):
     keys(
         value,
         {
@@ -397,6 +397,18 @@ def normalize_definition(value):
     result["outputRequirements"] = strings(
         result.get("outputRequirements", []), "成果规范", 30
     )
+    if (
+        authored
+        and result["adapter"] == "research_flow"
+        and result.get("executionMode") == "main_agent"
+    ):
+        if not result.get("skill"):
+            invalid("请填写流程要回答的科研问题和判断依据")
+        if not result["outputRequirements"]:
+            invalid("请至少填写一项预期交付成果")
+        for node in nodes:
+            if not node["description"] or not node["instruction"]:
+                invalid(f"请补全「{node['title']}」的节点目的、判断与交付要求")
     return result
 
 

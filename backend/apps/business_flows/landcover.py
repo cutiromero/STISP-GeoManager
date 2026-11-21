@@ -1,7 +1,5 @@
 """Project-owned RGB interpretation using the common main-agent flow runtime."""
 
-from .execution_session import default_skill
-
 CODE = "huanjiang-landcover"
 
 
@@ -17,7 +15,7 @@ def definition(version_id):
     descriptions = [
         "确认选定样区与提取模式。",
         "核对RGB波段、2米分辨率与原始网格。",
-        "逐幅执行已登记模型，完成后处理、固定优先级合成和成果准备。",
+        "识别各样区的地类格局，并以一致的类别口径量化差异。",
         "读取实际类别计数、有效区与面积统计。",
         "整理已入库的分类图、统计和大屏成果入口。",
         "交付所选样区成果和对应任务记录。",
@@ -25,7 +23,7 @@ def definition(version_id):
     instructions = [
         "列出本次每份原始资料及用户指定模式，保留全部选定样区。",
         "使用已有元信息核对三波段RGB、2米和米制投影；正式计算预检在解译目标按方案完成一次。",
-        "必须对本次image角色中的每一幅影像分别调用冻结版本。使用image端口绑定一个真实资源ID；使用当前节点已配置classes。每幅依次operator_catalog、preflight_operator、run_operator；有成功计算后继续其余影像。全部图和统计实际成功且完成入库后finish_node。",
+        "按登记模型的类别定义逐幅判读所选影像，交付对应的分类和面积统计。影像格网或有效区存在差异时，先确定哪些范围可以比较，再解释地类比例。",
         "依据上游实际成果汇总所选每幅影像的地类面积和占比；保留样区口径及实际重叠范围。",
         "确认上游分类图已入库，提供当前项目大屏与地理工作台入口，使用真实资源与任务引用。",
         "简洁交付所有选定影像的分类成果、统计与模型依据。",
@@ -53,7 +51,7 @@ def definition(version_id):
                 algorithmVersionId=version_id,
                 parameters={"classes": "all"},
                 contract={
-                    "goal": instruction,
+                    "goal": description,
                     "acceptance": [
                         "每幅所选影像均有真实成功分类图和面积统计",
                         "分类图已通过标准质量检查并入库",
@@ -88,7 +86,13 @@ def definition(version_id):
         "schemaVersion": 1,
         "adapter": "research_flow",
         "executionMode": "main_agent",
-        "skill": default_skill("research_flow"),
+        "skill": {
+            "title": "地表覆盖格局判读",
+            "knowledgeQuestions": [
+                "按六类地表覆盖制图前，参照的分类标准怎样处理过渡地类和无效像元？",
+            ],
+            "instructions": "识别不同样区的六类地表覆盖格局，为现状制图和地块复核提供基线。结合实际分类图、有效范围和面积统计判断各样区的主要地类及过渡区，并说明适用尺度。",
+        },
         "inputRequirements": [
             {
                 "key": "image",

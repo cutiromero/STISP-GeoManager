@@ -7,7 +7,7 @@ from django.core.exceptions import PermissionDenied, ValidationError
 MAX_BYTES = 24000
 
 
-def search_knowledge(run, user, query):
+def search_knowledge(run, user, query, *, allow_documents=True):
     from apps.knowledge.library import search_documents, visible_documents
     from apps.knowledge.services import search_entries, visible_entries
     from apps.knowledge.weknora_client import WeKnoraError
@@ -16,10 +16,12 @@ def search_knowledge(run, user, query):
     require_knowledge(run)
     domains = knowledge_domains(run, query)
     structured = search_entries(user, query, limit=8, domains=domains)
-    try:
-        document_search = search_documents(user, query, limit=6, domains=domains)
-    except WeKnoraError as exc:
-        document_search = {"items": [], "available": False, "detail": str(exc)}
+    document_search = {"items": [], "available": False, "detail": "文档正文读取未开启"}
+    if allow_documents:
+        try:
+            document_search = search_documents(user, query, limit=6, domains=domains)
+        except WeKnoraError as exc:
+            document_search = {"items": [], "available": False, "detail": str(exc)}
     references = {(e["id"], e["revision"]) for e in structured["items"]}
     if references and not references <= set(
         visible_entries(user, domains=domains)
@@ -111,6 +113,28 @@ def read_knowledge_document(run, user, args):
     }
     response = {"documents": [item]}
     return response, [(None, response)]
+
+
+def check_knowledge_evidence(
+    user, knowledge_refs, document_refs, domains=None, *, history=False
+):
+    if knowledge_refs:
+        from apps.knowledge.services import visible_entries
+
+        visible = set(
+            visible_entries(user, domains=domains)
+            .filter(pk__in=[identity for identity, _ in knowledge_refs])
+            .values_list("id", "revision")
+        )
+        if not (
+            {identity for identity, _ in knowledge_refs}
+            <= {identity for identity, _ in visible}
+            if history
+            else knowledge_refs <= visible
+        ):
+            raise PermissionDenied("知识依据已更新或访问权限已变化，请重新检索")
+    if document_refs:
+        check_document_evidence(user, document_refs, domains=domains, history=history)
 
 
 def check_document_evidence(user, document_refs, domains=None, *, history=False):

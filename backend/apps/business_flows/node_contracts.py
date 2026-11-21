@@ -74,7 +74,7 @@ def normalize_contract(value):
 def recovery_contract(node):
     return normalize_contract(
         {
-            "goal": "恢复当前算子节点：" + node["title"],
+            "goal": node.get("description") or node["title"],
             "acceptance": ["必须取得真实算子结果；不得代替人工批准"],
             "requiredOutputs": [{"name": "result", "semanticType": "operator_result"}],
             "tools": sorted(TOOLS),

@@ -658,6 +658,15 @@ def authorize_demo(workflow, user, p, *, include_previous=True, history=False) -
     from apps.knowledge.trial_rules import authorize_trial_evidence
 
     trial_ids = authorize_trial_evidence(workflow, user, history=history)
+    from .workflow_discovery import WorkflowDiscovery
+
+    stages = [*workflow.plan.get("stages", []), workflow.plan.get("finalStage", {})]
+    for stage in stages:
+        if stage.get("discoveryState"):
+            WorkflowDiscovery(workflow).restore(stage["discoveryState"])
+        for batch in stage.get("modelBatches", {}).get("batches", []):
+            if batch.get("stage", {}).get("discoveryState"):
+                WorkflowDiscovery(workflow).restore(batch["stage"]["discoveryState"])
     if workflow.workflow_type in MULTI_FAMILY and not history:
         from .geology_multi import authorize_frozen
 
@@ -951,6 +960,7 @@ def _has_model_progress(stage) -> bool:
 
     return bool(
         contacted(stage.get("modelAttempts", []))
+        or stage.get("discoveryState")
         or batches.get("cursor")
         or any(
             contacted(batch.get("stage", {}).get("modelAttempts", []))

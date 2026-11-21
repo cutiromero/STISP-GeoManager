@@ -69,7 +69,7 @@ def create(client, project=1, **overrides):
     )
 
 
-def test_project_visibility_drafts_and_public_reuse(users):
+def test_project_visibility_drafts_and_public_project_isolation(users):
     client, admin, reader, private = users
     public = create(client).json()
     secret = create(client, private.id, title="私有知识").json()
@@ -78,7 +78,13 @@ def test_project_visibility_drafts_and_public_reuse(users):
     result = client.get(
         "/api/knowledge/entries/", HTTP_X_PROJECT_ID=str(private.id)
     ).json()
-    assert {v["id"] for v in result["items"]} == {public["id"], secret["id"]}
+    assert {v["id"] for v in result["items"]} == {secret["id"]}
+    assert (
+        client.get(
+            f"/api/knowledge/entries/{public['id']}/", HTTP_X_PROJECT_ID=str(private.id)
+        ).status_code
+        == 404
+    )
     assert not result["canEdit"]
     assert (
         client.get(

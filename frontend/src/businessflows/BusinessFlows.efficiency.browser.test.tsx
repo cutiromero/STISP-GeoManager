@@ -257,6 +257,19 @@ it("preserves dependency branches and renders execution/review/human states from
   ).toThrow();
 });
 
+function selectEditorNode(title: string) {
+  fireEvent.click(
+    screen.getByRole("button", {
+      name: (name) => name.startsWith(`${title}，`),
+    }),
+  );
+}
+
+function openNodeIdentity() {
+  fireEvent.click(screen.getByText("节点标识", { selector: "summary" }));
+  return screen.getByRole("textbox", { name: "节点编码" });
+}
+
 it("locks the professional skeleton and important human gates while publishing a review-policy version", async () => {
   const save = vi.fn().mockResolvedValue(undefined);
   render(
@@ -270,6 +283,7 @@ it("locks the professional skeleton and important human gates while publishing a
       />
     </App>,
   );
+  selectEditorNode("审核与处置建议");
   const approval = screen.getByRole("switch", {
     name: "审核与处置建议：必须由人决定",
   });
@@ -278,11 +292,7 @@ it("locks the professional skeleton and important human gates while publishing a
   expect(
     screen.queryByRole("button", { name: "添加节点" }),
   ).not.toBeInTheDocument();
-  expect(
-    screen
-      .getAllByRole("textbox", { name: "节点编码" })
-      .every((element) => (element as HTMLInputElement).disabled),
-  ).toBe(true);
+  expect(openNodeIdentity()).toBeDisabled();
   fireEvent.click(screen.getByRole("button", { name: "保存并发布" }));
   await waitFor(() => expect(save).toHaveBeenCalledOnce());
   expect(
@@ -311,19 +321,105 @@ it("keeps edited node identity stable and prevents duplicate publish requests", 
   fireEvent.change(screen.getByRole("textbox", { name: "流程编码" }), {
     target: { value: "research_summary" },
   });
-  const node = screen.getAllByRole("textbox", { name: "节点编码" })[0]!;
+  const publish = screen.getByRole("button", { name: "保存并发布" });
+  fireEvent.click(publish);
+  await screen.findByText("请写明流程要回答的科研问题，以及判断结果的依据。");
+  expect(save).not.toHaveBeenCalled();
+  const instructions =
+    "确定哪些岩性差异值得现场复核，用区域地质标准核对可比的字段。";
+  fireEvent.change(
+    screen.getByRole("textbox", { name: "科研目的与判断依据" }),
+    {
+      target: { value: instructions },
+    },
+  );
+  const question = "对照两幅图前应核对哪种填图比例尺？";
+  fireEvent.change(screen.getByRole("textbox", { name: "待查证的知识问题" }), {
+    target: { value: question },
+  });
+  fireEvent.click(screen.getByRole("radio", { name: "资料与交付" }));
+  const outputs = screen.getByRole("textbox", { name: "交付要求" });
+  fireEvent.change(outputs, { target: { value: "岩性复核清单" } });
+  fireEvent.click(screen.getByRole("radio", { name: "节点设计" }));
+  const node = openNodeIdentity();
   node.focus();
   fireEvent.change(node, { target: { value: "research_changed" } });
-  expect(screen.getAllByRole("textbox", { name: "节点编码" })[0]).toBe(node);
+  expect(screen.getByRole("textbox", { name: "节点编码" })).toBe(node);
   expect(node).toHaveFocus();
-  const publish = screen.getByRole("button", { name: "保存并发布" });
+  for (const [name, purpose, guidance] of [
+    [
+      "分析项目资料",
+      "识别不能直接对照的岩性单元。",
+      "用字段语义和样本定位差异。",
+    ],
+    [
+      "整理科研成果",
+      "确定外业核查的优先次序。",
+      "按证据完整度整理带图斑编号的清单。",
+    ],
+  ]) {
+    selectEditorNode(name!);
+    expect(
+      document.querySelectorAll(".business-flow-editor-node"),
+    ).toHaveLength(1);
+    fireEvent.change(screen.getByRole("textbox", { name: "节点目的" }), {
+      target: { value: purpose },
+    });
+    fireEvent.change(screen.getByRole("textbox", { name: "判断与交付" }), {
+      target: { value: guidance },
+    });
+  }
+  selectEditorNode("分析项目资料");
+  fireEvent.click(
+    screen.getByRole("checkbox", { name: "允许按资料选择已发布算子" }),
+  );
+  const acceptance = screen.getByRole("textbox", { name: "验收条件" });
+  fireEvent.change(acceptance, {
+    target: { value: "差异可以追溯到具体的图斑编号" },
+  });
   fireEvent.click(publish);
   fireEvent.click(publish);
   await waitFor(() => expect(save).toHaveBeenCalledOnce());
+  expect(save.mock.calls[0]?.[1].skill.instructions).toBe(instructions);
+  expect(save.mock.calls[0]?.[1].skill.knowledgeQuestions).toEqual([question]);
+  expect(save.mock.calls[0]?.[1].nodes[0].contract).toMatchObject({
+    goal: "识别不能直接对照的岩性单元。",
+    acceptance: ["差异可以追溯到具体的图斑编号"],
+    tools: expect.arrayContaining([
+      "operator_catalog",
+      "preflight_operator",
+      "run_operator",
+    ]),
+  });
   expect(save.mock.calls[0]?.[1].nodes[1].dependsOn).toEqual([
     "research_changed",
   ]);
   await act(async () => complete());
+});
+
+it("adds a branch after the node chosen in the diagram on a narrow screen", async () => {
+  await page.viewport(390, 844);
+  try {
+    render(
+      <App>
+        <BusinessFlowEditor open onClose={() => {}} onSave={vi.fn()} />
+      </App>,
+    );
+    selectEditorNode("整理科研成果");
+    fireEvent.click(screen.getByRole("button", { name: "添加节点" }));
+    expect(screen.getByRole("button", { name: /^新节点，/ })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("textbox", { name: "节点名称" })).toHaveValue("");
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.getBoundingClientRect().width).toBeLessThanOrEqual(390);
+    expect(dialog.querySelectorAll(".business-flow-editor-node")).toHaveLength(
+      1,
+    );
+  } finally {
+    await page.viewport(1440, 900);
+  }
 });
 
 it.each([
@@ -423,6 +519,7 @@ it("keeps all legacy human gates fixed and only exposes supported independent re
     </App>,
   );
   for (const node of geologyVersion.definition.nodes) {
+    selectEditorNode(node.title);
     expect(
       screen.getByRole("switch", { name: `${node.title}：必须由人决定` }),
     ).toBeDisabled();
@@ -496,19 +593,23 @@ it("preserves declared upstream output bindings when an operator node is renamed
       />
     </App>,
   );
-  fireEvent.click(
-    screen.getAllByText("算子输入来源（资料角色或上游输出）")[1]!,
-  );
+  selectEditorNode("第二步计算");
+  fireEvent.click(screen.getByText("算子输入来源（资料角色或上游输出）"));
   const binding = screen.getByRole("textbox", {
     name: "第二步计算：算子输入来源",
   });
   expect(binding).toHaveValue(
     JSON.stringify({ image: { nodeId: "first", outputKey: "ndvi" } }, null, 2),
   );
-  fireEvent.change(screen.getAllByRole("textbox", { name: "节点编码" })[0]!, {
+  selectEditorNode("第一步计算");
+  fireEvent.change(openNodeIdentity(), {
     target: { value: "source_calc" },
   });
-  expect(binding).toHaveValue(
+  selectEditorNode("第二步计算");
+  fireEvent.click(screen.getByText("算子输入来源（资料角色或上游输出）"));
+  expect(
+    screen.getByRole("textbox", { name: "第二步计算：算子输入来源" }),
+  ).toHaveValue(
     JSON.stringify(
       { image: { nodeId: "source_calc", outputKey: "ndvi" } },
       null,

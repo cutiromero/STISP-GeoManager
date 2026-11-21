@@ -2356,6 +2356,14 @@ export type AgentWorkflowCatalogItem = {
      */
     description: string;
     /**
+     * 是否为经来源核验的成果
+     */
+    isComputeResult?: boolean;
+    /**
+     * 资源来源分类
+     */
+    origin?: 'uploaded_data' | 'compute_results';
+    /**
      * 数据目录（存量数据组别）ID
      */
     directoryId: number | null;
@@ -2374,7 +2382,7 @@ export type AgentWorkflowCatalogItem = {
 };
 
 /**
- * 普通智能体发现边界内按最近更新时间排序的系统数据页；目录来自可发现基础集合，total为关键词与目录筛选后的匹配数。基础集合为空时items/directories为空且total为0，筛选无匹配时items为空且total为0，不补入历史或内部材料
+ * 普通智能体发现边界内的系统数据页。按名称命中优先，同级按更新时间、登记时间、编号倒序。目录来自所选来源的可发现集合，total为来源、关键词与目录筛选后的匹配数。
  */
 export type AgentWorkflowCatalogPage = {
     /**
@@ -2459,6 +2467,11 @@ export type AgentLogicConfigurationResult = {
 };
 
 /**
+ * registered 为登记的业务资料，computed 为通过来源核验且可复用的计算或业务流成果
+ */
+export type AgentResourceSource = 'registered' | 'computed';
+
+/**
  * 当前项目ACL内active且准备ready的普通业务资料或明确成果；不含trial、任务内部过程和评价材料，名称不作为排除依据
  */
 export type AgentResource = {
@@ -2478,6 +2491,14 @@ export type AgentResource = {
      * 说明
      */
     description: string;
+    /**
+     * 是否为经来源核验的成果
+     */
+    isComputeResult?: boolean;
+    /**
+     * 资源来源分类
+     */
+    origin?: 'uploaded_data' | 'compute_results';
 };
 
 /**
@@ -13637,6 +13658,10 @@ export type BusinessFlowSkill = {
      */
     instructions: string;
     /**
+     * 需要查证的具体知识问题。配置后主智能体可在任务调度阶段按权限检索。
+     */
+    knowledgeQuestions?: Array<string>;
+    /**
      * 按节点选择的专项指导，不把全部节点说明一起发送
      */
     nodeInstructions?: {
@@ -14853,6 +14878,15 @@ export type AgentToolStartBusinessFlowArguments = {
      * 由既有业务流规范定义的资料适配选择
      */
     inputAdapters?: BusinessFlowInputAdapterChoices;
+};
+
+/**
+ * 按名称或用途查找本轮可用的平台工具，query可为空，limit最多12项，按nextOffset继续。
+ */
+export type AgentToolSearchToolsArguments = {
+    query?: string;
+    offset?: number;
+    limit?: number;
 };
 
 /**
@@ -25208,6 +25242,10 @@ export type ListAgentResourcesData = {
          * 名称或说明关键词
          */
         q?: string;
+        /**
+         * 按资料来源筛选；省略时同时返回登记数据与计算成果
+         */
+        source?: AgentResourceSource;
     };
     url: '/api/agent/resources/';
 };
@@ -25379,6 +25417,10 @@ export type ListAgentWorkflowCatalogResourcesData = {
          * 名称或说明搜索词，最多200字
          */
         q?: string;
+        /**
+         * 按资料来源筛选；省略时同时返回登记数据与计算成果
+         */
+        source?: AgentResourceSource;
         /**
          * 页码，从1开始
          */
@@ -27773,7 +27815,7 @@ export type RegisterBusinessFlowData = {
 
 export type RegisterBusinessFlowErrors = {
     /**
-     * 请求错误
+     * 流程定义缺项或不符合发布要求
      */
     400: ErrorResponse;
     /**
@@ -27947,7 +27989,7 @@ export type PublishBusinessFlowVersionData = {
 
 export type PublishBusinessFlowVersionErrors = {
     /**
-     * 请求错误
+     * 流程定义缺项或不符合发布要求
      */
     400: ErrorResponse;
     /**

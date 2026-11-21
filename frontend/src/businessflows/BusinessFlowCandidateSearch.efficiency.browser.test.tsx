@@ -129,6 +129,30 @@ afterEach(() => {
   resetProjectSession();
 });
 
+it("requests registered candidates first and keeps inputs when showing compute results", async () => {
+  const read = vi.mocked(agentApi.resources);
+  read.mockImplementation(async (_query, options) => ({
+    items:
+      options?.source === "computed"
+        ? [resource(75, "已入库成果")]
+        : [resource(1, "已登记底图")],
+  }));
+  show();
+  await screen.findByRole("textbox", { name: "本次任务目标" });
+  expect(screen.getByRole("radio", { name: "登记数据" })).toBeChecked();
+  expect(read).not.toHaveBeenCalled();
+  fireEvent.mouseDown(input());
+  await choose("已登记底图");
+  expect(read.mock.calls[0]?.[1]?.source).toBe("registered");
+  fireEvent.click(screen.getByRole("radio", { name: "计算成果" }));
+  fireEvent.mouseDown(input("对比资料"));
+  await choose("已入库成果");
+  expect(read.mock.calls[1]?.[1]?.source).toBe("computed");
+  expect(input().closest(".business-flow-launch-field")).toHaveTextContent(
+    "已登记底图",
+  );
+});
+
 it("waits for IME completion and explains description-only matches", async () => {
   vi.mocked(agentApi.resources).mockImplementation(async (query = "") => ({
     items: query

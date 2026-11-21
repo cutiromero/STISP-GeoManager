@@ -521,14 +521,14 @@ def source_knowledge_domains(run):
     if not used:
         return set()
     domains.update(
-        KnowledgeEntry._base_manager.filter(pk__in=entry_ids).values_list(
-            "domain", flat=True
-        )
+        KnowledgeEntry._base_manager.filter(
+            pk__in=entry_ids, project_tag_id=run.project_tag_id
+        ).values_list("domain", flat=True)
     )
     domains.update(
-        KnowledgeDocument._base_manager.filter(pk__in=document_ids).values_list(
-            "domain", flat=True
-        )
+        KnowledgeDocument._base_manager.filter(
+            pk__in=document_ids, project_tag_id=run.project_tag_id
+        ).values_list("domain", flat=True)
     )
     return domains or (set(knowledge_domains(run)) if used else set())
 

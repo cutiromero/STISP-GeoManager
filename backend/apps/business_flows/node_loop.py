@@ -1102,6 +1102,10 @@ def execute_tool(
             arguments.get("offset", 0),
             arguments.get("length", MAX_FRAGMENT_BYTES),
         )
+        if isinstance(identity, str) and identity.startswith("knowledge-"):
+            from .knowledge import evidence_rows
+
+            rows.update({row["id"]: row for row in evidence_rows(workflow)})
         if identity == "node-config-" + node["id"] and node.get("kind") == "operator":
             rows[identity] = {"result": node_configuration(workflow, node, loop)}
         if not isinstance(identity, str) or identity not in rows:
@@ -1432,10 +1436,16 @@ def execute_tool(
         )
         return {"message": question}
     if action == "finish_node":
+        from .knowledge import evidence_rows
         from .node_coverage import require_source_coverage
 
         require_source_coverage(workflow, node, item)
-        result = finish(node, item, arguments, [*evidence, *loop["evidence"].values()])
+        result = finish(
+            node,
+            item,
+            arguments,
+            [*evidence, *loop["evidence"].values(), *evidence_rows(workflow)],
+        )
         check_retained_outputs(
             workflow,
             user,

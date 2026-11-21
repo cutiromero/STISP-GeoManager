@@ -8,10 +8,11 @@ import {
   RobotOutlined,
   UserOutlined,
 } from "@ant-design/icons";
-import { Alert, Button, Input, Select, Spin, Tag } from "antd";
+import { Alert, Button, Input, Segmented, Select, Spin, Tag } from "antd";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import type {
   AgentResource,
+  AgentResourceSource,
   BusinessFlowRun,
   BusinessFlowVersion,
   BusinessFlowInputAdapterChoices,
@@ -146,6 +147,8 @@ export default function BusinessFlowLaunch({
     "idle" | "loading" | "ready" | "error"
   >("idle");
   const [resourceError, setResourceError] = useState("");
+  const [resourceSource, setResourceSource] =
+    useState<AgentResourceSource>("registered");
   const [resourceSearch, setResourceSearch] = useState("");
   const candidateComposing = useRef(false);
   const [openRole, setOpenRole] = useState<string | null>(null);
@@ -194,6 +197,7 @@ export default function BusinessFlowLaunch({
       setResources([]);
       setResourceState("idle");
       setResourceError("");
+      setResourceSource("registered");
       setResourceSearch("");
       candidateComposing.current = false;
       setOpenRole(null);
@@ -341,7 +345,11 @@ export default function BusinessFlowLaunch({
   const unassigned = isLegacy
     ? materialCount - new Set(Object.values(inputs)).size
     : 0;
-  const loadCandidates = async (query = wantedQuery.current, force = false) => {
+  const loadCandidates = async (
+    query = wantedQuery.current,
+    force = false,
+    source = resourceSource,
+  ) => {
     if (!roleOpen.current || !alive.current || candidateComposing.current)
       return;
     query = query.trim().slice(0, 200);
@@ -366,6 +374,7 @@ export default function BusinessFlowLaunch({
     try {
       const result = await agentApi.resources(query, {
         signal: controller.signal,
+        source,
       });
       ensureScope();
       if (
@@ -415,6 +424,20 @@ export default function BusinessFlowLaunch({
         requestQuery.current = null;
       }
     }
+  };
+  const changeResourceSource = (source: AgentResourceSource) => {
+    setResourceSource(source);
+    clearTimeout(searchTimer.current);
+    searchTimer.current = undefined;
+    candidateRequest.current?.abort();
+    candidateRequest.current = null;
+    requestQuery.current = null;
+    readyQuery.current = null;
+    setResources([]);
+    setResourceError("");
+    setResourceState("idle");
+    if (roleOpen.current)
+      void loadCandidates(wantedQuery.current, false, source);
   };
   const searchCandidates = (query: string) => {
     if (!roleOpen.current) return;
@@ -803,6 +826,22 @@ export default function BusinessFlowLaunch({
                 ) : version.definition.inputRequirements.length ? (
                   <div className="business-flow-launch-inputs">
                     <h3>{ui("任务资料", "Task data")}</h3>
+                    <Segmented<AgentResourceSource>
+                      aria-label={ui("资料来源", "Data source")}
+                      value={resourceSource}
+                      options={[
+                        {
+                          label: ui("登记数据", "Registered data"),
+                          value: "registered",
+                        },
+                        {
+                          label: ui("计算成果", "Compute results"),
+                          value: "computed",
+                        },
+                      ]}
+                      disabled={busy}
+                      onChange={changeResourceSource}
+                    />
                     {version.definition.inputRequirements.map((input) => (
                       <label
                         className="business-flow-launch-field"

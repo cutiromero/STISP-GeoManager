@@ -4,11 +4,8 @@
   "executionMode": "main_agent",
   "skill": {
     "title": "可恢复的资料统计",
-    "instructions": "由同一主执行智能体完成任务。资料和成果按引用交接，读取必要片段与统计；先预检再计算，按真实诊断调整允许的输入或参数。格式与引用错误先核对原响应，不能删掉必要证据。补救仍失败时保留成果并先说明错误位置、实际差距、已尝试办法和需要用户处理的内容，再等待人工补充，从本节点继续后重新校验与审核，不重复已完成的计算，不代替用户批准。",
-    "nodeInstructions": {
-      "adaptive_statistics": "查询登记能力后，对实际版本、来源、参数和映射预检一次；方案或来源变化后再预检。相同成功计算保留引用，只修改分析时不重算。交付前核对真实成果有效，按需读取完整统计；只读统计默认不增加人工门禁。",
-      "finish": "依据已完成节点的真实统计及引用整理说明，不重复运行统计或资料转换；区分全量统计与展示样本。"
-    }
+    "instructions": "判断多个来源能否形成可比统计，用以解释类别分布和地区差异。先厘清单位、分组、有效范围及统计分母；出现不一致时判断能否换算或建立对应关系。",
+    "knowledgeQuestions": ["进行跨来源统计前，项目采用的标准怎样规定分母、单位换算和类别合并？"]
   },
   "inputPreparation": { "allowScripts": true, "reviewScripts": true, "maxRepairs": 2 },
   "inputRequirements": [{
@@ -16,20 +13,20 @@
     "dataTypes": ["table", "document"], "required": true, "requiredFields": [], "multiple": true
   }],
   "nodes": [{
-    "id": "adaptive_statistics", "title": "选择算子并适配资料", "description": "查询statistics能力，预检实际资料，必要时映射字段或审核衔接脚本，再运行并读取成果。",
+    "id": "adaptive_statistics", "title": "选择算子并适配资料", "description": "建立不同资料的共同统计口径。",
     "kind": "agent", "dependsOn": [], "dataRoles": ["source"],
-    "instruction": "根据实际资料选用有统计能力且允许智能体调用的已发布算子；不能猜测单位或矿物类别含义。失败时说明补救依据，不修改原始资料。",
+    "instruction": "选用符合字段含义与尺度的登记统计算子。先比较资料的单位与分组，再判断映射或分别统计，交付字段、范围和分母可追溯的结果。",
     "contract": {
-      "goal": "从当前授权目录选择合适算子，完成实际资料的统计并交付可追溯成果。",
-      "acceptance": ["已通过输入预检", "已读取真实成功算子的统计结果", "说明字段、集合类别及适用限制"],
+      "goal": "建立不同资料的共同统计口径。",
+      "acceptance": ["各来源的统计数量与有效范围可核对", "说明单位、分组和分母的对应关系", "可比结果与需分别统计的部分均有来源引用"],
       "requiredOutputs": [{ "name": "statistics", "semanticType": "operator_result" }],
       "tools": ["read_evidence", "operator_catalog", "preflight_operator", "run_operator", "prepare_input", "ask_user", "finish_node"],
       "maxSteps": 32, "maxModelCalls": 32, "maxOperatorCalls": 3, "maxRecoveries": 3, "maxSeconds": 3600
     },
     "review": { "ai": false, "human": false, "maxRevisions": 0 }, "allowSkip": false
   }, {
-    "id": "finish", "title": "汇总成果", "description": "汇总真实统计成果、实际引用及适用限制。", "kind": "result",
-    "dependsOn": ["adaptive_statistics"], "dataRoles": [], "instruction": "保留实际计算依据和适用限制。",
+    "id": "finish", "title": "汇总成果", "description": "让研究者用同一口径比较不同资料来源。", "kind": "result",
+    "dependsOn": ["adaptive_statistics"], "dataRoles": [], "instruction": "解释可比较的结果和存在差异的口径，指出哪些分组还需补充资料，并引用完整统计。",
     "review": { "ai": false, "human": false, "maxRevisions": 0 }
   }],
   "outputRequirements": ["真实统计结果", "字段与类别说明", "来源引用与适用限制"]

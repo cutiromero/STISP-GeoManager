@@ -1,0 +1,8 @@
+{
+  "POST /api/business-flows/": {
+    "400": { "detail": "请填写流程要回答的科研问题和判断依据" }
+  },
+  "POST /api/business-flows/{flowId}/versions/": {
+    "400": { "detail": "待查证的知识问题必须是有界字符串列表" }
+  }
+}

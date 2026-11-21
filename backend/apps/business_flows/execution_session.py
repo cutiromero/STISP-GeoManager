@@ -11,39 +11,37 @@ MAX_CORE_CHARACTERS = 600
 MAX_NODE_CHARACTERS = 300
 MAX_SKILL_BYTES = 16 * 1024
 EXECUTOR_INSTRUCTION = (
-    "\n你是贯穿本次业务流的主执行智能体，executionSession标识同一持续任务。"
-    "当前节点是本任务的工作目标；结合ledger延续此前结论、成果与未解决事项。"
-    "已完成工作不重复执行；根据真实诊断修复当前问题，成功后继续下一目标。"
-    "成果以引用交接，只有实际读取的统计或片段才可作为判断依据，不累积文件正文或完整历史。"
-    "配套技能不增加工具、数据访问或人工批准权限；具体动作遵循当前节点允许的工具。"
+    "\n你负责从研究问题到成果交付的同一项任务。结合本次目标、流程目的和已验证证据，"
+    "判断当前节点需要解决什么问题，并在允许的动作范围内选择做法。遇到意外先判断"
+    "它影响哪项科研结论，再决定补充证据、调整处理方案或请用户确认。"
 )
 REVIEWER_INSTRUCTION = (
-    "\n本次独立审核沿用同一业务流的技能与任务事实；保持独立判断，不继承执行者的思考对话。"
-    "台账只提供历史索引，核对结论仍须依据本次真实证据。"
+    "\n按本次科研目的、节点验收条件和实际证据独立判断。指出哪些结论成立，"
+    "哪些还需要补充证据，以及缺口会影响什么判断。"
 )
 
 
 def default_skill(adapter):
     return {
-        "title": "地质综合推理" if adapter == "geology_generic" else "科研任务执行",
+        "title": "地质综合推理" if adapter == "geology_generic" else "本次科研任务",
         "instructions": (
-            "围绕用户目标完成节点并验证成果。依据真实资料选择登记算子、输入输出绑定和允许调整的参数，"
-            "以已验证配置为起点，依据当前数据和任务需要调整并说明原因，不为消除报错放宽科学判据。"
-            "先预检再计算。失败先读诊断，区分输入、参数和环境问题，改变有效方案后再预检；"
-            "保留已完成工作，不能反复提交相同错误方案。缺少必要含义时明确提问，"
-            "格式、引用或审核错误先核对诊断与当前结果，不能用删减必要证据或反复重算消除报错。"
-            "自动补救后仍无法继续时，保留当前成果并先说明错误位置、实际差距、已尝试办法和需要用户处理的内容，再等待人工补充；收到补充后只处理受影响节点，再校验和审核。"
-            "算子核心计算逻辑、原件和用户批准范围保持受保护；参数按实际语义和登记范围判断。"
-            "资料与成果按引用读取必要统计和片段，区分已测事实、推断及剩余限制。"
+            "用岩性、构造和蚀变的空间关系检查地质图中值得复核的矛盾，解释已确认修正对成矿远景判断的影响。"
+            "按实际空间尺度、地质规则和数据分辨率逐项核对证据，区分可确认的问题、解释分歧和需要外业复查的线索。"
+            if adapter == "geology_generic"
+            else "根据用户本次提出的科研问题和所选资料，找出能支撑结论的证据。资料的时间、范围或语义有疑问时，先明确这些差异会影响哪个判断。"
         ),
         "nodeInstructions": {},
     }
 
 
 def normalize_skill(value, node_ids):
-    from .definitions import invalid, keys, text
+    from .definitions import invalid, keys, strings, text
 
-    keys(value, {"title", "instructions", "nodeInstructions"}, "业务流配套技能")
+    keys(
+        value,
+        {"title", "instructions", "nodeInstructions", "knowledgeQuestions"},
+        "业务流配套技能",
+    )
     result = {
         "title": text(value.get("title"), "技能名称", 80),
         "instructions": text(
@@ -56,6 +54,10 @@ def normalize_skill(value, node_ids):
         invalid("技能专项指导只能引用当前流程节点")
     for identity, note in notes.items():
         notes[identity] = text(note, "节点技能指导", MAX_NODE_CHARACTERS)
+    if "knowledgeQuestions" in value:
+        result["knowledgeQuestions"] = strings(
+            value["knowledgeQuestions"], "待查证的知识问题", 3
+        )
     if len(json.dumps(result, ensure_ascii=False).encode()) > MAX_SKILL_BYTES:
         invalid("技能说明过长，请保留短核心指导及当前节点必要说明")
     return result
@@ -101,7 +103,7 @@ def guidance(workflow, node_id, role="executor"):
     note = skill.get("nodeInstructions", {}).get(node_id, "")
     return (
         (EXECUTOR_INSTRUCTION if role == "executor" else REVIEWER_INSTRUCTION)
-        + "\n业务流配套技能："
+        + "\n流程科研目的与判断依据："
         + skill["title"]
         + "\n"
         + skill["instructions"]

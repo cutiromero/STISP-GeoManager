@@ -7,6 +7,14 @@ CODE = "wildfire-history-observation"
 
 def definition(version_id):
     value = base_definition(version_id, compact=False)
+    value["skill"] = {
+        "title": "历史野火观测判读",
+        "knowledgeQuestions": [
+            "比较历史野火序列前，SeasFire 中 GWIS、GFED、FCCI 火烧面积与 CAMS 火辐射功率密度各表示什么，单位和时间尺度有何差异？",
+            "判断空图或异常时，FCCI 月尺度重复记录、有效掩膜和零值应怎样区分？",
+        ],
+        "instructions": "查明选定地区实际观测中哪里记录了火烧或较强火辐射，以及信号何时集中，为历史事件回顾和实地核查提供线索。根据实际时标、单位和有效范围解释两类物理量。",
+    }
     value["inputRequirements"] = [
         {
             "key": "cube",
@@ -29,7 +37,7 @@ def definition(version_id):
     instructions = [
         "从任务目标读取已选观测产品、时期、研究区与序列长度，结合已绑定原生立方体确认资料，随后继续。产品为gwis_ba、gfed_ba、fcci_ba或cams_frpfire。",
         "GWIS/GFED按原始周期，FCCI按月平均重复记录，三者单位ha；CAMS FRP单位W m-2、按原始周期。按原始有效掩膜核对任务目标中已选时期。",
-        "以cube端口绑定真实原生立方体资源，沿用所选产品、时间、序列长度和边界参数，依次查询、预检并执行冻结观测算子一次。观测图、分级图、统计及序列表实际成功并完成入库后结束目标。",
+        "以所选产品的实际时标和有效格网提取观测。遇到空图、零值或异常峰值，核对时标、掩膜和单位后解释，并通过原值、分级和序列对照验证。",
         "读取实际火烧面积或FRP值、有效格网和真实日期序列；火烧面积已经是ha，不乘显示像元面积。",
         "交付同任务入库的观测原值、物理量分级、区域统计和历史序列，提供大屏入口。",
         "简洁交付所选历史观测、实际时期、区域和处理记录。",

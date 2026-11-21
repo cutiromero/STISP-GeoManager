@@ -251,9 +251,11 @@ def check_revision(flow, expected):
         raise ComputeError("业务流已由其他页面更新，请刷新后再保存", 409)
 
 
-def publish_version(user, flow, definition, *, expected=None, metadata=None):
+def publish_version(
+    user, flow, definition, *, expected=None, metadata=None, authored=False
+):
     require_author(user, flow)
-    spec = normalize_definition(definition)
+    spec = normalize_definition(definition, authored=authored)
     validate_bindings(spec, flow.project_tag_id)
     with transaction.atomic():
         flow = _locked(flow.pk)
@@ -287,7 +289,7 @@ def publish_version(user, flow, definition, *, expected=None, metadata=None):
     return flow, version
 
 
-def register_flow(user, value):
+def register_flow(user, value, *, authored=False):
     require_author(user)
     code = text(value.get("code"), "业务流编码", 80)
     if not CODE_PATTERN.fullmatch(code):
@@ -299,7 +301,7 @@ def register_flow(user, value):
     active = value.get("isActive", True)
     if type(active) is not bool:
         raise ValidationError("启用标记必须是布尔值")
-    spec = normalize_definition(value.get("definition"))
+    spec = normalize_definition(value.get("definition"), authored=authored)
     project_id = selected_project_id()
     require_registration_project(code, project_id)
     validate_bindings(spec, project_id)

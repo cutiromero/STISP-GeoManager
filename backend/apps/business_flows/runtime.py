@@ -81,6 +81,9 @@ def authorize(user, workflow, *, history=False):
             history=history,
             additional_ids=workflow.resource_ids,
         )
+    from .knowledge import authorized_entries
+
+    authorized_entries(workflow, user, history=history)
     return policy
 
 
@@ -476,6 +479,9 @@ def start_flow(user, version, value, *, source_run=None):
     definition = deepcopy(version.definition)
     if type(value.get("agentEnabled", True)) is not bool:
         raise ValidationError("agentEnabled必须为布尔值")
+    from .knowledge import initial_knowledge_selection
+
+    knowledge = initial_knowledge_selection(definition, source_run, goal)
     if any(node["kind"] == "operator" for node in definition["nodes"]):
         if not policy.get("operatorEnabled", False):
             raise PermissionDenied("当前策略未允许业务流调用算子")
@@ -659,6 +665,10 @@ def start_flow(user, version, value, *, source_run=None):
                 "idempotencyKey": key,
                 "inputs": inputs,
                 "resourceIds": list(inputs.values()),
+                "knowledgeSelection": {
+                    "mode": knowledge["mode"],
+                    "domains": knowledge["domains"],
+                },
                 "uploadBatchId": parameters.pop("uploadBatchId", None),
                 "parameters": parameters,
             }
@@ -691,7 +701,10 @@ def start_flow(user, version, value, *, source_run=None):
                 max_operator_steps=policy["maxOperatorSteps"],
                 plan={
                     "inputs": inputs,
-                    "knowledgeSelection": {"mode": "none", "domains": []},
+                    "knowledgeSelection": {
+                        "mode": knowledge["mode"],
+                        "domains": knowledge["domains"],
+                    },
                 },
                 policy_snapshot={
                     "operatorEnabled": policy.get("operatorEnabled", False)
@@ -705,7 +718,7 @@ def start_flow(user, version, value, *, source_run=None):
             status="waiting_compute",
             idempotency_key="business-flow-" + key[:60],
             resource_ids=sorted(set(inputs.values())),
-            knowledge_selection={"mode": "none", "domains": [], "_contextRunIds": []},
+            knowledge_selection=knowledge,
             thinking_mode="deep" if thinking else "fast",
             reasoning_effort=effort if thinking else "",
             budget_profile=budget_snapshot.get("budgetProfile", ""),

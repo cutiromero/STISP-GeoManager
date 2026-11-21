@@ -162,6 +162,17 @@ def recognize_roles(
     requested_settings = (policy.get("_thinking"), policy["reasoningEffort"])
     thinking = bool(policy.get("_thinking", policy["thinkingEnabled"] and model.qwen))
     deadline = time.monotonic() + policy["maxRunSeconds"]
+
+    from .business_flow_model import _structured_text
+    from .models import AgentWorkflow
+    from .workflow_discovery import GUIDANCE, WorkflowDiscovery
+
+    discovery = WorkflowDiscovery(
+        AgentWorkflow(
+            owner=user, project_tag_id=project, model=model_id, goal="识别地质资料角色"
+        ),
+        source_run=source_run,
+    )
     snapshots = {
         str(upload.id): (upload.resource_id, upload.resource.updated_at)
         for upload in uploads
@@ -225,6 +236,7 @@ def recognize_roles(
             )
         ):
             raise PermissionDenied("模型思考设置或预算已变化，请重新识别资料角色")
+        discovery.authorize()
 
     guard = ModelStreamGuard(authorize, deadline)
 
@@ -254,11 +266,14 @@ def recognize_roles(
                 for identity, upload in references.items()
             ],
         }
+        search = discovery.packet()
+        payload["discovery"] = search
         messages = [
             {
                 "role": "system",
                 "content": INSTRUCTION
-                + "进行简短判断；previousRoles只是上次确认的参考，本次仍须结合实际资料逐份确认角色。",
+                + "进行简短判断；previousRoles只是上次确认的参考，本次仍须结合实际资料逐份确认角色。"
+                + GUIDANCE,
             },
             {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
         ]
@@ -266,7 +281,8 @@ def recognize_roles(
             guard.poll()
             window = provider.model_window(model)
             guard.poll()
-            for attempt in range(2):
+            attempt = 0
+            while attempt < 2:
                 request_thinking = thinking
                 messages, management = prepare_auxiliary_request(
                     messages,
@@ -296,6 +312,13 @@ def recognize_roles(
                     )
                 )
                 guard.poll()
+                action = discovery.parse(_structured_text(raw), search.get("tools"))
+                if action:
+                    discovery.lookup(action, guard.poll)
+                    search = discovery.packet()
+                    payload["discovery"] = search
+                    messages[1]["content"] = json.dumps(payload, ensure_ascii=False)
+                    continue
                 try:
                     result = validate_roles(raw, uploads, references=references)
                 except ComputeError as exc:
@@ -312,7 +335,8 @@ def recognize_roles(
                         target_id=source_run.pk if source_run else None,
                         target_code=batch_id,
                     )
-                    if attempt:
+                    attempt += 1
+                    if attempt >= 2:
                         break
                     messages += [
                         {"role": "assistant", "content": raw},

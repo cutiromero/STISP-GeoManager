@@ -97,10 +97,7 @@ it("搜索系统数据、加入与上传并列，并仅移除目录引用", asyn
   );
   fireEvent.click(screen.getByRole("button", { name: "选择系统数据" }));
   const dialog = await screen.findByRole("dialog");
-  await waitFor(() =>
-    expect(agentApi.workflowCatalogResources).toHaveBeenCalled(),
-  );
-  fireEvent.click(within(dialog).getByTitle("2"));
+  fireEvent.click(await within(dialog).findByTitle("2"));
   await waitFor(() =>
     expect(agentApi.workflowCatalogResources).toHaveBeenLastCalledWith(
       "",
@@ -118,7 +115,10 @@ it("搜索系统数据、加入与上传并列，并仅移除目录引用", asyn
   await waitFor(() =>
     expect(agentApi.workflowCatalogResources).toHaveBeenLastCalledWith(
       "系统",
-      expect.objectContaining({ signal: expect.anything() }),
+      expect.objectContaining({
+        signal: expect.anything(),
+        source: "registered",
+      }),
       1,
       undefined,
     ),

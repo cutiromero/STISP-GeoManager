@@ -1906,6 +1906,45 @@
       "risk": "low",
       "version": "1.0.1"
     },
+    "search_tools": {
+      "anyPermissions": [],
+      "approval": "none",
+      "capability": "read_data",
+      "completion": "返回当前权限和会话范围内的工具说明",
+      "description": "按名称或用途查找本轮可用的平台工具，query可为空，limit最多12项，按nextOffset继续。",
+      "effect": "read",
+      "idempotency": "只读目录查询",
+      "implementation": "shared_service",
+      "inputSchema": {
+        "additionalProperties": false,
+        "description": "按名称或用途查找本轮可用的平台工具，query可为空，limit最多12项，按nextOffset继续。",
+        "properties": {
+          "limit": {
+            "maximum": 12,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "offset": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "query": {
+            "maxLength": 120,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "limitations": "目录结果只说明工具用途；具体对象、执行权限和人工审核由相关入口核验",
+      "name": "search_tools",
+      "operationIds": [
+        "listAgentCapabilities"
+      ],
+      "requiredPermissions": [],
+      "retry": "根据检索目的调整关键词或翻页",
+      "risk": "low",
+      "version": "1.0.0"
+    },
     "search_web": {
       "anyPermissions": [],
       "approval": "none",

@@ -39,6 +39,7 @@ export function scheduleResourceSearch<Result>(
     error: (reason: unknown) => void;
     settled: () => void;
   },
+  delay = RESOURCE_SEARCH_DELAY_MS,
 ) {
   const controller = new AbortController();
   const timer = setTimeout(() => {
@@ -52,7 +53,7 @@ export function scheduleResourceSearch<Result>(
       .finally(() => {
         if (!controller.signal.aborted) callbacks.settled();
       });
-  }, RESOURCE_SEARCH_DELAY_MS);
+  }, delay);
   return () => {
     clearTimeout(timer);
     controller.abort();

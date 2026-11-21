@@ -439,7 +439,7 @@ def delete_upload(user, upload_id) -> None:
             resource.save(update_fields=["status", "updated_at"])
 
 
-def catalog_resources(user, project_id):
+def catalog_resources(user, project_id, *, source=None):
     from .resource_discovery import discover_resources
     from apps.compute.project_tools import GEOLOGY_PROJECT_CODES
     from apps.projects.models import Project
@@ -449,7 +449,7 @@ def catalog_resources(user, project_id):
         pk=project_id, code__in=GEOLOGY_PROJECT_CODES
     ).exists():
         raise ComputeError("请在逻辑推理项目选择系统数据", 400)
-    return discover_resources(user, policy).filter(
+    return discover_resources(user, policy, source=source).filter(
         project_tag_id=project_id,
         data_type__in={"vector", "raster", "table"},
     )

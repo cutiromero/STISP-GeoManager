@@ -5,6 +5,7 @@ import {
   Input,
   Modal,
   Pagination,
+  Segmented,
   Select,
   Space,
   Tag,
@@ -28,12 +29,16 @@ import {
 } from "react";
 import { agentApi } from "../api/agent";
 import { ResourceSearchLabel } from "./ResourceSearchLabel";
-import { scheduleResourceSearch } from "./resourceSearch";
+import {
+  RESOURCE_SEARCH_DELAY_MS,
+  scheduleResourceSearch,
+} from "./resourceSearch";
 import type { ReasoningEffort } from "./ReasoningEffortControl";
 import type {
   AgentWorkflowUpload,
   AgentWorkflowRoleResult,
   AgentWorkflowCatalogItem,
+  AgentResourceSource,
   AgentLogicConfigurationResult,
 } from "../api/generated/types.gen";
 
@@ -139,7 +144,10 @@ export default function GenericWorkflowUploads({
   const [uploading, setUploading] = useState<string>();
   const [error, setError] = useState("");
   const [catalogOpen, setCatalogOpen] = useState(false);
+  const [catalogSource, setCatalogSource] =
+    useState<AgentResourceSource>("registered");
   const [catalogQuery, setCatalogQuery] = useState("");
+  const [catalogSearchDelay, setCatalogSearchDelay] = useState(0);
   const [catalogComposing, setCatalogComposing] = useState(false);
   const [catalogResultQuery, setCatalogResultQuery] = useState("");
   const [catalogItems, setCatalogItems] = useState<AgentWorkflowCatalogItem[]>(
@@ -170,12 +178,13 @@ export default function GenericWorkflowUploads({
   useEffect(() => {
     if (!catalogOpen || catalogComposing) return;
     setCatalogLoading(true);
+    setCatalogItems([]);
     setCatalogError("");
     return scheduleResourceSearch(
       (signal) =>
         agentApi.workflowCatalogResources(
           catalogQuery,
-          { signal },
+          { signal, source: catalogSource },
           catalogPage,
           directoryId,
         ),
@@ -195,10 +204,13 @@ export default function GenericWorkflowUploads({
         },
         settled: () => setCatalogLoading(false),
       },
+      catalogSearchDelay,
     );
   }, [
     catalogOpen,
+    catalogSource,
     catalogQuery,
+    catalogSearchDelay,
     batchId,
     catalogPage,
     directoryId,
@@ -436,6 +448,19 @@ export default function GenericWorkflowUploads({
       }
     }
   };
+  const changeCatalogQuery = (value: string) => {
+    setCatalogQuery(value);
+    setCatalogPage(1);
+    setCatalogSearchDelay(RESOURCE_SEARCH_DELAY_MS);
+  };
+  const changeCatalogSource = (source: AgentResourceSource) => {
+    setCatalogSource(source);
+    setDirectoryId(undefined);
+    setDirectories([]);
+    setCatalogTotal(0);
+    setCatalogPage(1);
+    setCatalogSearchDelay(0);
+  };
   return (
     <section
       className={
@@ -489,7 +514,11 @@ export default function GenericWorkflowUploads({
           icon={polished ? <PlusOutlined /> : undefined}
           aria-label="选择系统数据"
           disabled={disabled || Boolean(uploading) || recognizing}
-          onClick={() => setCatalogOpen(true)}
+          onClick={() => {
+            changeCatalogSource("registered");
+            setCatalogQuery("");
+            setCatalogOpen(true);
+          }}
         >
           选择系统数据
         </Button>
@@ -549,6 +578,16 @@ export default function GenericWorkflowUploads({
             : `名称命中优先，同级最近更新优先，共 ${catalogTotal} 份。可搜索资料名称或说明；多个关键词以空格分隔且都要包含，可跨页选择。`}
         </p>
         {catalogError && <Alert type="error" title={catalogError} />}
+        <Segmented<AgentResourceSource>
+          aria-label="资料来源"
+          value={catalogSource}
+          options={[
+            { label: "登记数据", value: "registered" },
+            { label: "计算成果", value: "computed" },
+          ]}
+          onChange={changeCatalogSource}
+          style={{ marginBottom: 8 }}
+        />
         <Select
           aria-label="按数据目录筛选"
           allowClear
@@ -562,6 +601,7 @@ export default function GenericWorkflowUploads({
           onChange={(value) => {
             setDirectoryId(value);
             setCatalogPage(1);
+            setCatalogSearchDelay(0);
           }}
         />
         {polished ? (
@@ -575,10 +615,7 @@ export default function GenericWorkflowUploads({
               allowClear
               loading={catalogLoading}
               value={catalogQuery}
-              onChange={(event) => {
-                setCatalogQuery(event.target.value);
-                setCatalogPage(1);
-              }}
+              onChange={(event) => changeCatalogQuery(event.target.value)}
             />
             <div
               className="flow-materials-candidates"
@@ -635,10 +672,7 @@ export default function GenericWorkflowUploads({
               loading={catalogLoading}
               showSearch={{
                 filterOption: false,
-                onSearch: (value) => {
-                  setCatalogQuery(value);
-                  setCatalogPage(1);
-                },
+                onSearch: changeCatalogQuery,
               }}
               value={catalogSelected}
               labelRender={(option) =>
@@ -686,7 +720,10 @@ export default function GenericWorkflowUploads({
           pageSize={20}
           total={catalogTotal}
           showSizeChanger={false}
-          onChange={setCatalogPage}
+          onChange={(page) => {
+            setCatalogPage(page);
+            setCatalogSearchDelay(0);
+          }}
           showTotal={(total) => `共 ${total} 份`}
         />
       </Modal>

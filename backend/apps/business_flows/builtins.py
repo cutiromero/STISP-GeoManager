@@ -69,10 +69,14 @@ def geology_definition(*, legacy_roles=False, main_agent=False):
         **({"executionMode": "main_agent"} if main_agent else {}),
         "skill": {
             **default_skill("geology_generic"),
+            "knowledgeQuestions": [
+                "解释岩性、断层与蚀变的空间关系时，哪些地质证据适用于本研究区和填图尺度？",
+                "评估成矿远景前，哪些蚀变组合或构造位置支持进一步外业核查？",
+            ],
             "nodeInstructions": {
                 "inputs": "按真实字段与样本确认资料含义，蚀变类别不受示例矿物列表限制。",
-                "apply": "核对处置证据，执行范围以用户实际批准记录为准，审核通过不能替代人工批准。",
-                "finish": "由主执行智能体依据完整统计与成果引用撰写综合分析：解释问题、处置效果、要素关系及远景意义，区分事实与假设，说明缺口与核查建议；统计表由平台附入，不能以样本推算全集。报告返修沿用已验证计算和批准范围，不为文字或格式重复运行科学算子。",
+                "apply": "用图斑、关系证据与规则支撑处置建议，说明修改会改善哪项地质解释，并列出值得人工确认的分歧。",
+                "finish": "依据完整统计和成果引用，解释已确认的图面问题、处置前后的变化和各要素对远景判断的贡献，指出仍需外业核查的位置与证据缺口。",
             },
         },
         "inputRequirements": [
@@ -107,9 +111,12 @@ def source_summary_definition(*, main_agent=False):
         "adapter": "research_flow",
         **({"executionMode": "main_agent"} if main_agent else {}),
         "skill": {
-            "title": "只读科研资料梳理",
-            "instructions": "围绕用户目标梳理实际可见资料，区分事实、推断和未读内容。引用真实来源，按需读取有界内容，不复制完整文件或累积历史。格式、引用或审核问题先核对实际诊断；自动补救仍失败时保留成果，先说明错误位置、实际差距、已尝试办法和需要用户处理的内容，再等待人工补充，从当前节点继续并重新校验和审核。人工说明不构成科研批准。遵循当前节点工具及只读要求，不能编造计算、修改或批准。",
+            "title": "科研资料适用性评估",
+            "instructions": "判断哪些项目资料可以回答本次科研问题，为后续选数和研究设计提供依据。核对资料来源、字段口径、时空范围和可见证据，说明结论能推广到哪里，哪些判断需要补充资料。",
             "nodeInstructions": {},
+            "knowledgeQuestions": [
+                "比较不同来源或时期的项目资料前，需要核对哪些空间尺度、抽样条件或字段口径？",
+            ],
         },
         "inputRequirements": [
             {
@@ -125,21 +132,21 @@ def source_summary_definition(*, main_agent=False):
             {
                 "id": "summarize",
                 "title": "梳理资料与研究线索",
-                "description": "读取已授权元信息和可用内容，整理关键字段、事实、局限与后续研究线索。",
+                "description": "定位能支撑研究判断的资料和仍待核查的信息。",
                 "kind": "agent",
                 "dependsOn": [],
                 "dataRoles": ["source"],
-                "instruction": "请基于本次绑定资料的实际证据，给出简明的资料摘要、可用字段、可信范围和后续研究建议。明确区分事实与推断，不修改原始资料。",
+                "instruction": "用实际读取的字段和内容说明资料能回答的问题，并注明样本覆盖范围。资料口径冲突时列出各自来源以及对比较结论的影响。",
                 "review": {"ai": False, "human": False, "maxRevisions": 0},
             },
             {
                 "id": "finish",
                 "title": "汇总成果",
-                "description": "形成可追溯的资料摘要与引用。",
+                "description": "让后续研究者按结论找到原始依据和待核实项。",
                 "kind": "result",
                 "dependsOn": ["summarize"],
                 "dataRoles": [],
-                "instruction": "整理已完成节点的结果与依据。",
+                "instruction": "交付结论与资料的对应关系，并按影响程度列出仍需补充的事实。",
                 "review": {"ai": False, "human": False, "maxRevisions": 0},
             },
         ],
@@ -149,13 +156,16 @@ def source_summary_definition(*, main_agent=False):
 
 def source_review_definition(*, main_agent=False):
     definition = source_summary_definition(main_agent=main_agent)
+    definition["skill"]["knowledgeQuestions"] = [
+        "评价本研究的证据强弱前，相关学科标准怎样界定抽样、适用范围和结论可比性？",
+    ]
     summary = definition["nodes"][0]
     summary["title"] = "梳理资料并形成审校稿"
     summary["description"] = (
         "梳理资料结构、适用范围和研究解释，审核依据与局限，确认后生成报告。"
     )
     summary["instruction"] = (
-        "请根据本次绑定资料的实际可见证据，整理资料结构、关键字段、适用范围和有依据的研究解释。明确已读内容、抽样或仅元信息的范围，区分事实与推断，说明局限；不修改原始资料。先形成待独立审核和用户接受的审校稿，不能声称用户已经批准。"
+        "以已读内容和可定位字段为证据给出审校稿。分别说明事实、解释和待验证假设；资料缺失或抽样覆盖有限时，指出会受影响的结论。"
     )
     summary["review"] = {"ai": True, "human": True, "maxRevisions": 1}
     definition["nodes"][1]["description"] = (

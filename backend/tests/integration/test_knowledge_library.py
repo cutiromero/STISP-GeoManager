@@ -110,7 +110,7 @@ def test_upload_real_local_archive_and_separate_permission_domains(env):
     items = env.client.get(
         "/api/knowledge/documents/", HTTP_X_PROJECT_ID=str(env.project.id)
     ).json()["items"]
-    assert {x["id"] for x in items} == {public["id"], shared["id"]}
+    assert {x["id"] for x in items} == {shared["id"]}
     assert all("upstream" not in json.dumps(x) for x in items)
 
 
