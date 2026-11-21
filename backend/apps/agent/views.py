@@ -15,7 +15,7 @@ from django.views.decorators.gzip import gzip_page
 from apps.audit.service import log_operation
 from apps.core.api import api_login_required
 from apps.core.initialization import GUEST_GROUP_NAME
-from apps.projects.context import is_superadmin
+from apps.projects.context import is_superadmin, selected_project_id
 from apps.compute.services import ComputeError
 from .config import registry
 from .models import (
@@ -1329,7 +1329,7 @@ def workflow_recognize_roles(request):
     return JsonResponse(
         recognize_roles(
             request.user,
-            request.headers.get("X-Project-Id"),
+            selected_project_id(),
             value.get("batchId"),
             value["model"],
             reasoning_effort=value.get("reasoningEffort"),

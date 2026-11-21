@@ -734,6 +734,40 @@ it("lets a researcher create and edit definitions when the server grants authori
   fireEvent.change(fields.getByRole("textbox", { name: /流程编码/ }), {
     target: { value: "research-example" },
   });
+  fireEvent.click(fields.getByRole("radio", { name: "科研目的" }));
+  fireEvent.change(
+    fields.getByRole("textbox", { name: "科研目的与判断依据" }),
+    {
+      target: {
+        value: "核对样地资料是否能用于比较不同年份，结合实际抽样口径判断。",
+      },
+    },
+  );
+  fireEvent.click(fields.getByRole("radio", { name: "资料与交付" }));
+  fireEvent.change(fields.getByRole("textbox", { name: "交付要求" }), {
+    target: { value: "跨年可比性核查清单" },
+  });
+  fireEvent.click(fields.getByRole("radio", { name: "节点设计" }));
+  for (const [name, purpose, instruction] of [
+    ["分析项目资料", "核对两年的抽样口径。", "比较样地编号、时间和采样间距。"],
+    [
+      "整理科研成果",
+      "确定可以纳入跨年对比的样地。",
+      "交付可比样地及其源记录引用。",
+    ],
+  ]) {
+    fireEvent.click(
+      fields.getByRole("button", {
+        name: (label) => label.startsWith(`${name}，`),
+      }),
+    );
+    fireEvent.change(fields.getByRole("textbox", { name: "节点目的" }), {
+      target: { value: purpose },
+    });
+    fireEvent.change(fields.getByRole("textbox", { name: "判断与交付" }), {
+      target: { value: instruction },
+    });
+  }
   fireEvent.click(fields.getByRole("button", { name: "保存并发布" }));
   await waitFor(() => expect(create).toHaveBeenCalledOnce());
   expect(create.mock.calls[0]?.[0].definition.executionMode).toBe("main_agent");
@@ -744,12 +778,9 @@ it("lets a researcher create and edit definitions when the server grants authori
   );
   const editor = within(await screen.findByRole("dialog"));
   const instruction = "核对输入资料，依据实际结果说明适用范围。";
-  fireEvent.change(
-    editor.getAllByRole("textbox", { name: "处理要求与通过依据" })[0]!,
-    {
-      target: { value: instruction },
-    },
-  );
+  fireEvent.change(editor.getByRole("textbox", { name: "判断与交付" }), {
+    target: { value: instruction },
+  });
   fireEvent.click(editor.getByRole("button", { name: "保存并发布" }));
   await waitFor(() => expect(publish).toHaveBeenCalledOnce());
   expect(publish.mock.calls[0]?.[1].definition.nodes[0]?.instruction).toBe(
