@@ -240,7 +240,7 @@ export function useWorkspaceScenes({
   );
 
   const loadWorkspaceScene = useCallback(
-    async (scene: WorkspaceSceneSummary | number) => {
+    async (scene: WorkspaceSceneSummary | number, animate = true) => {
       const sceneId = typeof scene === "number" ? scene : scene.id;
       const existing = sceneLoads.current.get(sceneId);
       if (existing) return existing;
@@ -303,6 +303,20 @@ export function useWorkspaceScenes({
           status: "active",
           detail: "正在应用图层和地图视图",
         });
+        const map = mapRef.current;
+        if (snapshot.mapView && map) {
+          const view = {
+            center: snapshot.mapView.center,
+            zoom: snapshot.mapView.zoom,
+            bearing: snapshot.mapView.bearing,
+            pitch: snapshot.mapView.pitch,
+          };
+          if (animate) {
+            map.flyTo({ ...view, duration: 800, essential: true });
+          } else {
+            map.jumpTo(view);
+          }
+        }
         replaceGroups(restoredGroups);
         const restoredLayers = restoredGroups.flatMap(
           (group) => group.children,
@@ -313,16 +327,6 @@ export function useWorkspaceScenes({
             : (restoredLayers[0]?.id ?? null),
         );
         onWorkspaceLoaded();
-        if (snapshot.mapView && mapRef.current) {
-          mapRef.current.flyTo({
-            center: snapshot.mapView.center,
-            zoom: snapshot.mapView.zoom,
-            bearing: snapshot.mapView.bearing,
-            pitch: snapshot.mapView.pitch,
-            duration: 800,
-            essential: true,
-          });
-        }
         openWorkspaceProgressNotification(notification, {
           key: notificationKey,
           title: `${label}已加载`,
@@ -358,7 +362,7 @@ export function useWorkspaceScenes({
 
   const loadWorkspaceSceneById = useCallback(
     async (sceneId: number) => {
-      await loadWorkspaceScene(sceneId);
+      await loadWorkspaceScene(sceneId, false);
     },
     [loadWorkspaceScene],
   );

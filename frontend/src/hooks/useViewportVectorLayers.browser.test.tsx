@@ -143,6 +143,28 @@ function harness(
   return { ...hook, onError };
 }
 describe("view-bound vector loading", () => {
+  it("continues other layers when a resource cannot be read", async () => {
+    const group = fixture();
+    const layer = group.children[0] as LoadedVectorLayer;
+    group.children.push({
+      ...layer,
+      id: "second",
+      sourceResource: { ...layer.sourceResource, id: 8 },
+    });
+    mocks.queryResource.mockImplementation(async (resource) => {
+      if (resource.id === 7) throw new Error("资源已停用");
+      return result(88);
+    });
+    const h = harness(new Camera(), group);
+    await waitFor(() =>
+      expect(
+        (h.result.current[0]!.children[1] as LoadedVectorLayer).geojson
+          .features[0]?.id,
+      ).toBe(88),
+    );
+    expect(h.onError).toHaveBeenCalledWith("points：资源已停用");
+  });
+
   it("upgrades an existing layer once and moves without querying large GeoJSON", async () => {
     const camera = new Camera();
     const preview = {

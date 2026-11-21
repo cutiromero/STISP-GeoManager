@@ -1,11 +1,23 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
+import { App } from "antd";
+import type { Map as MapboxMap } from "mapbox-gl";
+import type { PropsWithChildren } from "react";
 import { expect, it, vi } from "vitest";
+import { api } from "../api/client";
+import { useWorkspaceScenes } from "../hooks/useWorkspaceScenes";
+import { cloneDefaultVectorSymbolization } from "../symbolization";
 import {
   mapUrlResourceIds,
   mapUrlResourceBounds,
   useMapUrlResources,
 } from "./MapPage";
-import type { LoadedLayer, ResourceListItem } from "../types";
+import type {
+  DataResourceProfile,
+  LoadedLayer,
+  ResourceListItem,
+  WorkspaceScene,
+} from "../types";
+import { createEmptyLayerGroup } from "../utils/layerFactory";
 
 const resources: ResourceListItem[] = [1, 2, 3].map((id) => ({
   id,
@@ -28,6 +40,79 @@ const resources: ResourceListItem[] = [1, 2, 3].map((id) => ({
   isRenderable: id === 1,
   updatedAt: "2026-10-10",
 }));
+
+it("applies the linked workspace camera before committing its large vector layer", async () => {
+  const resource = { ...resources[1]!, sizeBytes: 4 * 1024 * 1024 };
+  const savedView = {
+    center: [96.63, 35.99] as [number, number],
+    zoom: 9.3,
+    bearing: 0,
+    pitch: 0,
+  };
+  const layer = {
+    id: "rocks",
+    name: resource.name,
+    sourceResource: resource,
+    layerType: "vector",
+    geometryType: "Polygon",
+    visible: true,
+    fields: [],
+    metadata: {},
+    summary: "岩性图",
+    symbolization: cloneDefaultVectorSymbolization(),
+    query: { attributeFilters: [], spatialFilter: null },
+  };
+  const workspace = vi.spyOn(api, "workspace").mockResolvedValue({
+    id: 83,
+    kind: "project",
+    name: "Agent 地图",
+    snapshot: {
+      mapView: savedView,
+      selectedLayerId: layer.id,
+      groups: [{ ...createEmptyLayerGroup("岩性"), children: [layer] }],
+    },
+  } as WorkspaceScene);
+  const profile = vi.spyOn(api, "resourceProfile").mockResolvedValue({
+    resource,
+    fields: [],
+    featureCount: 570,
+    geometryType: "Polygon",
+  } as DataResourceProfile);
+  const query = vi.spyOn(api, "queryResource");
+  const jumpTo = vi.fn();
+  const flyTo = vi.fn();
+  const replaceGroups = vi.fn(() =>
+    expect(jumpTo).toHaveBeenCalledWith(savedView),
+  );
+  const view = renderHook(
+    () =>
+      useWorkspaceScenes({
+        canViewWorkspaces: true,
+        canQueryData: true,
+        canLoadVectorLayer: true,
+        canLoadRasterLayer: true,
+        queryResultLimit: 10000,
+        groups: [],
+        selectedLayerId: null,
+        currentMapView: null,
+        mapRef: { current: { jumpTo, flyTo } as unknown as MapboxMap },
+        replaceGroups,
+        setSelectedLayerId: vi.fn(),
+        onWorkspaceLoaded: vi.fn(),
+      }),
+    { wrapper: ({ children }: PropsWithChildren) => <App>{children}</App> },
+  );
+  try {
+    await act(() => view.result.current.loadWorkspaceSceneById(83));
+    expect(replaceGroups).toHaveBeenCalledOnce();
+    expect(flyTo).not.toHaveBeenCalled();
+    expect(query).not.toHaveBeenCalled();
+  } finally {
+    workspace.mockRestore();
+    profile.mockRestore();
+    query.mockRestore();
+  }
+});
 
 function options(params = "resources=1,2&projectTagId=2") {
   return {

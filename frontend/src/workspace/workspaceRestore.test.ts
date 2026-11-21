@@ -115,13 +115,14 @@ const notification = {
 
 describe("restoreWorkspaceGroups", () => {
   it("defers a large unfiltered saved layer until the final map viewport", async () => {
+    const resource = makeResource({ sizeBytes: 10, itemCount: 1 });
     mockApi.resourceProfile.mockResolvedValue({
+      resource: { ...resource, sizeBytes: 3706880, itemCount: 541 },
       fields: [],
       featureCount: 541,
       geometryType: "Polygon",
       bounds: [95, 35, 96, 36],
     });
-    const resource = makeResource({ sizeBytes: 3706880, itemCount: 541 });
     const result = await restoreWorkspaceGroups({
       savedGroups: [
         makeGroup([
@@ -140,6 +141,7 @@ describe("restoreWorkspaceGroups", () => {
     expect(mockApi.queryResource).not.toHaveBeenCalled();
     expect(result.groups[0].children[0]).toMatchObject({
       viewportOnly: true,
+      sourceResource: { sizeBytes: 3706880, itemCount: 541 },
       geojson: { features: [] },
       metadata: { 视野查询键: "", 视野刷新时间: 0 },
     });
@@ -179,6 +181,7 @@ describe("restoreWorkspaceGroups", () => {
     expect(result.issues).toEqual([]);
     expect(result.groups[0]!.children[0]).toMatchObject({
       vectorTiles: preview,
+      metadata: { 加载方式: "分级矢量瓦片" },
       geojson: { features: [] },
     });
     expect(mockApi.queryResource).not.toHaveBeenCalled();
