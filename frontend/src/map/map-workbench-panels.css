@@ -19,7 +19,10 @@
 .workspace-map-resizable
   .map-container
   :is(.mapboxgl-ctrl-bottom-left, .mapboxgl-ctrl-bottom-right) {
-  bottom: calc(var(--workspace-edge) + var(--map-control-bottom-clearance));
+  bottom: calc(
+    var(--workspace-edge) +
+      max(0px, var(--map-control-bottom-clearance) - var(--workspace-gap) + 2px)
+  );
   transition: bottom 180ms ease;
 }
 .workspace-map-resizable .map-container .mapboxgl-ctrl-bottom-left {
@@ -50,6 +53,12 @@
 }
 .workspace-map-resizable .map-container .mapboxgl-ctrl-bottom-right {
   right: var(--map-right-edge);
+}
+.workspace-map-resizable
+  .map-container
+  .mapboxgl-ctrl-bottom-right
+  > .mapboxgl-ctrl-attrib {
+  margin-bottom: 0;
 }
 .workspace-map-resizable
   .map-container
