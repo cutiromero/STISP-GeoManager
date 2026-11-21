@@ -92,6 +92,49 @@ def recipe(resource):
     }
 
 
+@pytest.mark.efficiency
+def test_agent_workspace_prepares_large_polygon_tiles_after_commit(
+    mapped, monkeypatch, django_capture_on_commit_callbacks
+):
+    from apps.agent import workspace_vector_tiles
+
+    env = mapped
+    user = env["user"]
+    query_permission = Permission.objects.get(
+        content_type__app_label="core", codename="query_data"
+    )
+    user.user_permissions.add(query_permission)
+    prepared = []
+    monkeypatch.setattr(
+        workspace_vector_tiles,
+        "prepare_vector_tiles",
+        lambda resource: prepared.append(resource.pk),
+    )
+    monkeypatch.setattr(workspace_vector_tiles, "close_old_connections", lambda: None)
+
+    def run_inline(*, target, args, **_options):
+        from types import SimpleNamespace
+
+        return SimpleNamespace(start=lambda: target(*args))
+
+    monkeypatch.setattr(workspace_vector_tiles.threading, "Thread", run_inline)
+    with project_scope(env["scope"]):
+        resource = env["vector"]
+        resource.size_bytes = 4 * 1024 * 1024
+        resource.save(update_fields=["size_bytes"])
+        run = new_run(env)
+        with django_capture_on_commit_callbacks(execute=True):
+            result = call(run, "prepare_map_workspace", {"resourceIds": [resource.pk]})
+            assert WorkspaceScene.objects.filter(pk=result["workspaceId"]).exists()
+            assert prepared == []
+        assert prepared == [resource.pk]
+
+        with django_capture_on_commit_callbacks(execute=True):
+            call(run, "prepare_map_workspace", {"resourceIds": [resource.pk]})
+            user.user_permissions.remove(query_permission)
+        assert prepared == [resource.pk]
+
+
 def test_real_categories_and_idempotent_personal_map_keep_original_data(mapped):
     env = mapped
     with project_scope(env["scope"]):

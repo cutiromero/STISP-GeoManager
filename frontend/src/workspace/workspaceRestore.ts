@@ -110,16 +110,21 @@ export async function restoreWorkspaceGroups({
         }
         try {
           const profile = await api.resourceProfile(savedLayer.sourceResource);
+          const resource = profile.resource ?? savedLayer.sourceResource;
           const unfiltered =
             !savedLayer.query.attributeFilters.length &&
             !savedLayer.query.spatialFilter;
           const deferred =
-            unfiltered && isLargeVectorResource(savedLayer.sourceResource);
+            unfiltered &&
+            isLargeVectorResource({
+              ...resource,
+              itemCount: profile.featureCount ?? resource.itemCount,
+            });
           const tiled = unfiltered && profile.vectorTiles;
           const result =
             tiled || deferred
-              ? tilePreviewResult(savedLayer.sourceResource, profile)
-              : await api.queryResource(savedLayer.sourceResource, {
+              ? tilePreviewResult(resource, profile)
+              : await api.queryResource(resource, {
                   attributeFilters: savedLayer.query.attributeFilters,
                   spatialFilter: savedLayer.query.spatialFilter,
                   limit: queryResultLimit,
@@ -127,7 +132,7 @@ export async function restoreWorkspaceGroups({
                 });
           showGeojsonWarnings(notification, result.warnings);
           const queryGroup = createVectorLayerGroup(
-            savedLayer.sourceResource,
+            resource,
             profile,
             result,
             savedLayer.query,
@@ -139,18 +144,22 @@ export async function restoreWorkspaceGroups({
               id: savedLayer.id,
               name: savedLayer.name,
               visible: savedLayer.visible,
-              summary: savedLayer.summary,
-              metadata: deferred
-                ? { ...savedLayer.metadata, 视野查询键: "", 视野刷新时间: 0 }
-                : savedLayer.metadata,
+              summary: tiled
+                ? restoredVectorLayer.summary
+                : deferred
+                  ? "按当前地图范围加载"
+                  : savedLayer.summary,
+              metadata: tiled
+                ? { ...savedLayer.metadata, ...restoredVectorLayer.metadata }
+                : deferred
+                  ? { ...savedLayer.metadata, 视野查询键: "", 视野刷新时间: 0 }
+                  : savedLayer.metadata,
               symbolization: restoreVectorStyle(
                 restoredVectorLayer.symbolization,
                 savedLayer.symbolization as LoadedVectorLayer["symbolization"],
               ),
               fields: savedLayer.fields,
-              ...(deferred
-                ? { viewportOnly: true, summary: "按当前地图范围加载" }
-                : {}),
+              ...(deferred ? { viewportOnly: true } : {}),
             });
           }
         } catch (error) {

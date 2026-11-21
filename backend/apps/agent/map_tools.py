@@ -17,6 +17,7 @@ from .map_profiles import cached_profile, map_profile, require_map_read
 from .map_styles import display_style
 from .platform_actions import PAGES
 from .resource_discovery import resolve_discoverable_resource
+from .workspace_vector_tiles import schedule_workspace_vector_tiles
 
 MAX_LAYERS = 5
 MAX_SNAPSHOT_BYTES = 512 * 1024
@@ -241,6 +242,15 @@ def execute_map(run, user, policy, name, args):
     }
     if len(json.dumps(snapshot, ensure_ascii=False).encode()) > MAX_SNAPSHOT_BYTES:
         raise ValidationError("地图配置超过512KiB，请减少图层或类别")
+    tile_candidates = [
+        resource.id
+        for resource, profile in zip(resources, profiles, strict=True)
+        if profile["geometryType"] in {"Polygon", "MultiPolygon"}
+        and (
+            (profile.get("featureCount") or 0) >= 1500
+            or resource.size_bytes >= 2 * 1024 * 1024
+        )
+    ]
     with transaction.atomic():
         # Reserve SQLite's writer before any read/modify/write transaction snapshot.
         get_user_model().objects.filter(pk=user.id, is_active=True).update(
@@ -298,6 +308,8 @@ def execute_map(run, user, policy, name, args):
                 target_type="workspace_scene",
                 target_id=scene.id,
             )
+        if tile_candidates:
+            schedule_workspace_vector_tiles(run.id, tile_candidates)
     result = {
         "workspaceId": scene.id,
         "workspaceName": scene.name,

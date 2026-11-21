@@ -2635,7 +2635,7 @@ function MapWorkspace() {
       );
       return;
     }
-    if (loadedSceneIdRef.current === sceneId) {
+    if (!mapObject || loadedSceneIdRef.current === sceneId) {
       return;
     }
     loadedSceneIdRef.current = sceneId;
@@ -2654,7 +2654,7 @@ function MapWorkspace() {
       }
     }
     void loadSceneFromUrl();
-  }, [english, loadWorkspaceSceneById, message, searchParams]);
+  }, [english, loadWorkspaceSceneById, mapObject, message, searchParams]);
 
   const layerContextValue: LayerContextValue = {
     groups: layerGroups.groups,

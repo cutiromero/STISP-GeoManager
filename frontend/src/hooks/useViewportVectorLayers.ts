@@ -79,16 +79,15 @@ export function useViewportVectorLayers(options: {
             Number(b.layer.geometryType.toLowerCase().includes("line")) -
             Number(a.layer.geometryType.toLowerCase().includes("line")),
         );
-      try {
-        // Prioritize pipelines and use the backend's two display-query slots.
-        let cursor = 0;
-        async function loadNext() {
-          while (cursor < layers.length) {
-            const { groupId, layer } = layers[cursor++]!;
-            if (layer.layerType !== "vector" || !isViewportVectorLayer(layer))
-              continue;
-            if (disposed || signal.aborted || latest.current.scope !== scope)
-              return;
+      let cursor = 0;
+      async function loadNext() {
+        while (cursor < layers.length) {
+          const { groupId, layer } = layers[cursor++]!;
+          if (layer.layerType !== "vector" || !isViewportVectorLayer(layer))
+            continue;
+          if (disposed || signal.aborted || latest.current.scope !== scope)
+            return;
+          try {
             const body = viewportQueryPayload(
               box,
               context.limit,
@@ -170,17 +169,22 @@ export function useViewportVectorLayers(options: {
                   )
                 : l,
             );
+          } catch (error) {
+            if (
+              disposed ||
+              current !== revision ||
+              signal.aborted ||
+              latest.current.scope !== scope
+            )
+              return;
+            latest.current.onError(
+              `${layer.name}：${error instanceof Error ? error.message : "当前视野加载失败"}`,
+            );
           }
         }
-        await Promise.all([loadNext(), loadNext()]);
-      } catch (error) {
-        if (!disposed && current === revision && !signal.aborted) {
-          controller?.abort();
-          latest.current.onError(
-            error instanceof Error ? error.message : "当前视野加载失败",
-          );
-        }
       }
+      // Prioritize pipelines and bound concurrent profile reads.
+      await Promise.all([loadNext(), loadNext()]);
     }
     function cancel() {
       revision++;
@@ -193,7 +197,7 @@ export function useViewportVectorLayers(options: {
     }
     map.on("movestart", cancel);
     map.on("moveend", schedule);
-    schedule();
+    void refresh();
     return () => {
       disposed = true;
       cancel();
