@@ -55,7 +55,15 @@ def geology_definition(*, legacy_roles=False, main_agent=False):
                 }[identity],
                 "dependsOn": [GEOLOGY_NODES[index - 1][0]] if index else [],
                 "dataRoles": [role for role in roles if role in input_roles],
-                "instruction": "",
+                "instruction": {
+                    "inputs": "确认各图层、类别与字段在本研究中的含义及覆盖范围，让后续判断可以追溯到实际资料。口径不一致时说明会影响哪项地质判断。",
+                    "check": "从空间量测、属性与当地适用规则解释已发现的图面矛盾，区分证据充分的问题、尺度差异与地质解释分歧。",
+                    "apply": "逐项说明候选处置会改善哪项地质解释，以及应暂留哪些高不确定对象。按已核验的依据提交人工确认。",
+                    "recheck": "比较处置前后相同空间范围和统计口径，核查已处置问题是否解决、哪些位置需要再判读。",
+                    "relations": "结合真实交汇位置、几何与交切证据判断可支持的构造关系，标明关系仍待核实的位置。",
+                    "prospect": "解释岩性背景、构造位置和蚀变组合各自怎样支持远景判断，区分可定位的优先核查区与低置信区域。",
+                    "finish": "按研究目的串联已核验问题、处置效果和找矿线索。给出实际成果引用及外业核查要解决的问题。",
+                }[identity],
                 "review": {
                     "ai": identity in {"apply", "finish"},
                     "human": identity in {"inputs", "apply"},

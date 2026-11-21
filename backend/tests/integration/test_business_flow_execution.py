@@ -94,8 +94,8 @@ def test_actors_inherit_configured_generation_and_time_budgets(
     guards = []
     real_guard = transport.ModelStreamGuard
 
-    def capture_guard(check, deadline):
-        guard = real_guard(check, deadline)
+    def capture_guard(check, deadline, **options):
+        guard = real_guard(check, deadline, **options)
         guards.append(guard)
         return guard
 

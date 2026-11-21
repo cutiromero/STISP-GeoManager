@@ -87,7 +87,7 @@ def test_visible_batch_refs_preserve_valid_partial_edits_and_reject_deferred_cit
             "id": 201,
             "revision": 3,
             "title": "后续远景规则",
-            "trialBinding": {"ruleId": "P-01"},
+            "trialBinding": {"ruleId": "P-01", "ruleVersion": "1.0.0"},
         }
     )
     refs = evidence_refs(workflow, [], results)
