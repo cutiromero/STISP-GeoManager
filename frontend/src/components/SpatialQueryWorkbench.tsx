@@ -143,15 +143,6 @@ export default function SpatialQueryWorkbench({
 
   return (
     <section className="spatial-workbench" aria-label={t("spatial.workbench")}>
-      <div className="spatial-workbench-heading">
-        <span>
-          <AimOutlined style={{ fontSize: 15 }} />
-          <Typography.Text strong>{t("spatial.workbench")}</Typography.Text>
-        </span>
-        <Typography.Text type="secondary">
-          {t("spatial.workbenchDescription")}
-        </Typography.Text>
-      </div>
       <div className="spatial-workbench-grid">
         <RangeSection
           spatialFilter={spatialFilter}

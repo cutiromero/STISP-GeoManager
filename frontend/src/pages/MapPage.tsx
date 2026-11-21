@@ -19,7 +19,6 @@ import {
   Layout,
   Spin,
   Tabs,
-  Tooltip,
 } from "antd";
 import type { LngLatBounds, Map as MapboxMap } from "mapbox-gl";
 import {
@@ -744,6 +743,8 @@ function MapWorkspace() {
   const [spatialQueryResult, setSpatialQueryResult] =
     useState<SpatialQueryWorkbenchResult | null>(null);
   const [spatialWorkbenchOpen, setSpatialWorkbenchOpen] = useState(false);
+  const [mapToolbarContainer, setMapToolbarContainer] =
+    useState<HTMLDivElement | null>(null);
   const [activeDraw, setActiveDraw] = useState<{
     purpose: DrawPurpose;
     mode: NonNullable<DrawMode>;
@@ -2913,6 +2914,15 @@ function MapWorkspace() {
       onLoadRaster={handleLoadRaster}
     />
   );
+  const openSpatialWorkbenchLabel = english
+    ? "Open spatial query workspace"
+    : "打开空间查询工作台";
+  const toggleSpatialWorkbenchLabel = spatialWorkbenchOpen
+    ? english
+      ? "Hide spatial query workspace"
+      : "隐藏空间查询工作台"
+    : openSpatialWorkbenchLabel;
+
   return (
     <Layout className="workspace">
       <WorkspaceHeader
@@ -3018,6 +3028,7 @@ function MapWorkspace() {
                 bootstrap={bootstrap}
                 basemapPreferenceScope={`user:${user?.id ?? "anonymous"}`}
                 basemapSwitchDisabled={mapExporting}
+                toolbarContainer={mapToolbarContainer}
                 initialViewState={currentMapView}
                 loadedLayers={mapLayers}
                 drawMode={activeDraw?.mode ?? null}
@@ -3210,30 +3221,63 @@ function MapWorkspace() {
               : "spatial-workbench-panel-collapsed"
           }`}
           aria-label={english ? "Spatial query panel" : "空间查询面板"}
-          aria-expanded={spatialWorkbenchOpen}
         >
           <ConfigProvider theme={workspacePanelTheme}>
-            {spatialWorkbenchOpen ? (
-              <>
-                <Tooltip
-                  title={
-                    english
-                      ? "Hide spatial query workspace"
-                      : "隐藏空间查询工作台"
-                  }
+            <div className="spatial-workbench-header">
+              <div className="spatial-workbench-heading">
+                <span className="spatial-workbench-peek-icon" aria-hidden>
+                  <AimOutlined style={{ fontSize: 15 }} />
+                </span>
+                <span className="spatial-workbench-peek-copy">
+                  <strong>
+                    {spatialWorkbenchOpen
+                      ? i18n.t("spatial.workbench")
+                      : openSpatialWorkbenchLabel}
+                  </strong>
+                  {!spatialWorkbenchOpen && (
+                    <small>{spatialWorkbenchStatus}</small>
+                  )}
+                </span>
+              </div>
+              <div
+                className="spatial-workbench-map-tools"
+                ref={setMapToolbarContainer}
+              />
+              {spatialWorkbenchOpen && (
+                <span
+                  className="spatial-workbench-hint"
+                  title={i18n.t("spatial.workbenchDescription")}
                 >
-                  <Button
-                    className="spatial-workbench-collapse-button"
-                    type="text"
-                    icon={<DownOutlined style={{ fontSize: 14 }} />}
-                    aria-label={
-                      english
-                        ? "Hide spatial query workspace"
-                        : "隐藏空间查询工作台"
-                    }
-                    onClick={() => setSpatialWorkbenchOpen(false)}
-                  />
-                </Tooltip>
+                  {i18n.t("spatial.workbenchDescription")}
+                </span>
+              )}
+              <button
+                className="spatial-workbench-toggle"
+                type="button"
+                title={toggleSpatialWorkbenchLabel}
+                aria-label={toggleSpatialWorkbenchLabel}
+                aria-controls="spatial-query-workbench-content"
+                aria-expanded={spatialWorkbenchOpen}
+                onClick={() => setSpatialWorkbenchOpen((open) => !open)}
+              >
+                {spatialWorkbenchOpen ? (
+                  <DownOutlined />
+                ) : (
+                  <>
+                    <span className="spatial-workbench-toggle-label">
+                      {english ? "Open" : "打开"}
+                    </span>
+                    <UpOutlined />
+                  </>
+                )}
+              </button>
+            </div>
+            <div
+              className="spatial-workbench-content"
+              id="spatial-query-workbench-content"
+              hidden={!spatialWorkbenchOpen}
+            >
+              {spatialWorkbenchOpen && (
                 <SpatialQueryWorkbench
                   layers={allLayers}
                   selectedResource={spatialTargetResource}
@@ -3267,37 +3311,8 @@ function MapWorkspace() {
                   onClearSpatialResult={handleClearSpatialResult}
                   onExportMapPng={exportCurrentMapPng}
                 />
-              </>
-            ) : (
-              <button
-                className="spatial-workbench-peek-card"
-                type="button"
-                aria-label={
-                  english
-                    ? "Open spatial query workspace"
-                    : "打开空间查询工作台"
-                }
-                aria-controls="spatial-query-workbench-panel"
-                aria-expanded={spatialWorkbenchOpen}
-                onClick={() => setSpatialWorkbenchOpen(true)}
-              >
-                <span className="spatial-workbench-peek-icon" aria-hidden>
-                  <AimOutlined style={{ fontSize: 15 }} />
-                </span>
-                <span className="spatial-workbench-peek-copy">
-                  <strong>
-                    {english
-                      ? "Open spatial query workspace"
-                      : "打开空间查询工作台"}
-                  </strong>
-                  <small>{spatialWorkbenchStatus}</small>
-                </span>
-                <span className="spatial-workbench-peek-action">
-                  <span>{english ? "Open" : "打开"}</span>
-                  <UpOutlined style={{ fontSize: 13 }} />
-                </span>
-              </button>
-            )}
+              )}
+            </div>
           </ConfigProvider>
         </aside>
       </div>

@@ -133,7 +133,7 @@ export default function BasemapSwitcher({
   return (
     <span
       className={["basemap-switcher", className].filter(Boolean).join(" ")}
-      title={disabled ? disabledReason : undefined}
+      title={disabled ? disabledReason : triggerLabel}
     >
       <Popover content={content} placement="topLeft" trigger="click">
         <Button
@@ -149,9 +149,7 @@ export default function BasemapSwitcher({
               : triggerLabel
           }
           aria-busy={switching}
-        >
-          {activeBasemap?.label ?? t("map.selectBasemap")}
-        </Button>
+        />
       </Popover>
     </span>
   );

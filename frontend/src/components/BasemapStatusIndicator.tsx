@@ -133,12 +133,13 @@ export default function BasemapStatusIndicator({
             : `底图服务状态：${presentation.label}`
         }
         aria-live="polite"
+        title={
+          latency === null
+            ? presentation.label
+            : `${presentation.label} · ${latency} ms`
+        }
       >
         <StatusIcon presentation={presentation} />
-        <span className="basemap-status-label">{presentation.label}</span>
-        {latency !== null ? (
-          <span className="basemap-status-latency">{latency} ms</span>
-        ) : null}
       </button>
     </Popover>
   );

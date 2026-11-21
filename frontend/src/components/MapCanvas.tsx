@@ -19,6 +19,7 @@ import mapboxgl, {
 import "mapbox-gl/dist/mapbox-gl.css";
 import tiandituTileProviderUrl from "../map/tiandituTileProvider.js?url";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import BasemapStatusIndicator from "./BasemapStatusIndicator";
 import BasemapSwitcher from "./BasemapSwitcher";
@@ -134,6 +135,7 @@ interface Props {
   bootstrap: Bootstrap;
   basemapPreferenceScope: string;
   basemapSwitchDisabled?: boolean;
+  toolbarContainer: HTMLDivElement | null;
   initialViewState?: MapViewState | null;
   loadedLayers: LoadedLayer[];
   drawMode: DrawMode | null;
@@ -177,6 +179,7 @@ export default function MapCanvas({
   bootstrap,
   basemapPreferenceScope,
   basemapSwitchDisabled = false,
+  toolbarContainer,
   initialViewState,
   loadedLayers,
   drawMode,
@@ -520,6 +523,7 @@ export default function MapCanvas({
       language: mapLabelLanguage(),
       localIdeographFontFamily: '"Microsoft YaHei", "PingFang SC", sans-serif',
       attributionControl: false,
+      logoPosition: "bottom-left",
       performanceMetricsCollection: false,
     };
     if (mapboxToken) {
@@ -666,11 +670,9 @@ export default function MapCanvas({
         const panel = coordinatePanelRef.current;
         if (!panel) return;
         panel.textContent = lngLat
-          ? english
-            ? `Longitude ${lngLat[0].toFixed(4)}  Latitude ${lngLat[1].toFixed(4)}`
-            : `经度 ${lngLat[0].toFixed(4)}  纬度 ${lngLat[1].toFixed(4)}`
+          ? `${lngLat[0].toFixed(4)}, ${lngLat[1].toFixed(4)}`
           : english
-            ? "Coordinates --"
+            ? "Lon/Lat --"
             : "经纬度 --";
       });
     };
@@ -1120,78 +1122,101 @@ export default function MapCanvas({
     );
   }
 
+  const bottomLeftControls = mapObject
+    ?.getContainer()
+    .querySelector(".mapboxgl-ctrl-bottom-left");
+  const coordinateLabel = english ? "Longitude, latitude" : "经度，纬度";
+
   return (
     <div className="map-shell">
       <div ref={containerRef} className="map-container" />
-      <TiandituAttributionBadge provider={activeBasemap.provider} />
-      <div className="map-toolbar">
-        <BasemapSwitcher
-          basemaps={basemapCatalog}
-          activeId={activeBasemap.id}
-          switching={basemapSwitching}
-          disabled={Boolean(drawMode) || basemapSwitchDisabled}
-          disabledReason={
-            drawMode
-              ? english
-                ? "Finish drawing the current area first"
-                : "请先完成当前范围绘制"
-              : basemapSwitchDisabled
-                ? english
-                  ? "Basemaps cannot be switched during map export"
-                  : "地图导出期间暂不能切换底图"
-                : undefined
-          }
-          onSelect={(id) => void switchBasemap(id)}
-        />
-        <BasemapStatusIndicator
-          map={mapObject}
-          activeBasemap={activeBasemapDescriptor}
-          activeBasemapName={activeBasemap.label}
-          retryBasemap={
-            basemapSwitching || drawMode || basemapSwitchDisabled
-              ? undefined
-              : retryActiveBasemap
-          }
-        />
-        <div
-          ref={coordinatePanelRef}
-          className="map-coordinate-panel"
-          role="status"
-          aria-label={english ? "Pointer coordinates" : "鼠标位置经纬度"}
-        >
-          {english ? "Coordinates --" : "经纬度 --"}
-        </div>
-        <Tooltip title={english ? "Reset to project extent" : "复位到项目范围"}>
-          <Button
-            icon={<HomeOutlined style={{ fontSize: 16 }} />}
-            onClick={resetView}
-          />
-        </Tooltip>
-        <Tooltip title={english ? "Zoom in" : "放大"}>
-          <Button
-            icon={<ZoomInOutlined style={{ fontSize: 16 }} />}
-            onClick={() => mapRef.current?.zoomIn()}
-          />
-        </Tooltip>
-        <Tooltip title={english ? "Zoom out" : "缩小"}>
-          <Button
-            icon={<ZoomOutOutlined style={{ fontSize: 16 }} />}
-            onClick={() => mapRef.current?.zoomOut()}
-          />
-        </Tooltip>
-        <Tooltip title={english ? "Reset north" : "北向"}>
-          <Button
-            icon={<RotateLeftOutlined style={{ fontSize: 16 }} />}
-            onClick={() => mapRef.current?.resetNorthPitch()}
-          />
-        </Tooltip>
-        <Tooltip title={english ? "Full screen" : "全屏"}>
-          <Button
-            icon={<FullscreenOutlined style={{ fontSize: 16 }} />}
-            onClick={() => containerRef.current?.requestFullscreen()}
-          />
-        </Tooltip>
-      </div>
+      {bottomLeftControls &&
+        createPortal(
+          <TiandituAttributionBadge provider={activeBasemap.provider} />,
+          bottomLeftControls,
+        )}
+      {toolbarContainer &&
+        createPortal(
+          <div className="map-toolbar">
+            <BasemapSwitcher
+              basemaps={basemapCatalog}
+              activeId={activeBasemap.id}
+              switching={basemapSwitching}
+              disabled={Boolean(drawMode) || basemapSwitchDisabled}
+              disabledReason={
+                drawMode
+                  ? english
+                    ? "Finish drawing the current area first"
+                    : "请先完成当前范围绘制"
+                  : basemapSwitchDisabled
+                    ? english
+                      ? "Basemaps cannot be switched during map export"
+                      : "地图导出期间暂不能切换底图"
+                    : undefined
+              }
+              onSelect={(id) => void switchBasemap(id)}
+            />
+            <BasemapStatusIndicator
+              map={mapObject}
+              activeBasemap={activeBasemapDescriptor}
+              activeBasemapName={activeBasemap.label}
+              retryBasemap={
+                basemapSwitching || drawMode || basemapSwitchDisabled
+                  ? undefined
+                  : retryActiveBasemap
+              }
+            />
+            <div
+              ref={coordinatePanelRef}
+              className="map-coordinate-panel"
+              role="status"
+              aria-label={coordinateLabel}
+              title={coordinateLabel}
+            >
+              {english ? "Lon/Lat --" : "经纬度 --"}
+            </div>
+            <Tooltip
+              title={english ? "Reset to project extent" : "复位到项目范围"}
+            >
+              <Button
+                aria-label={
+                  english ? "Reset to project extent" : "复位到项目范围"
+                }
+                icon={<HomeOutlined style={{ fontSize: 16 }} />}
+                onClick={resetView}
+              />
+            </Tooltip>
+            <Tooltip title={english ? "Zoom in" : "放大"}>
+              <Button
+                aria-label={english ? "Zoom in" : "放大"}
+                icon={<ZoomInOutlined style={{ fontSize: 16 }} />}
+                onClick={() => mapRef.current?.zoomIn()}
+              />
+            </Tooltip>
+            <Tooltip title={english ? "Zoom out" : "缩小"}>
+              <Button
+                aria-label={english ? "Zoom out" : "缩小"}
+                icon={<ZoomOutOutlined style={{ fontSize: 16 }} />}
+                onClick={() => mapRef.current?.zoomOut()}
+              />
+            </Tooltip>
+            <Tooltip title={english ? "Reset north" : "北向"}>
+              <Button
+                aria-label={english ? "Reset north" : "北向"}
+                icon={<RotateLeftOutlined style={{ fontSize: 16 }} />}
+                onClick={() => mapRef.current?.resetNorthPitch()}
+              />
+            </Tooltip>
+            <Tooltip title={english ? "Full screen" : "全屏"}>
+              <Button
+                aria-label={english ? "Full screen" : "全屏"}
+                icon={<FullscreenOutlined style={{ fontSize: 16 }} />}
+                onClick={() => containerRef.current?.requestFullscreen()}
+              />
+            </Tooltip>
+          </div>,
+          toolbarContainer,
+        )}
     </div>
   );
 }
