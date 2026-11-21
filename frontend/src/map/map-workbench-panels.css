@@ -5,6 +5,15 @@
   --map-right-edge: calc(
     var(--workspace-edge) + var(--map-right-panel-width) + var(--workspace-gap)
   );
+  --map-attribution-bottom: max(4px, env(safe-area-inset-bottom));
+  --map-attribution-height: 52px;
+  --map-query-bottom: calc(
+    var(--map-attribution-bottom) + var(--map-attribution-height) +
+      var(--workspace-gap)
+  );
+}
+.workspace-map-resizable:has(.tianditu-attribution-badge) {
+  --map-attribution-height: 84px;
 }
 .workspace-body.workspace-map-resizable .floating-panel-left {
   width: var(--map-left-panel-width);
@@ -16,14 +25,40 @@
   left: var(--map-left-edge);
   right: var(--map-right-edge);
 }
+.workspace-map-resizable .spatial-workbench-panel-open {
+  bottom: var(--map-query-bottom);
+  max-height: calc(100% - var(--map-query-bottom) - 100px);
+}
+.workspace-map-resizable
+  .spatial-workbench-panel-collapsed
+  .spatial-workbench-header {
+  bottom: calc(var(--map-query-bottom) - var(--workspace-edge));
+}
+/* Leave room for the corner controls when the collapsed query bar can fit between them. */
+@container spatial-bottom (min-width: 790px) {
+  .workspace-map-resizable:not(
+      :has(.tianditu-attribution-badge, .mapboxgl-compact-show)
+    )
+    .spatial-workbench-panel-collapsed
+    .spatial-workbench-header {
+    bottom: 0;
+    max-width: calc(100% - 216px);
+  }
+}
+@container spatial-bottom (min-width: 970px) {
+  .workspace-map-resizable:has(.tianditu-attribution-badge):not(
+      :has(.mapboxgl-compact-show)
+    )
+    .spatial-workbench-panel-collapsed
+    .spatial-workbench-header {
+    bottom: 0;
+    max-width: calc(100% - 396px);
+  }
+}
 .workspace-map-resizable
   .map-container
   :is(.mapboxgl-ctrl-bottom-left, .mapboxgl-ctrl-bottom-right) {
-  bottom: calc(
-    var(--workspace-edge) +
-      max(0px, var(--map-control-bottom-clearance) - var(--workspace-gap) + 2px)
-  );
-  transition: bottom 180ms ease;
+  bottom: var(--map-attribution-bottom);
 }
 .workspace-map-resizable .map-container .mapboxgl-ctrl-bottom-left {
   left: var(--map-left-edge);
@@ -68,7 +103,6 @@
 .workspace-map-resizable .map-container:fullscreen {
   --map-left-edge: var(--workspace-edge);
   --map-right-edge: var(--workspace-edge);
-  --map-control-bottom-clearance: 0px;
 }
 .map-panel-chrome {
   height: 32px;
@@ -185,7 +219,10 @@
 .workbench-legend-content {
   max-height: min(
     450px,
-    calc(100dvh - var(--map-control-bottom-clearance) - 140px)
+    calc(
+      100dvh - var(--map-control-bottom-clearance) - var(--map-query-bottom) -
+        140px
+    )
   );
   overflow: auto;
   padding: 0 11px 8px;
@@ -287,12 +324,5 @@
   }
   .workbench-live-legend.legend-mobile-hidden {
     display: none;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .workspace-map-resizable
-    .map-container
-    :is(.mapboxgl-ctrl-bottom-left, .mapboxgl-ctrl-bottom-right) {
-    transition: none;
   }
 }
