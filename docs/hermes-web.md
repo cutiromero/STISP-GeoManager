@@ -6,7 +6,7 @@
 
 服务器使用 MH-agent 独立网关和千问本机模型。将 `config/mh-agent.example.toml` 的配置保存到正式业务数据根的 `config/mh-agent.toml`，填入安装好的 Hermes 可执行文件、千问监听端口和模型 ID。平台原有启动入口会启动旧工作进程并托管 MH-agent 子进程。网关凭据和会话位于同一业务数据根的 `config/mh-agent/`，候选使用自己的数据根和网关端口。网关仅监听回环地址。
 
-发布前检查千问的原生 `tool_calls` 与工具结果回传。使用标准 `full` 发布和 `tools/release/validate_mh_agent_candidate.py` 验收候选，检查真实千问调用、工具回执、SSE、幂等及跨账号读取。新版接口位于 `/api/agent/hermes`。
+发布前检查千问的原生 `tool_calls` 与工具结果回传。当前千问配置提供 131,072 token 的上下文窗口，满足 Hermes 运行时要求的至少 64,000 token。使用标准 `full` 发布和 `tools/release/validate_mh_agent_candidate.py` 验收候选，检查真实千问调用、工具回执、SSE、幂等及跨账号读取。新版接口位于 `/api/agent/hermes`。
 
 ## 本机运行
 
