@@ -41,7 +41,8 @@ def search_knowledge(run, user, query, *, allow_documents=True):
         "citationGuide": "只使用各条目的citation引用；id/documentId是存储标识，不是证据编号。",
         "retrievalGuide": (
             "documents是当前项目的候选原文片段，按内容确认是否能回答问题。"
-            "如未找到相关依据，通用概念可根据有把握的知识继续解释，说明尚未核实的具体细节。"
+            "无关片段按未命中处理。通用概念照常解释。"
+            "具体地层的时代、岩性和分布以相关辞书或文献核实，未命中时可以说明地层单位的含义。"
             "需要更多原文时用read_knowledge_document(documentId,offset,limit)，"
             "documentId属于知识库。"
         ),
