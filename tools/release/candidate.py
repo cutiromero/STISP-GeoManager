@@ -74,6 +74,23 @@ def run(config, release, package, operations, candidate_options):
     for directory in ("app", "research", "code"):
         (root / directory).mkdir(mode=0o700)
     raw = isolated_config(raw, root, port)
+    gateway = server.mh_agent_config(config)
+    if gateway:
+        gateway_port = port + 1
+        server.require(
+            gateway_port <= 65535 and gateway_port != gateway["port"],
+            "候选 MH-agent 端口无效",
+        )
+        with socket.socket() as probe:
+            server.require(
+                probe.connect_ex(("127.0.0.1", gateway_port)) != 0,
+                "候选 MH-agent 端口已占用",
+            )
+        directory = root / "app/config"
+        directory.mkdir(mode=0o700)
+        settings_file = directory / "mh-agent.toml"
+        settings_file.write_text(tomlkit.dumps({**gateway, "port": gateway_port}))
+        settings_file.chmod(0o600)
     config_path = root / "app.toml"
     with config_path.open("x") as output:
         output.write(tomlkit.dumps(raw))

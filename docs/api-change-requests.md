@@ -1,5 +1,31 @@
 # API Change Requests
 
+## API-20261122-002 - Hermes 会话的公开网页检索
+
+- Status: BackendReady
+- Owner: codex/xintao。
+- Endpoints: GET /api/agent/hermes/v1/capabilities；POST /api/agent/hermes/api/sessions；PATCH /api/agent/hermes/api/sessions/{sessionId}。
+- Change type: 新增会话级联网偏好。
+- OpenAPI change: 会话请求与响应增加 `internet_enabled`，能力接口增加 `public_web_enabled`。
+- Mock examples: 186-hermes-public-web.json。关闭与撤权使用代理集成回归和网页工具栏用例。
+- Frontend reason: 在输入区开启或关闭当前会话的公开网页检索。
+- Backend implementation notes: 管理策略与所有者的会话偏好共同生效。Hermes 原生网页工具在实际执行前复核账号、项目和设置。
+- Verification: 同账号开启与关闭、跨账号限制、管理员撤权、公开检索与提取。
+- Result: 独立本机开发分支。
+
+## API-20261122-001 - Hermes 网页会话与运行
+
+- Status: BackendReady
+- Owner: codex/xintao。
+- Endpoints: `/api/agent/hermes/api/sessions` 及会话消息与删除，`/api/agent/hermes/v1/runs` 及状态、SSE、停止、澄清和批准，`/v1/capabilities`、`/v1/skills`、`/v1/toolsets` 同一代理前缀。
+- Change type: 新增本机 Hermes 网页接口。
+- OpenAPI change: 会话、运行及工具发现使用 Hermes 的字段和状态。流透传原生 SSE，支持 `Last-Event-ID`。网页批准选择为 `once` 或 `deny`。
+- Mock examples: Hermes 会话、运行和澄清由独立网关及代理回归测试覆盖。
+- Frontend reason: 页面按本人及当前项目列出会话，显示工具状态和逐段回复，刷新后可继续接收。
+- Backend implementation notes: 浏览器保留 Django 登录与项目授权；Hermes 持有会话历史、工具注册、模型循环及流。平台业务流由 Hermes 插件通过回环接口调用。
+- Verification: API 契约、浏览器、DeepSeek 合成会话、技能、业务流工具与跨账号访问检查。
+- Result: 独立本机开发分支。
+
 ## API-20261121-002 - 业务流科研目的校验
 
 - Status: BackendReady
@@ -938,6 +964,8 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| API-20261122-002 | BackendReady | Hermes 会话的公开网页检索 |
+| API-20261122-001 | BackendReady | Hermes 网页会话、工具发现与 SSE |
 | API-20261121-002 | BackendReady | 业务流科研目的校验与节点图编辑 |
 | API-20261121-001 | BackendReady | 业务流选数来源筛选与登记数据查询优化 |
 | API-20261120-001 | BackendReady | 逻辑推理统一待核查疑点与保留原状复核 |

@@ -12,6 +12,38 @@ from .models import BusinessFlowVersion
 from .scopes import available_flows, catalog_flows
 
 
+def bind_geology_catalog_inputs(
+    user, version, inputs, parameters, key, *, batch_id=None
+):
+    if version.definition["adapter"] != "geology_generic" or parameters.get(
+        "uploadBatchId"
+    ):
+        return
+    from apps.agent.models import AgentWorkflow
+    from apps.agent.workflow_uploads import add_catalog_references
+
+    project_id = selected_project_id()
+    existing = AgentWorkflow.objects.filter(
+        owner=user, project_tag_id=project_id, idempotency_key=key
+    ).first()
+    if (
+        existing
+        and existing.parameters.get("_businessFlow", {}).get("versionId") == version.pk
+    ):
+        parameters["uploadBatchId"] = existing.policy_snapshot.get("request", {}).get(
+            "uploadBatchId"
+        )
+    else:
+        parameters["uploadBatchId"] = batch_id or uuid.uuid4().hex
+    if not existing:
+        add_catalog_references(
+            user,
+            project_id,
+            parameters["uploadBatchId"],
+            list(inputs.values()),
+        )
+
+
 def execute_business_flow_tool(run, user, name, args):
     require_access(user, "agent", run.model)
     if run.owner_id != user.pk or run.project_tag_id != selected_project_id():
@@ -118,35 +150,8 @@ def execute_business_flow_tool(run, user, name, args):
             raise ValidationError(
                 "业务流需要完整登记的算子组合，请从业务流入口核对后启动"
             )
-    if version.definition["adapter"] == "geology_generic" and not parameters.get(
-        "uploadBatchId"
-    ):
-        from apps.agent.workflow_uploads import add_catalog_references
-
-        from apps.agent.models import AgentWorkflow
-
-        existing = AgentWorkflow.objects.filter(
-            owner=user,
-            project_tag_id=run.project_tag_id,
-            idempotency_key=f"business-tool-{run.pk}-{version.pk}",
-        ).first()
-        if (
-            existing
-            and existing.parameters.get("_businessFlow", {}).get("versionId")
-            == version.pk
-        ):
-            parameters["uploadBatchId"] = existing.policy_snapshot.get(
-                "request", {}
-            ).get("uploadBatchId")
-        else:
-            parameters["uploadBatchId"] = uuid.uuid4().hex
-        if not existing:
-            add_catalog_references(
-                user,
-                run.project_tag_id,
-                parameters["uploadBatchId"],
-                list(inputs.values()),
-            )
+    key = f"business-tool-{run.pk}-{version.pk}"
+    bind_geology_catalog_inputs(user, version, inputs, parameters, key)
     from .runtime import start_flow
 
     workflow = start_flow(
@@ -160,7 +165,7 @@ def execute_business_flow_tool(run, user, name, args):
             "parameters": parameters,
             "reviewerModel": args.get("reviewerModel") or run.model,
             "conversationId": run.conversation_id,
-            "idempotencyKey": f"business-tool-{run.pk}-{version.pk}",
+            "idempotencyKey": key,
             "inputAdapters": args.get("inputAdapters", {}),
         },
         source_run=run,

@@ -21742,6 +21742,911 @@
         }
       }
     },
+    "/api/agent/hermes/v1/capabilities": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/HermesProject"
+        }
+      ],
+      "get": {
+        "tags": [
+          "智能体"
+        ],
+        "operationId": "getHermesCapabilities",
+        "summary": "读取 Hermes 网关能力",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "读取 Hermes 网关能力",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HermesCapabilities"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "401": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "403": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "404": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "409": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "429": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "503": {
+            "$ref": "#/components/responses/HermesError"
+          }
+        }
+      }
+    },
+    "/api/agent/hermes/v1/skills": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/HermesProject"
+        }
+      ],
+      "get": {
+        "tags": [
+          "智能体"
+        ],
+        "operationId": "listHermesSkills",
+        "summary": "查看 Hermes 技能目录",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "查看 Hermes 技能目录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HermesSkillList"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "401": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "403": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "404": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "409": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "429": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "503": {
+            "$ref": "#/components/responses/HermesError"
+          }
+        }
+      }
+    },
+    "/api/agent/hermes/v1/toolsets": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/HermesProject"
+        }
+      ],
+      "get": {
+        "tags": [
+          "智能体"
+        ],
+        "operationId": "listHermesToolsets",
+        "summary": "查看 Hermes 工具集",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "查看 Hermes 工具集",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HermesToolsetList"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "401": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "403": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "404": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "409": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "429": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "503": {
+            "$ref": "#/components/responses/HermesError"
+          }
+        }
+      }
+    },
+    "/api/agent/hermes/api/sessions": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/HermesProject"
+        }
+      ],
+      "get": {
+        "tags": [
+          "智能体"
+        ],
+        "operationId": "listHermesSessions",
+        "summary": "列出本人的 Hermes 会话",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "列出本人的 Hermes 会话",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HermesSessionList"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "401": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "403": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "404": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "409": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "429": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "503": {
+            "$ref": "#/components/responses/HermesError"
+          }
+        },
+        "parameters": [
+          {
+            "name": "mode",
+            "in": "query",
+            "description": "mode",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "agent",
+                "chat"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "limit",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "offset",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "智能体"
+        ],
+        "operationId": "createHermesSession",
+        "summary": "创建 Hermes 会话",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "创建 Hermes 会话",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HermesSessionEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "401": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "403": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "404": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "409": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "429": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "503": {
+            "$ref": "#/components/responses/HermesError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HermesSessionCreate"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agent/hermes/api/sessions/{sessionId}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/HermesProject"
+        },
+        {
+          "$ref": "#/components/parameters/HermesSessionId"
+        }
+      ],
+      "patch": {
+        "tags": [
+          "智能体"
+        ],
+        "operationId": "updateHermesSession",
+        "summary": "设置 Hermes 会话联网权限",
+        "description": "平台管理员允许联网后，由科研智能体会话的所有者开启或关闭公开网页检索。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "会话所有者明确设置的联网状态。",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "internet_enabled"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "internet_enabled": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "已保存当前会话联网设置。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HermesSessionEnvelope"
+                },
+                "example": {
+                  "object": "hermes.session",
+                  "session": {
+                    "id": "stisp_1234567890abcdef1234567890abcdef",
+                    "title": "公开资料检索",
+                    "source": "api_server",
+                    "last_active": 1795356000,
+                    "last_run_id": null,
+                    "internet_enabled": true
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "401": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "403": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "404": {
+            "$ref": "#/components/responses/HermesError"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "智能体"
+        ],
+        "operationId": "deleteHermesSession",
+        "summary": "删除 Hermes 会话",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "删除 Hermes 会话"
+          },
+          "400": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "401": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "403": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "404": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "409": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "429": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "503": {
+            "$ref": "#/components/responses/HermesError"
+          }
+        }
+      }
+    },
+    "/api/agent/hermes/api/sessions/{sessionId}/messages": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/HermesProject"
+        },
+        {
+          "$ref": "#/components/parameters/HermesSessionId"
+        }
+      ],
+      "get": {
+        "tags": [
+          "智能体"
+        ],
+        "operationId": "listHermesMessages",
+        "summary": "读取 Hermes 对话历史",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "读取 Hermes 对话历史",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HermesMessageList"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "401": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "403": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "404": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "409": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "429": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "503": {
+            "$ref": "#/components/responses/HermesError"
+          }
+        }
+      }
+    },
+    "/api/agent/hermes/v1/runs": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/HermesProject"
+        }
+      ],
+      "post": {
+        "tags": [
+          "智能体"
+        ],
+        "operationId": "createHermesRun",
+        "summary": "提交 Hermes 运行",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "提交 Hermes 运行",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HermesRunAdmission"
+                }
+              }
+            },
+            "headers": {
+              "Idempotency-Replayed": {
+                "description": "重复请求返回原运行",
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "401": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "403": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "404": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "409": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "429": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "503": {
+            "$ref": "#/components/responses/HermesError"
+          }
+        },
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HermesRunCreate"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agent/hermes/v1/runs/{runId}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/HermesProject"
+        },
+        {
+          "$ref": "#/components/parameters/HermesRunId"
+        }
+      ],
+      "get": {
+        "tags": [
+          "智能体"
+        ],
+        "operationId": "getHermesRun",
+        "summary": "读取 Hermes 运行状态",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "读取 Hermes 运行状态",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HermesRunStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "401": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "403": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "404": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "409": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "429": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "503": {
+            "$ref": "#/components/responses/HermesError"
+          }
+        }
+      }
+    },
+    "/api/agent/hermes/v1/runs/{runId}/events": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/HermesProject"
+        },
+        {
+          "$ref": "#/components/parameters/HermesRunId"
+        }
+      ],
+      "get": {
+        "tags": [
+          "智能体"
+        ],
+        "operationId": "streamHermesRun",
+        "summary": "订阅 Hermes 原生 SSE",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "订阅 Hermes 原生 SSE",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string",
+                  "description": "Hermes 原生 SSE。data 为含 event、run_id 和 seq 的 JSON，支持重连游标。"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "401": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "403": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "404": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "409": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "429": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "503": {
+            "$ref": "#/components/responses/HermesError"
+          }
+        },
+        "parameters": [
+          {
+            "name": "Last-Event-ID",
+            "in": "header",
+            "description": "Last-Event-ID",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "last_seq",
+            "in": "query",
+            "description": "last_seq",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ]
+      }
+    },
+    "/api/agent/hermes/v1/runs/{runId}/stop": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/HermesProject"
+        },
+        {
+          "$ref": "#/components/parameters/HermesRunId"
+        }
+      ],
+      "post": {
+        "tags": [
+          "智能体"
+        ],
+        "operationId": "stopHermesRun",
+        "summary": "停止 Hermes 运行",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "停止 Hermes 运行",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "401": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "403": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "404": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "409": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "429": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "503": {
+            "$ref": "#/components/responses/HermesError"
+          }
+        }
+      }
+    },
+    "/api/agent/hermes/v1/runs/{runId}/clarify": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/HermesProject"
+        },
+        {
+          "$ref": "#/components/parameters/HermesRunId"
+        }
+      ],
+      "post": {
+        "tags": [
+          "智能体"
+        ],
+        "operationId": "clarifyHermesRun",
+        "summary": "回答 Hermes 澄清问题",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "回答 Hermes 澄清问题",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "401": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "403": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "404": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "409": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "429": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "503": {
+            "$ref": "#/components/responses/HermesError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "request_id",
+                  "execution_generation",
+                  "answer"
+                ],
+                "properties": {
+                  "request_id": {
+                    "type": "string"
+                  },
+                  "execution_generation": {
+                    "type": "integer"
+                  },
+                  "answer": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agent/hermes/v1/runs/{runId}/approval": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/HermesProject"
+        },
+        {
+          "$ref": "#/components/parameters/HermesRunId"
+        }
+      ],
+      "post": {
+        "tags": [
+          "智能体"
+        ],
+        "operationId": "approvalHermesRun",
+        "summary": "回应 Hermes 批准请求",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "回应 Hermes 批准请求",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "401": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "403": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "404": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "409": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "429": {
+            "$ref": "#/components/responses/HermesError"
+          },
+          "503": {
+            "$ref": "#/components/responses/HermesError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "request_id",
+                  "execution_generation",
+                  "choice"
+                ],
+                "properties": {
+                  "request_id": {
+                    "type": "string"
+                  },
+                  "execution_generation": {
+                    "type": "integer"
+                  },
+                  "choice": {
+                    "type": "string",
+                    "enum": [
+                      "once",
+                      "deny"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/agent/capabilities/": {
       "get": {
         "tags": [
@@ -30974,6 +31879,36 @@
       }
     },
     "parameters": {
+      "HermesProject": {
+        "name": "X-Project-Id",
+        "in": "header",
+        "description": "X-Project-Id",
+        "required": true,
+        "schema": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "HermesSessionId": {
+        "name": "sessionId",
+        "in": "path",
+        "description": "sessionId",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^stisp_[0-9a-f]{32}$"
+        }
+      },
+      "HermesRunId": {
+        "name": "runId",
+        "in": "path",
+        "description": "runId",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^run_[0-9a-f]{32}$"
+        }
+      },
       "BrowserSessionFamily": {
         "name": "X-STISP-Session",
         "in": "header",
@@ -31015,6 +31950,25 @@
       }
     },
     "responses": {
+      "HermesError": {
+        "description": "平台或 Hermes 网关返回的错误",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "detail": {
+                  "type": "string"
+                },
+                "error": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        }
+      },
       "BrowserIdentityChanged": {
         "description": "页面身份与 Cookie 会话不一致，业务操作未执行；重新读取当前身份及项目授权后重试。",
         "headers": {
@@ -31151,6 +32105,297 @@
       }
     },
     "schemas": {
+      "HermesCapabilities": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "public_web_enabled": {
+            "type": "boolean",
+            "description": "当前账号具备科研智能体权限且平台策略允许会话开启联网。"
+          }
+        }
+      },
+      "HermesSkill": {
+        "type": "object",
+        "required": [
+          "name",
+          "description",
+          "category"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          }
+        }
+      },
+      "HermesSkillList": {
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HermesSkill"
+            }
+          }
+        }
+      },
+      "HermesToolset": {
+        "type": "object",
+        "required": [
+          "name",
+          "label",
+          "enabled",
+          "tools"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "configured": {
+            "type": "boolean"
+          },
+          "tools": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "HermesToolsetList": {
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HermesToolset"
+            }
+          }
+        }
+      },
+      "HermesSession": {
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "last_run_id",
+          "internet_enabled"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "last_active": {
+            "type": "number"
+          },
+          "last_run_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "internet_enabled": {
+            "type": "boolean",
+            "description": "会话所有者已开启公开网页检索。"
+          }
+        }
+      },
+      "HermesSessionCreate": {
+        "type": "object",
+        "required": [
+          "mode"
+        ],
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "chat",
+              "agent"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "internet_enabled": {
+            "type": "boolean",
+            "default": false,
+            "description": "开启新科研智能体会话的公开网页检索。"
+          }
+        }
+      },
+      "HermesSessionList": {
+        "type": "object",
+        "required": [
+          "object",
+          "data",
+          "has_more"
+        ],
+        "properties": {
+          "object": {
+            "type": "string"
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HermesSession"
+            }
+          },
+          "has_more": {
+            "type": "boolean"
+          },
+          "offset": {
+            "type": "integer"
+          },
+          "limit": {
+            "type": "integer"
+          }
+        }
+      },
+      "HermesSessionEnvelope": {
+        "type": "object",
+        "required": [
+          "object",
+          "session"
+        ],
+        "properties": {
+          "object": {
+            "type": "string"
+          },
+          "session": {
+            "$ref": "#/components/schemas/HermesSession"
+          }
+        }
+      },
+      "HermesMessage": {
+        "type": "object",
+        "required": [
+          "id",
+          "role",
+          "content"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "role": {
+            "type": "string"
+          },
+          "content": {},
+          "tool_name": {
+            "type": "string"
+          },
+          "display_kind": {
+            "type": "string"
+          }
+        }
+      },
+      "HermesMessageList": {
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HermesMessage"
+            }
+          }
+        }
+      },
+      "HermesRunCreate": {
+        "type": "object",
+        "required": [
+          "session_id",
+          "input"
+        ],
+        "properties": {
+          "session_id": {
+            "type": "string"
+          },
+          "input": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 12000
+          }
+        }
+      },
+      "HermesRunAdmission": {
+        "type": "object",
+        "required": [
+          "run_id",
+          "status",
+          "replayed"
+        ],
+        "properties": {
+          "run_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "replayed": {
+            "type": "boolean"
+          }
+        }
+      },
+      "HermesRunStatus": {
+        "type": "object",
+        "required": [
+          "run_id",
+          "status",
+          "session_id"
+        ],
+        "properties": {
+          "run_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "session_id": {
+            "type": "string"
+          },
+          "output": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          },
+          "pending_controls": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        }
+      },
       "MonitoringSourcePreviewRequest": {
         "type": "object",
         "additionalProperties": false,

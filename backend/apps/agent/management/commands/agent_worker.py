@@ -5,6 +5,7 @@ from apps.core.storage import app_path
 from django.core.management.base import CommandError
 from django.core.management.base import BaseCommand
 from apps.agent.worker import serve
+from apps.agent.hermes_service import manage_gateway
 
 
 class Command(BaseCommand):
@@ -37,4 +38,5 @@ class Command(BaseCommand):
             for sig in (signal.SIGINT, signal.SIGTERM):
                 signal.signal(sig, lambda *_: stop.set())
             self.stdout.write("Agent worker started; read-only tools only.")
-            serve(stop, once=options["once"])
+            with manage_gateway(stop, once=options["once"]):
+                serve(stop, once=options["once"])

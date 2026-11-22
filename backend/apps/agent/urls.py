@@ -1,11 +1,25 @@
-from django.urls import path
-from . import views, workflow_report_views, workflow_validation_views
+from django.urls import path, re_path
+from . import hermes_views, views, workflow_report_views, workflow_validation_views
 from .run_stream import response as run_stream
 from .capability_views import capabilities
 from .tool_call_views import tool_calls
 from .operation_views import operations, operation_detail
 
 urlpatterns = [
+    path("hermes/v1/capabilities", hermes_views.capabilities),
+    re_path(r"^hermes/v1/(?P<kind>skills|toolsets)$", hermes_views.discovery),
+    path("hermes/api/sessions", hermes_views.sessions),
+    path("hermes/api/sessions/<str:session_id>", hermes_views.session_detail),
+    path("hermes/api/sessions/<str:session_id>/messages", hermes_views.messages),
+    path("hermes/v1/runs", hermes_views.runs),
+    re_path(r"^hermes/v1/runs/(?P<run_id>run_[0-9a-f]{32})$", hermes_views.run_status),
+    re_path(
+        r"^hermes/v1/runs/(?P<run_id>run_[0-9a-f]{32})/events$", hermes_views.events
+    ),
+    re_path(
+        r"^hermes/v1/runs/(?P<run_id>run_[0-9a-f]{32})/(?P<action>stop|clarify|approval)$",
+        hermes_views.run_control,
+    ),
     path("capabilities/", capabilities),
     path("runs/<int:run_id>/operations/", operations),
     path("operations/<uuid:operation_id>/", operation_detail),

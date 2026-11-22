@@ -104,6 +104,40 @@ class Conversation(ProjectScopedModel):
         ordering = ("-updated_at", "-id")
 
 
+class HermesSession(ProjectScopedModel):
+    """Platform ownership of a native Hermes session."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    mode = models.CharField(max_length=10)
+    internet_enabled = models.BooleanField(default=False, db_default=False)
+    title = models.CharField(max_length=120)
+    last_run_id = models.CharField(max_length=36, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(
+                fields=("project_tag", "owner", "mode", "-updated_at"),
+                name="agent_hermes_session_scope",
+            ),
+        ]
+
+
+class HermesToolReceipt(models.Model):
+    session = models.ForeignKey(
+        HermesSession, on_delete=models.CASCADE, related_name="tool_receipts"
+    )
+    turn_id = models.CharField(max_length=200)
+    tool_call_id = models.CharField(max_length=200, blank=True)
+    name = models.CharField(max_length=80)
+    contract_version = models.CharField(max_length=24)
+    argument_hash = models.CharField(max_length=64)
+    evidence = models.JSONField(default=list)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
 class AgentAttachment(ProjectScopedModel):
     """A project-scoped file supplied to one agent conversation.
 

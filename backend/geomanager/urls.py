@@ -4,6 +4,7 @@ from django.urls import include, path, re_path
 
 from apps.core.views import frontend_app
 from apps.core.frontend_assets import historical_asset
+from apps.agent.hermes_tools import tool as hermes_tool
 from apps.ecology.monitoring_views import (
     monitoring,
     wildfire_catalog,
@@ -37,6 +38,7 @@ urlpatterns = [
     re_path(r"^static/assets/(?P<asset_path>.+)$", historical_asset),
     path("api/knowledge/", include("apps.knowledge.urls")),
     path("api/agent/", include("apps.agent.urls")),
+    path("internal/hermes/tool/", hermes_tool),
     path("api/compute/", include("apps.compute.urls")),
     path("api/", include("apps.projects.urls")),
     path("api/", include("apps.content.urls")),

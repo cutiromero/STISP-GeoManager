@@ -2,6 +2,9 @@ import { Fragment, memo, type ReactNode } from "react";
 import SafeMath from "./SafeMath";
 
 type WikiLinkRenderer = (target: string, label: string) => ReactNode;
+const httpLinks =
+  /(?<!!)\[(?<label>[^\]\n]+)\]\((?<target>https?:\/\/[^()\s<>]+)\)|(?<bare>https?:\/\/[^\s<>()[\]]+)/
+    .source;
 
 function textContent(text: string): string {
   const entities: Record<string, string> = {
@@ -20,16 +23,27 @@ function inline(
   text: string,
   wikiLink?: WikiLinkRenderer,
   math = false,
+  links = false,
 ): ReactNode[] {
   const output: ReactNode[] = [];
   let cursor = 0;
   const pattern = math
     ? /\\[\\`*_[\]()|$]|\[\[([^\]\n|]+)(?:\|([^\]\n]+))?\]\]|\*\*((?:\\.|[^*\\])+)\*\*|`([^`]+)`|(?<!\\)\$(?!\$)((?:\\.|[^$\\\n])+)\$(?!\$)/g
     : /\\[\\`*_[\]()|$]|\[\[([^\]\n|]+)(?:\|([^\]\n]+))?\]\]|\*\*((?:\\.|[^*\\])+)\*\*|`([^`]+)`/g;
-  for (const match of text.matchAll(pattern)) {
+  const tokens = links
+    ? new RegExp(`${pattern.source}|${httpLinks}`, "g")
+    : pattern;
+  for (const match of text.matchAll(tokens)) {
     output.push(textContent(text.slice(cursor, match.index)));
+    const link = match.groups?.target || match.groups?.bare;
     output.push(
-      match[0].startsWith("\\") ? (
+      link ? (
+        <PublicLink
+          key={`l${match.index}`}
+          value={link}
+          label={match.groups?.label}
+        />
+      ) : match[0].startsWith("\\") ? (
         match[0].slice(1)
       ) : match[1] ? (
         <Fragment key={`w${match.index}`}>
@@ -37,7 +51,7 @@ function inline(
         </Fragment>
       ) : match[3] ? (
         <strong key={`s${match.index}`}>
-          {inline(match[3], wikiLink, math)}
+          {inline(match[3], wikiLink, math, links)}
         </strong>
       ) : match[4] ? (
         <code key={`c${match.index}`}>{match[4]}</code>
@@ -51,14 +65,41 @@ function inline(
   return output;
 }
 
+function PublicLink({ value, label }: { value: string; label?: string }) {
+  const target = label ? value : value.replace(/[.,;:!?，。；：！？]+$/, "");
+  const suffix = value.slice(target.length);
+  let url: URL;
+  try {
+    url = new URL(target);
+  } catch {
+    return label ? `[${label}](${value})` : value;
+  }
+  if (
+    !["http:", "https:"].includes(url.protocol) ||
+    url.username ||
+    url.password
+  )
+    return label ? `[${label}](${value})` : value;
+  return (
+    <>
+      <a href={url.href} target="_blank" rel="noopener noreferrer">
+        {textContent(label ?? target)}
+      </a>
+      {suffix}
+    </>
+  );
+}
+
 function SafeMarkdown({
   text,
   wikiLink,
   math = false,
+  links = false,
 }: {
   text: string;
   wikiLink?: WikiLinkRenderer;
   math?: boolean;
+  links?: boolean;
 }) {
   const lines = text.split("\n");
   const result: ReactNode[] = [];
@@ -132,9 +173,9 @@ function SafeMarkdown({
           const cellKey = `cell-${cellOffset}`;
           cellOffset += cell.length + 1;
           return tag === "th" ? (
-            <th key={cellKey}>{inline(cell, wikiLink, math)}</th>
+            <th key={cellKey}>{inline(cell, wikiLink, math, links)}</th>
           ) : (
-            <td key={cellKey}>{inline(cell, wikiLink, math)}</td>
+            <td key={cellKey}>{inline(cell, wikiLink, math, links)}</td>
           );
         });
       };
@@ -163,17 +204,24 @@ function SafeMarkdown({
         <ul key={key}>
           {items.map((item) => (
             <li key={item.key}>
-              {inline(item.text.replace(/^\s*[-*] /, ""), wikiLink, math)}
+              {inline(
+                item.text.replace(/^\s*[-*] /, ""),
+                wikiLink,
+                math,
+                links,
+              )}
             </li>
           ))}
         </ul>,
       );
     } else if (/^#{1,4} /.test(line)) {
       result.push(
-        <h3 key={key}>{inline(line.replace(/^#+ /, ""), wikiLink, math)}</h3>,
+        <h3 key={key}>
+          {inline(line.replace(/^#+ /, ""), wikiLink, math, links)}
+        </h3>,
       );
     } else if (line.trim()) {
-      result.push(<p key={key}>{inline(line, wikiLink, math)}</p>);
+      result.push(<p key={key}>{inline(line, wikiLink, math, links)}</p>);
     }
   }
   return <div className="agent-markdown">{result}</div>;

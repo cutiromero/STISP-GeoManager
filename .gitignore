@@ -7,6 +7,7 @@
 logs/
 demo/
 runtime-data/
+.runtime/
 .env
 __pycache__/
 *.py[cod]
@@ -16,7 +17,7 @@ __pycache__/
 *.sqlite3
 *.tsbuildinfo
 package-lock.json
-node_modules/
+node_modules
 .pnpm-store/
 dist/
 coverage/

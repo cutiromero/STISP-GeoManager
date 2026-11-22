@@ -13,9 +13,7 @@ import {
   App,
   Alert,
   Button,
-  Drawer,
   Input,
-  Layout,
   Modal,
   Space,
   Switch,
@@ -33,13 +31,17 @@ import {
   CopyOutlined,
   EditOutlined,
   PaperClipOutlined,
-  MenuOutlined,
   CloseOutlined,
   NodeIndexOutlined,
 } from "@ant-design/icons";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import WorkspaceHeader from "../components/WorkspaceHeader";
 import { useAppContext } from "../contexts/AppContext";
 import { useProjectContext } from "../projects/ProjectContext";
 import { useComputeText } from "../compute/ui";
@@ -79,7 +81,10 @@ import {
   type LiveActivity as ActivityState,
 } from "./agentActivity";
 import { researchDemoLaunch } from "./researchDemoLaunch";
-import AgentResizeHandle from "./AgentResizeHandle";
+import AgentWorkspaceLayout, {
+  AgentComposerFrame,
+  conversationTime,
+} from "./AgentWorkspaceLayout";
 import {
   defaultToolPreferences,
   type ToolPreferences,
@@ -88,7 +93,6 @@ import useAgentLayout from "./useAgentLayout";
 import ReasoningEffortControl, {
   type ReasoningEffort,
 } from "./ReasoningEffortControl";
-import "./agent.css";
 
 const active = (r: AgentRun) =>
   ["queued", "running", "waiting_compute"].includes(r.status);
@@ -118,30 +122,24 @@ const exampleQuestions = [
   "请根据我的研究目标推荐分析步骤。",
 ];
 
-// Same-named conversations stay distinguishable by when they were last used.
-function conversationTime(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  const today = new Date();
-  const time = date.toLocaleTimeString("zh-CN", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-  return date.toDateString() === today.toDateString()
-    ? `今天 ${time}`
-    : `${date.toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" })} ${time}`;
-}
-
-export default function AgentPage() {
+export default function AgentPage({
+  runtimeSwitch,
+}: { runtimeSwitch?: ReactNode } = {}) {
   const project = useProjectContext();
   const { user } = useAppContext();
-  return <AgentWorkspace key={`${user?.id}:${project?.current}`} />;
+  return (
+    <AgentWorkspace
+      key={`${user?.id}:${project?.current}`}
+      runtimeSwitch={runtimeSwitch}
+    />
+  );
 }
 
-function AgentWorkspace() {
+function AgentWorkspace({ runtimeSwitch }: { runtimeSwitch?: ReactNode }) {
   const ui = useComputeText();
   const navigate = useNavigate();
   const location = useLocation();
+  const historyOnly = location.pathname === "/agent/history";
   const { user } = useAppContext();
   const project = useProjectContext();
   const layout = useAgentLayout(`agent-layout:${user?.id ?? "anon"}:agent`);
@@ -247,7 +245,6 @@ function AgentWorkspace() {
     runId: number;
     workflow: AgentWorkflow;
   }>();
-  const historyButton = useRef<HTMLButtonElement>(null);
   const historyCloseButton = useRef<HTMLButtonElement>(null);
   const alive = useRef(true);
   const sequence = useRef(0);
@@ -868,6 +865,7 @@ function AgentWorkspace() {
   }, [canUse, businessLaunch, conversationStorageKey, conversations, current]);
   const send = async (text = prompt, demoScenario?: AgentResearchScenario) => {
     if (
+      historyOnly ||
       !canUse ||
       busy ||
       historyLoading ||
@@ -1214,7 +1212,7 @@ function AgentWorkspace() {
         className="agent-new-conversation"
         block
         icon={<PlusOutlined />}
-        disabled={!canUse || busy}
+        disabled={historyOnly || !canUse || busy}
         onClick={reset}
       >
         {ui("新建会话", "New conversation")}
@@ -1315,814 +1313,721 @@ function AgentWorkspace() {
     </aside>
   );
   return (
-    <Layout className="agent-shell">
-      <WorkspaceHeader
-        activeTab="warning"
-        canBrowseData={Boolean(user?.permissions.canBrowseData)}
-      />
-      <div className="agent-workspace">
-        {layout.narrow ? (
-          <Drawer
-            placement="left"
-            open={showHistory}
-            onClose={() => setShowHistory(false)}
-            closable={false}
-            size="default"
-            styles={{
-              wrapper: { width: "min(320px, calc(100vw - 44px))" },
-              body: { padding: 16 },
-            }}
-            classNames={{ root: "agent-history-drawer" }}
-            aria-label={ui("会话侧栏", "Conversation sidebar")}
-            afterOpenChange={(open) => {
-              if (open) historyCloseButton.current?.focus();
-              else historyButton.current?.focus();
-            }}
-          >
-            {sidebar}
-          </Drawer>
-        ) : (
-          sidebar
-        )}
-        {!layout.narrow && (
-          <AgentResizeHandle
-            orientation="vertical"
-            label={ui("调整会话侧栏宽度", "Resize conversation sidebar")}
-            hint={ui(
-              "左右拖动或按方向键调整，双击恢复",
-              "Drag or use arrow keys to resize; double-click to reset",
-            )}
-            controls="agent-conversation-sidebar"
-            value={layout.sidebar}
-            min={layout.sidebarMin}
-            max={layout.sidebarMax}
-            defaultValue={layout.defaults.sidebar}
-            onChange={layout.setSidebar}
-          />
-        )}
-        <main
-          className={`agent-main${businessLaunch && canUse ? " is-preparing-flow" : ""}`}
-          inert={showHistory && layout.narrow}
-        >
-          <div className="agent-toolbar">
-            <div className="agent-toolbar-heading">
-              <Button
-                ref={historyButton}
-                className="agent-history-toggle"
-                type="text"
-                icon={<MenuOutlined />}
-                aria-label={ui("会话", "Conversations")}
-                aria-expanded={showHistory}
-                aria-controls="agent-conversation-sidebar"
-                onClick={() => setShowHistory(!showHistory)}
-              >
-                {ui("会话", "History")}
-              </Button>
-              <div className="agent-conversation-heading">
-                <span>{modeLabel}</span>
-                <strong title={current?.title}>
-                  {current?.title ?? modeLabel}
-                </strong>
-              </div>
-            </div>
-            {mode === "agent" && canUse && (
-              <PlatformOperationsPanel
-                key={`platform-operations:${user?.id}:${project?.current}:${current?.id}`}
-                accountId={user?.id ?? 0}
-                projectId={Number(project?.current ?? 1)}
-                runIds={runs.map((run) => run.id)}
-              />
-            )}
-            <Tag className="agent-project-badge">
-              {project?.projects.find((p) => String(p.id) === project.current)
-                ?.name ?? ui("当前项目", "Current project")}
-            </Tag>
-          </div>
-          {businessLaunch && canUse && (
-            <BusinessFlowLaunch
-              launch={businessLaunch}
-              model={model}
-              reasoningEffort={effortOverride ?? "medium"}
-              onReasoningEffortChange={(value) => {
-                setEffortOverride(value);
-                setThinkingMode("deep");
-              }}
-              compact={layout.narrow}
-              conversationId={
-                current?.archived || taskLocked ? undefined : current?.id
-              }
-              onStarted={startedBusinessFlow}
-              onCancel={() => setBusinessLaunch(undefined)}
+    <AgentWorkspaceLayout
+      layout={layout}
+      sidebar={sidebar}
+      historyOpen={showHistory}
+      onHistoryOpen={setShowHistory}
+      historyCloseButton={historyCloseButton}
+      modeLabel={modeLabel}
+      title={current?.title}
+      preparing={Boolean(businessLaunch && canUse)}
+      actions={
+        <>
+          {runtimeSwitch}
+          {mode === "agent" && canUse && (
+            <PlatformOperationsPanel
+              key={`platform-operations:${user?.id}:${project?.current}:${current?.id}`}
+              accountId={user?.id ?? 0}
+              projectId={Number(project?.current ?? 1)}
+              runIds={runs.map((run) => run.id)}
             />
           )}
-          {error && (
-            <Alert
-              title={error}
-              type="error"
-              showIcon
-              closable
-              onClose={() => setError("")}
-              action={
-                <Button size="small" onClick={downloadResponseDiagnostics}>
-                  {ui("下载异常诊断", "Download diagnostics")}
-                </Button>
-              }
-            />
-          )}
-          {historyLoading && (
-            <Typography.Text role="status" aria-live="polite">
-              {ui("正在加载会话：", "Loading conversation: ")}
-              {historyLoading.title}
-            </Typography.Text>
-          )}
-          {historyFailure && (
-            <Alert
-              type="warning"
-              showIcon
-              title={ui(
-                "暂时无法加载所选历史",
-                "Unable to load selected history",
-              )}
-              description={
-                <>
-                  {historyFailure.message}
-                  <p>
-                    {ui(
-                      "当前聊天记录已保留，请重试加载。",
-                      "Current messages are retained. Retry loading the history.",
-                    )}
-                  </p>
-                </>
-              }
-              action={
-                <Space wrap>
-                  <Button
-                    size="small"
-                    onClick={() => void open(historyFailure.conversation)}
-                  >
-                    {ui("重试加载历史", "Retry history")}
-                  </Button>
-                  <Button size="small" onClick={downloadResponseDiagnostics}>
-                    {ui("下载异常诊断", "Download diagnostics")}
-                  </Button>
-                </Space>
-              }
-            />
-          )}
-          {pollFailure && (
-            <Alert
-              type="warning"
-              showIcon
-              title={pollFailure}
-              description={ui(
-                "当前回答已保留，正在重新连接。",
-                "The current answer is retained. Reconnecting.",
-              )}
-              action={
-                <Space wrap>
-                  <Button
-                    size="small"
-                    onClick={() => setPollAttempt((value) => value + 1)}
-                  >
-                    {ui("重试更新回答", "Retry answer update")}
-                  </Button>
-                  <Button size="small" onClick={downloadResponseDiagnostics}>
-                    {ui("下载异常诊断", "Download diagnostics")}
-                  </Button>
-                </Space>
-              }
-            />
-          )}
-          {!bootstrap && bootstrapStatus === "error" && (
-            <Alert
-              type="warning"
-              title={
-                bootstrapError ||
-                ui("连接失败，请重试。", "Connection failed. Please retry.")
-              }
-              action={
-                <Button onClick={retryBootstrap}>
-                  {ui("重试连接", "Retry connection")}
-                </Button>
-              }
-            />
-          )}
-          {bootstrapStatus === "unauthenticated" && (
-            <Alert
-              type="warning"
-              title={ui(
-                "登录状态已失效，请重新登录。",
-                "Your session has expired. Please sign in again.",
-              )}
-            />
-          )}
-          {(canUse === false || bootstrapStatus === "forbidden") && (
-            <Alert
-              type="info"
-              title={ui(
-                "当前账号未获准使用此功能，请联系超级管理员。",
-                "This feature is unavailable for this account. Contact your administrator.",
-              )}
-            />
-          )}
-          {bootstrap && canUse && !bootstrap.workerOnline && (
-            <Alert
-              type="warning"
-              title={ui(
-                "模型服务工作进程未就绪，历史记录仍可查看。",
-                "The model worker is unavailable. You can still view history.",
-              )}
-            />
-          )}
-          <div
-            className="agent-messages"
-            hidden={Boolean(businessLaunch && canUse)}
-            ref={viewport}
-            onScroll={(event) => {
-              const box = event.currentTarget;
-              if (box.scrollTop < lastScrollTop.current - 1)
+        </>
+      }
+      sidePanel={
+        canUse &&
+        !businessLaunch &&
+        !historyLoading &&
+        !historyFailure &&
+        monitoredFlow &&
+        monitoredFlow.conversationId === current?.id && (
+          <BusinessFlowMonitor
+            key={monitoredFlow.id}
+            flow={monitoredFlow}
+            accessBlocked={blockedFlowId === monitoredFlow.id}
+            onLocate={(nodeId) => {
+              setInspectedFlowNode({
+                flowId: monitoredFlow.id,
+                nodeId,
+                request: Date.now(),
+              });
+              const box = viewport.current;
+              const card = Array.from(
+                box?.querySelectorAll<HTMLElement>("[data-business-flow-id]") ??
+                  [],
+              ).find(
+                (element) =>
+                  element.dataset.businessFlowId === monitoredFlow.id,
+              );
+              if (box && card) {
+                box.scrollTop +=
+                  card.getBoundingClientRect().top -
+                  box.getBoundingClientRect().top -
+                  24;
                 followLatest.current = false;
-              if (box.scrollHeight - box.scrollTop - box.clientHeight < 96)
-                followLatest.current = true;
-              setShowLatest(!followLatest.current);
-              lastScrollTop.current = box.scrollTop;
+              }
             }}
-          >
-            {!runs.length && !historyLoading && !historyFailure && (
-              <div className="agent-welcome">
+          />
+        )
+      }
+      overlay={
+        <Modal
+          open={Boolean(rename)}
+          title={ui("重命名会话", "Rename conversation")}
+          onCancel={() => setRename(null)}
+          onOk={() => {
+            if (rename)
+              void agentApi
+                .update(rename.id, { title: renameText })
+                .then((c) => {
+                  if (current?.id === c.id) setCurrent(c);
+                  setRename(null);
+                  return refreshList();
+                })
+                .catch(report);
+          }}
+        >
+          <Input
+            value={renameText}
+            onChange={(e) => setRenameText(e.target.value)}
+            maxLength={120}
+          />
+        </Modal>
+      }
+    >
+      {businessLaunch && canUse && (
+        <BusinessFlowLaunch
+          launch={businessLaunch}
+          model={model}
+          reasoningEffort={effortOverride ?? "medium"}
+          onReasoningEffortChange={(value) => {
+            setEffortOverride(value);
+            setThinkingMode("deep");
+          }}
+          compact={layout.narrow}
+          conversationId={
+            current?.archived || taskLocked ? undefined : current?.id
+          }
+          onStarted={startedBusinessFlow}
+          onCancel={() => setBusinessLaunch(undefined)}
+        />
+      )}
+      {error && (
+        <Alert
+          title={error}
+          type="error"
+          showIcon
+          closable
+          onClose={() => setError("")}
+          action={
+            <Button size="small" onClick={downloadResponseDiagnostics}>
+              {ui("下载异常诊断", "Download diagnostics")}
+            </Button>
+          }
+        />
+      )}
+      {historyLoading && (
+        <Typography.Text role="status" aria-live="polite">
+          {ui("正在加载会话：", "Loading conversation: ")}
+          {historyLoading.title}
+        </Typography.Text>
+      )}
+      {historyFailure && (
+        <Alert
+          type="warning"
+          showIcon
+          title={ui("暂时无法加载所选历史", "Unable to load selected history")}
+          description={
+            <>
+              {historyFailure.message}
+              <p>
+                {ui(
+                  "当前聊天记录已保留，请重试加载。",
+                  "Current messages are retained. Retry loading the history.",
+                )}
+              </p>
+            </>
+          }
+          action={
+            <Space wrap>
+              <Button
+                size="small"
+                onClick={() => void open(historyFailure.conversation)}
+              >
+                {ui("重试加载历史", "Retry history")}
+              </Button>
+              <Button size="small" onClick={downloadResponseDiagnostics}>
+                {ui("下载异常诊断", "Download diagnostics")}
+              </Button>
+            </Space>
+          }
+        />
+      )}
+      {pollFailure && (
+        <Alert
+          type="warning"
+          showIcon
+          title={pollFailure}
+          description={ui(
+            "当前回答已保留，正在重新连接。",
+            "The current answer is retained. Reconnecting.",
+          )}
+          action={
+            <Space wrap>
+              <Button
+                size="small"
+                onClick={() => setPollAttempt((value) => value + 1)}
+              >
+                {ui("重试更新回答", "Retry answer update")}
+              </Button>
+              <Button size="small" onClick={downloadResponseDiagnostics}>
+                {ui("下载异常诊断", "Download diagnostics")}
+              </Button>
+            </Space>
+          }
+        />
+      )}
+      {!bootstrap && bootstrapStatus === "error" && (
+        <Alert
+          type="warning"
+          title={
+            bootstrapError ||
+            ui("连接失败，请重试。", "Connection failed. Please retry.")
+          }
+          action={
+            <Button onClick={retryBootstrap}>
+              {ui("重试连接", "Retry connection")}
+            </Button>
+          }
+        />
+      )}
+      {bootstrapStatus === "unauthenticated" && (
+        <Alert
+          type="warning"
+          title={ui(
+            "登录状态已失效，请重新登录。",
+            "Your session has expired. Please sign in again.",
+          )}
+        />
+      )}
+      {(canUse === false || bootstrapStatus === "forbidden") && (
+        <Alert
+          type="info"
+          title={ui(
+            "当前账号未获准使用此功能，请联系超级管理员。",
+            "This feature is unavailable for this account. Contact your administrator.",
+          )}
+        />
+      )}
+      {bootstrap && canUse && !bootstrap.workerOnline && (
+        <Alert
+          type="warning"
+          title={ui(
+            "模型服务工作进程未就绪，历史记录仍可查看。",
+            "The model worker is unavailable. You can still view history.",
+          )}
+        />
+      )}
+      <div
+        className="agent-messages"
+        hidden={Boolean(businessLaunch && canUse)}
+        ref={viewport}
+        onScroll={(event) => {
+          const box = event.currentTarget;
+          if (box.scrollTop < lastScrollTop.current - 1)
+            followLatest.current = false;
+          if (box.scrollHeight - box.scrollTop - box.clientHeight < 96)
+            followLatest.current = true;
+          setShowLatest(!followLatest.current);
+          lastScrollTop.current = box.scrollTop;
+        }}
+      >
+        {!runs.length && !historyLoading && !historyFailure && (
+          <div className="agent-welcome">
+            <RobotOutlined />
+            <Typography.Title level={2}>
+              {ui("从项目数据中寻找答案", "Find answers in your project data")}
+            </Typography.Title>
+            <p>
+              {ui(
+                "直接提问，智能体将按需查找当前项目的授权资料与可用算法；完整任务可从业务流开始。",
+                "Ask a question to discover authorized project data and algorithms, or start a task from business flows.",
+              )}
+            </p>
+            <div
+              className="agent-example-questions"
+              aria-label={ui("示例问题", "Example questions")}
+            >
+              {exampleQuestions.map((question) => (
+                <Button key={question} onClick={() => setPrompt(question)}>
+                  {question}
+                </Button>
+              ))}
+              {bootstrap?.canAgent && (
+                <Button type="primary" onClick={openBusinessFlows}>
+                  {ui("从业务流开始任务", "Start a task with a business flow")}
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
+        {runs.map((r) => (
+          <section className="agent-turn" key={r.id} data-run-id={r.id}>
+            <div className="agent-user-message">{r.prompt}</div>
+            <div className="agent-assistant-message">
+              <Space className="agent-answer-heading">
                 <RobotOutlined />
-                <Typography.Title level={2}>
-                  {ui(
-                    "从项目数据中寻找答案",
-                    "Find answers in your project data",
-                  )}
-                </Typography.Title>
-                <p>
-                  {ui(
-                    "直接提问，智能体将按需查找当前项目的授权资料与可用算法；完整任务可从业务流开始。",
-                    "Ask a question to discover authorized project data and algorithms, or start a task from business flows.",
-                  )}
-                </p>
-                <div
-                  className="agent-example-questions"
-                  aria-label={ui("示例问题", "Example questions")}
-                >
-                  {exampleQuestions.map((question) => (
-                    <Button key={question} onClick={() => setPrompt(question)}>
-                      {question}
-                    </Button>
-                  ))}
-                  {bootstrap?.canAgent && (
-                    <Button type="primary" onClick={openBusinessFlows}>
-                      {ui(
-                        "从业务流开始任务",
-                        "Start a task with a business flow",
-                      )}
-                    </Button>
+                <strong>MH-Agent</strong>
+                {r.status !== "succeeded" && (
+                  <span
+                    className={`agent-answer-status${active(r) ? " is-active" : ""}`}
+                  >
+                    {statusLabel[r.status]}
+                  </span>
+                )}
+              </Space>
+              {r.businessFlow && (
+                <BusinessFlowActivity
+                  flow={r.businessFlow}
+                  modelActivity={workflowModelActivity(r)}
+                  onChanged={acceptBusinessFlow}
+                  inspectNode={
+                    inspectedFlowNode?.flowId === r.businessFlow.id
+                      ? inspectedFlowNode
+                      : undefined
+                  }
+                  onAccessBlocked={() => setBlockedFlowId(r.businessFlow!.id)}
+                />
+              )}
+              {r.attachments.length > 0 && (
+                <div className="agent-run-attachments">
+                  {r.attachments.map((item) =>
+                    item.kind === "image" && item.previewUrl ? (
+                      <a
+                        key={item.id}
+                        href={item.previewUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        <img
+                          src={item.previewUrl}
+                          alt={item.fileName}
+                          className="agent-attachment-preview"
+                        />
+                      </a>
+                    ) : (
+                      <Tag key={item.id} icon={<PaperClipOutlined />}>
+                        {item.fileName}
+                      </Tag>
+                    ),
                   )}
                 </div>
-              </div>
-            )}
-            {runs.map((r) => (
-              <section className="agent-turn" key={r.id} data-run-id={r.id}>
-                <div className="agent-user-message">{r.prompt}</div>
-                <div className="agent-assistant-message">
-                  <Space className="agent-answer-heading">
-                    <RobotOutlined />
-                    <strong>MH-Agent</strong>
-                    {r.status !== "succeeded" && (
-                      <span
-                        className={`agent-answer-status${active(r) ? " is-active" : ""}`}
-                      >
-                        {statusLabel[r.status]}
-                      </span>
-                    )}
-                  </Space>
-                  {r.businessFlow && (
-                    <BusinessFlowActivity
-                      flow={r.businessFlow}
-                      modelActivity={workflowModelActivity(r)}
-                      onChanged={acceptBusinessFlow}
-                      inspectNode={
-                        inspectedFlowNode?.flowId === r.businessFlow.id
-                          ? inspectedFlowNode
-                          : undefined
-                      }
-                      onAccessBlocked={() =>
-                        setBlockedFlowId(r.businessFlow!.id)
-                      }
-                    />
+              )}
+              {r.contextTruncated && (
+                <p className="agent-muted">
+                  {ui(
+                    "本轮已裁剪较早历史。",
+                    "Older context was shortened for this turn.",
                   )}
-                  {r.attachments.length > 0 && (
-                    <div className="agent-run-attachments">
-                      {r.attachments.map((item) =>
-                        item.kind === "image" && item.previewUrl ? (
-                          <a
-                            key={item.id}
-                            href={item.previewUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            <img
-                              src={item.previewUrl}
-                              alt={item.fileName}
-                              className="agent-attachment-preview"
-                            />
-                          </a>
-                        ) : (
-                          <Tag key={item.id} icon={<PaperClipOutlined />}>
-                            {item.fileName}
-                          </Tag>
-                        ),
-                      )}
-                    </div>
-                  )}
-                  {r.contextTruncated && (
-                    <p className="agent-muted">
-                      {ui(
-                        "本轮已裁剪较早历史。",
-                        "Older context was shortened for this turn.",
-                      )}
-                    </p>
-                  )}
-                  {!r.businessFlow &&
-                    !(
-                      r.researchIntent?.scenario === "geology_generic" &&
-                      r.researchIntent.workflowId
-                    ) && (
-                      <RunProcess
-                        run={r}
-                        events={r.id === running?.id ? events : []}
-                        disconnected={
-                          r.id === running?.id ? pollFailure : undefined
-                        }
-                      />
-                    )}
-                  {!r.businessFlow &&
-                    !(
-                      r.researchIntent?.scenario === "geology_generic" &&
-                      r.researchIntent.workflowId
-                    ) &&
-                    (!(mode === "agent" && r.computeIntent?.taskId) ||
-                      r.evidence.some((item) =>
-                        ["read_compute_output", "get_compute_task"].includes(
-                          item.tool,
-                        ),
-                      )) && (
-                      <>
-                        <AnswerPreview run={r} />
-                        <SafeMarkdown text={r.answer} />
-                      </>
-                    )}
-                  {mode === "agent" &&
-                    r.computeIntent &&
-                    r.interaction?.status !== "pending" && (
-                      <ComputeIntentCard
-                        runId={r.id}
-                        intent={r.computeIntent}
-                        onChanged={(next) => {
-                          if (
-                            alive.current &&
-                            conversationSequence === sequence.current
-                          )
-                            updateRun(next);
-                        }}
-                      />
-                    )}
-                  {mode === "agent" &&
-                    r.researchIntent &&
-                    !runs.some(
-                      (later) =>
-                        later.id > r.id &&
-                        later.researchIntent?.originRunId ===
-                          r.researchIntent?.originRunId,
-                    ) && (
-                      <ResearchIntentCard
-                        run={{ ...r, researchIntent: r.researchIntent }}
-                        onWorkflowChange={(workflow) =>
-                          setResearchWorkflow((previous) => {
-                            if (latestResearchRunId.current !== r.id)
-                              return previous;
-                            return workflow
-                              ? { runId: r.id, workflow }
-                              : previous?.runId === r.id
-                                ? undefined
-                                : previous;
-                          })
-                        }
-                        onRestart={openBusinessFlows}
-                        onChanged={(next) => {
-                          if (
-                            !alive.current ||
-                            conversationSequence !== sequence.current
-                          )
-                            return;
-                          if (!updateRun(next)) return;
-                          if (
-                            next.id !== r.id &&
-                            !runs.some((old) => old.id === next.id)
-                          ) {
-                            pendingScroll.current = next.id;
-                            void refreshList();
-                          }
-                        }}
-                      />
-                    )}
-                  <InteractionCard
+                </p>
+              )}
+              {!r.businessFlow &&
+                !(
+                  r.researchIntent?.scenario === "geology_generic" &&
+                  r.researchIntent.workflowId
+                ) && (
+                  <RunProcess
                     run={r}
-                    disabled={Boolean(current?.archived) || busy}
+                    events={r.id === running?.id ? events : []}
+                    disconnected={
+                      r.id === running?.id ? pollFailure : undefined
+                    }
+                  />
+                )}
+              {!r.businessFlow &&
+                !(
+                  r.researchIntent?.scenario === "geology_generic" &&
+                  r.researchIntent.workflowId
+                ) &&
+                (!(mode === "agent" && r.computeIntent?.taskId) ||
+                  r.evidence.some((item) =>
+                    ["read_compute_output", "get_compute_task"].includes(
+                      item.tool,
+                    ),
+                  )) && (
+                  <>
+                    <AnswerPreview run={r} />
+                    <SafeMarkdown text={r.answer} />
+                  </>
+                )}
+              {mode === "agent" &&
+                r.computeIntent &&
+                r.interaction?.status !== "pending" && (
+                  <ComputeIntentCard
+                    runId={r.id}
+                    intent={r.computeIntent}
+                    onChanged={(next) => {
+                      if (
+                        alive.current &&
+                        conversationSequence === sequence.current
+                      )
+                        updateRun(next);
+                    }}
+                  />
+                )}
+              {mode === "agent" &&
+                r.researchIntent &&
+                !runs.some(
+                  (later) =>
+                    later.id > r.id &&
+                    later.researchIntent?.originRunId ===
+                      r.researchIntent?.originRunId,
+                ) && (
+                  <ResearchIntentCard
+                    run={{ ...r, researchIntent: r.researchIntent }}
+                    onWorkflowChange={(workflow) =>
+                      setResearchWorkflow((previous) => {
+                        if (latestResearchRunId.current !== r.id)
+                          return previous;
+                        return workflow
+                          ? { runId: r.id, workflow }
+                          : previous?.runId === r.id
+                            ? undefined
+                            : previous;
+                      })
+                    }
+                    onRestart={openBusinessFlows}
                     onChanged={(next) => {
                       if (
                         !alive.current ||
                         conversationSequence !== sequence.current
                       )
                         return;
-                      followLatest.current = true;
-                      setEvents([]);
-                      updateRun(next);
-                      void refreshList();
-                    }}
-                  />
-
-                  {mode === "agent" &&
-                    (r.computeIntent?.taskId ||
-                      r.evidence.some((item) =>
-                        [
-                          "execute_operator",
-                          "get_compute_task",
-                          "import_compute_result",
-                        ].includes(item.tool),
-                      )) && (
-                      <RunComputeTasks
-                        runId={r.id}
-                        refreshKey={r.updatedAt}
-                        activityTaskId={r.computeIntent?.taskId ?? undefined}
-                        onActivityChange={(activity) => {
-                          if (
-                            !alive.current ||
-                            conversationSequence !== sequence.current
-                          )
-                            return;
-                          setComputeActivities((old) => {
-                            const previous = old[r.id];
-                            if (
-                              previous?.state === activity.state &&
-                              previous.label === activity.label &&
-                              previous.detail === activity.detail
-                            )
-                              return old;
-                            return { ...old, [r.id]: activity };
-                          });
-                        }}
-                      />
-                    )}
-                  {r.evidence.some((item) =>
-                    [
-                      "preview_data_import",
-                      "preview_publication",
-                      "preview_share",
-                    ].includes(item.tool),
-                  ) && (
-                    <PlatformOperationsPanel
-                      key={`operation-${user?.id}-${project?.current}-${r.id}`}
-                      accountId={user?.id ?? 0}
-                      projectId={Number(project?.current ?? 1)}
-                      runIds={[r.id]}
-                      inline
-                    />
-                  )}
-                  <PlatformActions
-                    actions={r.platformActions}
-                    projectId={Number(project?.current ?? 1)}
-                  />
-                  <RunEvidence
-                    items={r.evidence}
-                    canManage={Boolean(bootstrap?.canManage)}
-                  />
-                  {!r.businessFlow && r.detail && r.status !== "succeeded" && (
-                    <Alert
-                      className="agent-run-notice"
-                      type={r.status === "failed" ? "error" : "info"}
-                      title={r.detail}
-                      showIcon
-                    />
-                  )}
-                  {!active(r) &&
-                    !waiting(r) &&
-                    !r.computeIntent &&
-                    !r.researchIntent &&
-                    !r.businessFlow && (
-                      <Space className="agent-answer-actions">
-                        <Button
-                          size="small"
-                          icon={<CopyOutlined />}
-                          disabled={!r.answer}
-                          onClick={() => void copy(r.answer)}
-                        >
-                          {ui("复制", "Copy")}
-                        </Button>
-                        <Button
-                          size="small"
-                          disabled={taskLocked || busy || !modelOnline}
-                          onClick={() => void send(r.prompt)}
-                        >
-                          {r.status === "succeeded"
-                            ? ui("重新生成", "Regenerate")
-                            : ui("重试", "Retry")}
-                        </Button>
-                      </Space>
-                    )}
-                </div>
-              </section>
-            ))}
-          </div>
-          {!businessLaunch && showLatest && runs.length > 0 && (
-            <div className="agent-latest-bar">
-              <Button
-                icon={<ArrowDownOutlined />}
-                onClick={() => {
-                  followLatest.current = true;
-                  setShowLatest(false);
-                  if (viewport.current)
-                    viewport.current.scrollTop = viewport.current.scrollHeight;
-                }}
-              >
-                {ui("回到最新", "Jump to latest")}
-              </Button>
-            </div>
-          )}
-          {canUse && !businessLaunch && (
-            <div className="agent-composer">
-              <AgentResizeHandle
-                orientation="horizontal"
-                label={ui("调整输入框高度", "Resize message input")}
-                hint={ui(
-                  "上下拖动或按方向键调整，双击恢复",
-                  "Drag or use arrow keys to resize; double-click to reset",
-                )}
-                controls="agent-message-input"
-                value={layout.input}
-                min={layout.inputMin}
-                max={layout.inputMax}
-                defaultValue={layout.defaults.input}
-                onChange={layout.setInput}
-              />
-              <div className="agent-composer-content">
-                <div className="agent-composer-context">
-                  {waitingRun?.interaction?.status === "pending" && (
-                    <div
-                      className="agent-answer-target"
-                      id="agent-answer-target"
-                    >
-                      <MessageOutlined />
-                      <span>
-                        <strong>
-                          {waitingRun.interaction.kind === "review"
-                            ? ui(
-                                "请在问题卡中审核",
-                                "Review in the question card",
-                              )
-                            : ui(
-                                "在下方回答当前问题",
-                                "Answer the current question below",
-                              )}
-                        </strong>
-                        <span>{waitingRun.interaction.title}</span>
-                      </span>
-                      <Button
-                        type="link"
-                        onClick={() => revealWaitingQuestion(true)}
-                      >
-                        {ui("查看问题", "View question")}
-                      </Button>
-                    </div>
-                  )}
-                  {attachments.length > 0 && (
-                    <div className="agent-attachments-row">
-                      {attachments.map((item) => (
-                        <Tag
-                          key={item.id}
-                          closable={!taskLocked && !busy}
-                          onClose={() =>
-                            setAttachments((old) =>
-                              old.filter((entry) => entry.id !== item.id),
-                            )
-                          }
-                        >
-                          {item.fileName}
-                        </Tag>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <div className="agent-input-row">
-                  <Input.TextArea
-                    id="agent-message-input"
-                    aria-label={ui("输入消息", "Message")}
-                    aria-describedby={
-                      waitingRun?.interaction?.status === "pending"
-                        ? "agent-answer-target"
-                        : undefined
-                    }
-                    value={prompt}
-                    onChange={(e) => setPrompt(e.target.value)}
-                    style={{ height: layout.input, resize: "none" }}
-                    maxLength={bootstrap?.budgets?.maxPromptCharacters ?? 12000}
-                    disabled={!canUse || current?.archived}
-                    placeholder={
-                      businessBlocked && !running
-                        ? ui(
-                            "请在业务流中处理当前决定，或新建会话继续其他工作",
-                            "Continue in the flow, or open a new conversation",
-                          )
-                        : waitingRun
-                          ? ui(
-                              "可直接补充回答，或在上方问题卡中选择并继续",
-                              "Answer here, or use the question card above",
-                            )
-                          : ui(
-                              "输入问题，Enter 发送，Shift+Enter 换行",
-                              "Ask a question. Enter to send, Shift+Enter for a new line",
-                            )
-                    }
-                    onKeyDown={(e) => {
+                      if (!updateRun(next)) return;
                       if (
-                        e.key === "Enter" &&
-                        !e.shiftKey &&
-                        !e.nativeEvent.isComposing
+                        next.id !== r.id &&
+                        !runs.some((old) => old.id === next.id)
                       ) {
-                        e.preventDefault();
-                        void send();
+                        pendingScroll.current = next.id;
+                        void refreshList();
                       }
                     }}
                   />
-                </div>
-                <div className="agent-composer-footer">
-                  <div className="agent-composer-tools">
-                    {bootstrap?.canAgent && (
+                )}
+              <InteractionCard
+                run={r}
+                disabled={Boolean(current?.archived) || busy}
+                onChanged={(next) => {
+                  if (
+                    !alive.current ||
+                    conversationSequence !== sequence.current
+                  )
+                    return;
+                  followLatest.current = true;
+                  setEvents([]);
+                  updateRun(next);
+                  void refreshList();
+                }}
+              />
+
+              {mode === "agent" &&
+                (r.computeIntent?.taskId ||
+                  r.evidence.some((item) =>
+                    [
+                      "execute_operator",
+                      "get_compute_task",
+                      "import_compute_result",
+                    ].includes(item.tool),
+                  )) && (
+                  <RunComputeTasks
+                    runId={r.id}
+                    refreshKey={r.updatedAt}
+                    activityTaskId={r.computeIntent?.taskId ?? undefined}
+                    onActivityChange={(activity) => {
+                      if (
+                        !alive.current ||
+                        conversationSequence !== sequence.current
+                      )
+                        return;
+                      setComputeActivities((old) => {
+                        const previous = old[r.id];
+                        if (
+                          previous?.state === activity.state &&
+                          previous.label === activity.label &&
+                          previous.detail === activity.detail
+                        )
+                          return old;
+                        return { ...old, [r.id]: activity };
+                      });
+                    }}
+                  />
+                )}
+              {r.evidence.some((item) =>
+                [
+                  "preview_data_import",
+                  "preview_publication",
+                  "preview_share",
+                ].includes(item.tool),
+              ) && (
+                <PlatformOperationsPanel
+                  key={`operation-${user?.id}-${project?.current}-${r.id}`}
+                  accountId={user?.id ?? 0}
+                  projectId={Number(project?.current ?? 1)}
+                  runIds={[r.id]}
+                  inline
+                />
+              )}
+              <PlatformActions
+                actions={r.platformActions}
+                projectId={Number(project?.current ?? 1)}
+              />
+              <RunEvidence
+                items={r.evidence}
+                canManage={Boolean(bootstrap?.canManage)}
+              />
+              {!r.businessFlow && r.detail && r.status !== "succeeded" && (
+                <Alert
+                  className="agent-run-notice"
+                  type={r.status === "failed" ? "error" : "info"}
+                  title={r.detail}
+                  showIcon
+                />
+              )}
+              {!active(r) &&
+                !waiting(r) &&
+                !r.computeIntent &&
+                !r.researchIntent &&
+                !r.businessFlow && (
+                  <Space className="agent-answer-actions">
+                    <Button
+                      size="small"
+                      icon={<CopyOutlined />}
+                      disabled={!r.answer}
+                      onClick={() => void copy(r.answer)}
+                    >
+                      {ui("复制", "Copy")}
+                    </Button>
+                    {!historyOnly && (
                       <Button
-                        type="text"
-                        icon={<NodeIndexOutlined />}
-                        aria-label={ui("业务流", "Business flows")}
-                        onClick={() => navigate("/business-flows")}
+                        size="small"
+                        disabled={taskLocked || busy || !modelOnline}
+                        onClick={() => void send(r.prompt)}
                       >
-                        业务流
+                        {r.status === "succeeded"
+                          ? ui("重新生成", "Regenerate")
+                          : ui("重试", "Retry")}
                       </Button>
                     )}
-                    {attachmentsAvailable && (
-                      <Upload
-                        className="agent-upload-tool"
-                        accept=".pdf,.docx,.txt,.md,.csv,.png,.jpg,.jpeg,.webp"
-                        multiple
-                        showUploadList={false}
-                        beforeUpload={(file) => {
-                          void uploadAttachment(file);
-                          return false;
-                        }}
-                        disabled={
-                          taskLocked ||
-                          busy ||
-                          uploadingAttachment ||
-                          current?.archived
-                        }
-                      >
-                        <Button
-                          type="text"
-                          icon={<PaperClipOutlined />}
-                          aria-label={ui("上传文档", "Upload document")}
-                          loading={uploadingAttachment}
-                        >
-                          {ui("上传文档", "Upload document")}
-                        </Button>
-                      </Upload>
-                    )}
-                    {deepThinkingAvailable && (
-                      <ReasoningEffortControl
-                        value={effortOverride ?? "medium"}
-                        overridden={effortOverride !== undefined}
-                        effortEnabled
-                        disabled={taskLocked || busy}
-                        onChange={(value) => setEffortOverride(value)}
-                      />
-                    )}
-                  </div>
-                  {running ? (
-                    <Button
-                      className="agent-send-button"
-                      aria-label={ui("停止回答", "Stop response")}
-                      title={ui("停止回答", "Stop response")}
-                      icon={<StopOutlined />}
-                      loading={stopping}
-                      disabled={stopping}
-                      onClick={() => void stopResponse()}
-                    />
-                  ) : reviewPending ? (
-                    <Button
-                      type="primary"
-                      className="agent-send-button agent-review-button"
-                      icon={<NodeIndexOutlined />}
-                      aria-label={ui("查看审核项", "Review pending items")}
-                      title={ui(
-                        "请在审核卡中选择后继续",
-                        "Choose items in the review card to continue",
-                      )}
-                      disabled={busy || Boolean(historyLoading)}
-                      onClick={() => revealWaitingQuestion(true)}
-                    >
-                      {ui("查看审核", "Review")}
-                    </Button>
-                  ) : (
-                    <Button
-                      type="primary"
-                      className="agent-send-button"
-                      aria-label={
-                        waitingRun
-                          ? ui("提交回答", "Submit answer")
-                          : ui("发送", "Send")
-                      }
-                      title={
-                        waitingRun
-                          ? ui("提交回答", "Submit answer")
-                          : ui("发送", "Send")
-                      }
-                      icon={<SendOutlined />}
-                      loading={busy}
-                      disabled={
-                        !canUse ||
-                        Boolean(businessBlocked) ||
-                        Boolean(historyLoading) ||
-                        uploadingAttachment ||
-                        !modelOnline ||
-                        !bootstrap?.workerOnline ||
-                        !prompt.trim() ||
-                        current?.archived
-                      }
-                      onClick={() => void send()}
-                    />
-                  )}
-                </div>
-              </div>
+                  </Space>
+                )}
             </div>
-          )}
-        </main>
-        {canUse &&
-          !businessLaunch &&
-          !historyLoading &&
-          !historyFailure &&
-          monitoredFlow &&
-          monitoredFlow.conversationId === current?.id && (
-            <BusinessFlowMonitor
-              key={monitoredFlow.id}
-              flow={monitoredFlow}
-              accessBlocked={blockedFlowId === monitoredFlow.id}
-              onLocate={(nodeId) => {
-                setInspectedFlowNode({
-                  flowId: monitoredFlow.id,
-                  nodeId,
-                  request: Date.now(),
-                });
-                const box = viewport.current;
-                const card = Array.from(
-                  box?.querySelectorAll<HTMLElement>(
-                    "[data-business-flow-id]",
-                  ) ?? [],
-                ).find(
-                  (element) =>
-                    element.dataset.businessFlowId === monitoredFlow.id,
-                );
-                if (box && card) {
-                  box.scrollTop +=
-                    card.getBoundingClientRect().top -
-                    box.getBoundingClientRect().top -
-                    24;
-                  followLatest.current = false;
+          </section>
+        ))}
+      </div>
+      {!businessLaunch && showLatest && runs.length > 0 && (
+        <div className="agent-latest-bar">
+          <Button
+            icon={<ArrowDownOutlined />}
+            onClick={() => {
+              followLatest.current = true;
+              setShowLatest(false);
+              if (viewport.current)
+                viewport.current.scrollTop = viewport.current.scrollHeight;
+            }}
+          >
+            {ui("回到最新", "Jump to latest")}
+          </Button>
+        </div>
+      )}
+      {canUse && !businessLaunch && !historyOnly && (
+        <AgentComposerFrame layout={layout}>
+          <div className="agent-composer-context">
+            {waitingRun?.interaction?.status === "pending" && (
+              <div className="agent-answer-target" id="agent-answer-target">
+                <MessageOutlined />
+                <span>
+                  <strong>
+                    {waitingRun.interaction.kind === "review"
+                      ? ui("请在问题卡中审核", "Review in the question card")
+                      : ui(
+                          "在下方回答当前问题",
+                          "Answer the current question below",
+                        )}
+                  </strong>
+                  <span>{waitingRun.interaction.title}</span>
+                </span>
+                <Button type="link" onClick={() => revealWaitingQuestion(true)}>
+                  {ui("查看问题", "View question")}
+                </Button>
+              </div>
+            )}
+            {attachments.length > 0 && (
+              <div className="agent-attachments-row">
+                {attachments.map((item) => (
+                  <Tag
+                    key={item.id}
+                    closable={!taskLocked && !busy}
+                    onClose={() =>
+                      setAttachments((old) =>
+                        old.filter((entry) => entry.id !== item.id),
+                      )
+                    }
+                  >
+                    {item.fileName}
+                  </Tag>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="agent-input-row">
+            <Input.TextArea
+              id="agent-message-input"
+              aria-label={ui("输入消息", "Message")}
+              aria-describedby={
+                waitingRun?.interaction?.status === "pending"
+                  ? "agent-answer-target"
+                  : undefined
+              }
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              style={{ height: layout.input, resize: "none" }}
+              maxLength={bootstrap?.budgets?.maxPromptCharacters ?? 12000}
+              disabled={!canUse || current?.archived}
+              placeholder={
+                businessBlocked && !running
+                  ? ui(
+                      "请在业务流中处理当前决定，或新建会话继续其他工作",
+                      "Continue in the flow, or open a new conversation",
+                    )
+                  : waitingRun
+                    ? ui(
+                        "可直接补充回答，或在上方问题卡中选择并继续",
+                        "Answer here, or use the question card above",
+                      )
+                    : ui(
+                        "输入问题，Enter 发送，Shift+Enter 换行",
+                        "Ask a question. Enter to send, Shift+Enter for a new line",
+                      )
+              }
+              onKeyDown={(e) => {
+                if (
+                  e.key === "Enter" &&
+                  !e.shiftKey &&
+                  !e.nativeEvent.isComposing
+                ) {
+                  e.preventDefault();
+                  void send();
                 }
               }}
             />
-          )}
-      </div>
-      <Modal
-        open={Boolean(rename)}
-        title={ui("重命名会话", "Rename conversation")}
-        onCancel={() => setRename(null)}
-        onOk={() => {
-          if (rename)
-            void agentApi
-              .update(rename.id, { title: renameText })
-              .then((c) => {
-                if (current?.id === c.id) setCurrent(c);
-                setRename(null);
-                return refreshList();
-              })
-              .catch(report);
-        }}
-      >
-        <Input
-          value={renameText}
-          onChange={(e) => setRenameText(e.target.value)}
-          maxLength={120}
-        />
-      </Modal>
-    </Layout>
+          </div>
+          <div className="agent-composer-footer">
+            <div className="agent-composer-tools">
+              {bootstrap?.canAgent && (
+                <Button
+                  type="text"
+                  icon={<NodeIndexOutlined />}
+                  aria-label={ui("业务流", "Business flows")}
+                  onClick={() => navigate("/business-flows")}
+                >
+                  业务流
+                </Button>
+              )}
+              {attachmentsAvailable && (
+                <Upload
+                  className="agent-upload-tool"
+                  accept=".pdf,.docx,.txt,.md,.csv,.png,.jpg,.jpeg,.webp"
+                  multiple
+                  showUploadList={false}
+                  beforeUpload={(file) => {
+                    void uploadAttachment(file);
+                    return false;
+                  }}
+                  disabled={
+                    taskLocked ||
+                    busy ||
+                    uploadingAttachment ||
+                    current?.archived
+                  }
+                >
+                  <Button
+                    type="text"
+                    icon={<PaperClipOutlined />}
+                    aria-label={ui("上传文档", "Upload document")}
+                    loading={uploadingAttachment}
+                  >
+                    {ui("上传文档", "Upload document")}
+                  </Button>
+                </Upload>
+              )}
+              {deepThinkingAvailable && (
+                <ReasoningEffortControl
+                  value={effortOverride ?? "medium"}
+                  overridden={effortOverride !== undefined}
+                  effortEnabled
+                  disabled={taskLocked || busy}
+                  onChange={(value) => setEffortOverride(value)}
+                />
+              )}
+            </div>
+            {running ? (
+              <Button
+                className="agent-send-button"
+                aria-label={ui("停止回答", "Stop response")}
+                title={ui("停止回答", "Stop response")}
+                icon={<StopOutlined />}
+                loading={stopping}
+                disabled={stopping}
+                onClick={() => void stopResponse()}
+              />
+            ) : reviewPending ? (
+              <Button
+                type="primary"
+                className="agent-send-button agent-review-button"
+                icon={<NodeIndexOutlined />}
+                aria-label={ui("查看审核项", "Review pending items")}
+                title={ui(
+                  "请在审核卡中选择后继续",
+                  "Choose items in the review card to continue",
+                )}
+                disabled={busy || Boolean(historyLoading)}
+                onClick={() => revealWaitingQuestion(true)}
+              >
+                {ui("查看审核", "Review")}
+              </Button>
+            ) : (
+              <Button
+                type="primary"
+                className="agent-send-button"
+                aria-label={
+                  waitingRun
+                    ? ui("提交回答", "Submit answer")
+                    : ui("发送", "Send")
+                }
+                title={
+                  waitingRun
+                    ? ui("提交回答", "Submit answer")
+                    : ui("发送", "Send")
+                }
+                icon={<SendOutlined />}
+                loading={busy}
+                disabled={
+                  !canUse ||
+                  Boolean(businessBlocked) ||
+                  Boolean(historyLoading) ||
+                  uploadingAttachment ||
+                  !modelOnline ||
+                  !bootstrap?.workerOnline ||
+                  !prompt.trim() ||
+                  current?.archived
+                }
+                onClick={() => void send()}
+              />
+            )}
+          </div>
+        </AgentComposerFrame>
+      )}
+    </AgentWorkspaceLayout>
   );
 }

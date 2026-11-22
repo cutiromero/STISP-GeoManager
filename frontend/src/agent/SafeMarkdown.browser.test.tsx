@@ -2,6 +2,28 @@ import { render, screen } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 import SafeMarkdown from "./SafeMarkdown";
 
+it("opens opted-in HTTP sources without rendering user info or executable markup", () => {
+  const { container } = render(
+    <SafeMarkdown
+      links
+      text={
+        "[机构](https://science.nasa.gov/) 与 https://www.usgs.gov/。\n" +
+        "[恶意](javascript:alert(1)) https://account:password@example.org/\n" +
+        "`https://example.org/code`"
+      }
+    />,
+  );
+  expect(screen.getByRole("link", { name: "机构" })).toHaveAttribute(
+    "href",
+    "https://science.nasa.gov/",
+  );
+  expect(
+    screen.getByRole("link", { name: "https://www.usgs.gov/" }),
+  ).toHaveAttribute("rel", "noopener noreferrer");
+  expect(screen.getAllByRole("link")).toHaveLength(2);
+  expect(container.textContent).toContain("。");
+});
+
 it("shows escaped catalog names exactly without splitting cells or creating markup", () => {
   const name =
     "haze1_ndvi|样区*A*`v1`[目录](修订)\\路径 <script>alert(1)</script> &lt;&gt;&amp;";

@@ -1,0 +1,22 @@
+{
+  "stisp_business_flows": [
+    "list_business_flows",
+    "prepare_business_flow_inputs",
+    "start_business_flow"
+  ],
+  "stisp_project_data": [
+    "search_tools",
+    "search_resources",
+    "summarize_resource_catalog",
+    "describe_resource",
+    "read_rows",
+    "summarize_data",
+    "aggregate_data",
+    "search_knowledge",
+    "read_knowledge_document",
+    "check_knowledge_constraints",
+    "list_compute_algorithms",
+    "get_map_data_profile",
+    "get_platform_link"
+  ]
+}

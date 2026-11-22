@@ -1,0 +1,15 @@
+{
+  "PATCH /api/agent/hermes/api/sessions/{sessionId}": {
+    "200": {
+      "object": "hermes.session",
+      "session": {
+        "id": "stisp_1234567890abcdef1234567890abcdef",
+        "title": "公开资料检索",
+        "source": "api_server",
+        "last_active": 1795356000,
+        "last_run_id": null,
+        "internet_enabled": true
+      }
+    }
+  }
+}

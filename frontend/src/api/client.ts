@@ -486,6 +486,7 @@ export async function requestJson<T>(
     body?: unknown;
     projectTagId?: string;
     signal?: AbortSignal;
+    idempotencyKey?: string;
     validate?: (data: unknown) => void;
   } = {},
 ): Promise<T> {
@@ -508,6 +509,8 @@ export async function requestJson<T>(
   const entry = typeof document === "undefined" ? "" : moduleEntry(document);
   if (entry) headers.set("X-App-Entry", entry);
   headers.set("X-Project-Id", options.projectTagId ?? getActiveProject());
+  if (options.idempotencyKey)
+    headers.set("Idempotency-Key", options.idempotencyKey);
   if (!independent && browserSessionFamily())
     headers.set("X-STISP-Session", browserSessionFamily());
   const cancellation = combineAbortSignals([

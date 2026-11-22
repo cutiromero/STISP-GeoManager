@@ -114,7 +114,7 @@ def snapshot(run_id, user):
     }
 
 
-def live(request, run_id):
+def live_browser_user(request):
     user = fresh_user(request.user.id)
     session = SessionStore(session_key=request.session.session_key).load()
     if str(session.get("_auth_user_id")) != str(user.id) or not constant_time_compare(
@@ -124,6 +124,11 @@ def live(request, run_id):
     state = session.get(SESSION_KEY)
     if state is not None and not has_active_page(state):
         raise StreamDenied(401, "页面会话已失效，请重新登录")
+    return user
+
+
+def live(request, run_id):
+    user = live_browser_user(request)
     run = (
         AgentRun.objects.select_related("conversation")
         .filter(pk=run_id, owner=user)

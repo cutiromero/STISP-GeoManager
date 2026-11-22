@@ -342,6 +342,8 @@ pnpm run api:docs
 
 ### API 契约规范
 
+本机 Hermes 网页入口使用上游 Sessions、Runs 和 SSE。浏览器通过 Django 同源代理访问。模型、技能、工具和平台业务流的接入见 [Hermes 网页开发](hermes-web.md)。
+
 逻辑推理审核的 `reviewIndex.candidateIds` 保存统一待核查疑点的冻结 ID；分页时以索引维持全选。`candidateAction: review` 表示所选对象由实际算子重新核对并保持原状，不计为数据修改。未选择对象不产生处置授权。
 
 Agent能力准入、参数与执行规则见[平台API与Agent能力开放规范](agent-api-governance.md)。`GET /api/agent/capabilities/`要求正式登录、当前单项目及智能体权限，返回经当前策略过滤的工具合同，不读取业务资料或执行业务操作。目录中的参数Schema和运行合同由OpenAPI的`x-agent-tools`生成，构建必须通过`agent:contracts:check`，发现能力不授予执行或对象访问权。

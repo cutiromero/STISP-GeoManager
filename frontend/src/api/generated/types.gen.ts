@@ -4,6 +4,104 @@ export type ClientOptions = {
     baseUrl: `${string}://${string}` | 'http://localhost:8000' | 'https://api.huyang.example.com' | (string & {});
 };
 
+export type HermesCapabilities = {
+    /**
+     * 当前账号具备科研智能体权限且平台策略允许会话开启联网。
+     */
+    public_web_enabled?: boolean;
+    [key: string]: unknown;
+};
+
+export type HermesSkill = {
+    name: string;
+    description: string;
+    category: string;
+};
+
+export type HermesSkillList = {
+    data: Array<HermesSkill>;
+};
+
+export type HermesToolset = {
+    name: string;
+    label: string;
+    enabled: boolean;
+    configured?: boolean;
+    tools: Array<string>;
+};
+
+export type HermesToolsetList = {
+    data: Array<HermesToolset>;
+};
+
+export type HermesSession = {
+    id: string;
+    title: string;
+    source?: string;
+    last_active?: number;
+    last_run_id: string | null;
+    /**
+     * 会话所有者已开启公开网页检索。
+     */
+    internet_enabled: boolean;
+};
+
+export type HermesSessionCreate = {
+    mode: 'chat' | 'agent';
+    title?: string;
+    /**
+     * 开启新科研智能体会话的公开网页检索。
+     */
+    internet_enabled?: boolean;
+};
+
+export type HermesSessionList = {
+    object: string;
+    data: Array<HermesSession>;
+    has_more: boolean;
+    offset?: number;
+    limit?: number;
+};
+
+export type HermesSessionEnvelope = {
+    object: string;
+    session: HermesSession;
+};
+
+export type HermesMessage = {
+    id: number;
+    role: string;
+    content: unknown;
+    tool_name?: string;
+    display_kind?: string;
+};
+
+export type HermesMessageList = {
+    data: Array<HermesMessage>;
+};
+
+export type HermesRunCreate = {
+    session_id: string;
+    input: string;
+};
+
+export type HermesRunAdmission = {
+    run_id: string;
+    status: string;
+    replayed: boolean;
+};
+
+export type HermesRunStatus = {
+    run_id: string;
+    status: string;
+    session_id: string;
+    output?: string;
+    error?: string;
+    pending_controls?: Array<{
+        [key: string]: unknown;
+    }>;
+};
+
 /**
  * 真实原生资料单期预览请求。
  */
@@ -15975,6 +16073,21 @@ export type AgentOperationPreviewInput = {
 };
 
 /**
+ * X-Project-Id
+ */
+export type HermesProject = number;
+
+/**
+ * sessionId
+ */
+export type HermesSessionId = string;
+
+/**
+ * runId
+ */
+export type HermesRunId = string;
+
+/**
  * 可选的页面登录 familyId，仅用于发现跨标签页账号变化，不是身份凭据；不匹配当前 Cookie 身份时返回409，原有项目与数据权限仍实时检查。
  */
 export type BrowserSessionFamily = string;
@@ -24395,6 +24508,1324 @@ export type ListAgentToolCallsResponses = {
 };
 
 export type ListAgentToolCallsResponse = ListAgentToolCallsResponses[keyof ListAgentToolCallsResponses];
+
+export type GetHermesCapabilitiesData = {
+    body?: never;
+    headers: {
+        /**
+         * X-Project-Id
+         */
+        'X-Project-Id': number;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/agent/hermes/v1/capabilities';
+};
+
+export type GetHermesCapabilitiesErrors = {
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    400: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    401: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    403: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    404: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    409: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    429: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    503: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+};
+
+export type GetHermesCapabilitiesError = GetHermesCapabilitiesErrors[keyof GetHermesCapabilitiesErrors];
+
+export type GetHermesCapabilitiesResponses = {
+    /**
+     * 读取 Hermes 网关能力
+     */
+    200: HermesCapabilities;
+};
+
+export type GetHermesCapabilitiesResponse = GetHermesCapabilitiesResponses[keyof GetHermesCapabilitiesResponses];
+
+export type ListHermesSkillsData = {
+    body?: never;
+    headers: {
+        /**
+         * X-Project-Id
+         */
+        'X-Project-Id': number;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/agent/hermes/v1/skills';
+};
+
+export type ListHermesSkillsErrors = {
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    400: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    401: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    403: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    404: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    409: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    429: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    503: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+};
+
+export type ListHermesSkillsError = ListHermesSkillsErrors[keyof ListHermesSkillsErrors];
+
+export type ListHermesSkillsResponses = {
+    /**
+     * 查看 Hermes 技能目录
+     */
+    200: HermesSkillList;
+};
+
+export type ListHermesSkillsResponse = ListHermesSkillsResponses[keyof ListHermesSkillsResponses];
+
+export type ListHermesToolsetsData = {
+    body?: never;
+    headers: {
+        /**
+         * X-Project-Id
+         */
+        'X-Project-Id': number;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/agent/hermes/v1/toolsets';
+};
+
+export type ListHermesToolsetsErrors = {
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    400: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    401: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    403: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    404: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    409: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    429: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    503: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+};
+
+export type ListHermesToolsetsError = ListHermesToolsetsErrors[keyof ListHermesToolsetsErrors];
+
+export type ListHermesToolsetsResponses = {
+    /**
+     * 查看 Hermes 工具集
+     */
+    200: HermesToolsetList;
+};
+
+export type ListHermesToolsetsResponse = ListHermesToolsetsResponses[keyof ListHermesToolsetsResponses];
+
+export type ListHermesSessionsData = {
+    body?: never;
+    headers: {
+        /**
+         * X-Project-Id
+         */
+        'X-Project-Id': number;
+    };
+    path?: never;
+    query?: {
+        /**
+         * mode
+         */
+        mode?: 'agent' | 'chat';
+        /**
+         * limit
+         */
+        limit?: number;
+        /**
+         * offset
+         */
+        offset?: number;
+    };
+    url: '/api/agent/hermes/api/sessions';
+};
+
+export type ListHermesSessionsErrors = {
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    400: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    401: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    403: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    404: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    409: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    429: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    503: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+};
+
+export type ListHermesSessionsError = ListHermesSessionsErrors[keyof ListHermesSessionsErrors];
+
+export type ListHermesSessionsResponses = {
+    /**
+     * 列出本人的 Hermes 会话
+     */
+    200: HermesSessionList;
+};
+
+export type ListHermesSessionsResponse = ListHermesSessionsResponses[keyof ListHermesSessionsResponses];
+
+export type CreateHermesSessionData = {
+    body: HermesSessionCreate;
+    headers: {
+        /**
+         * X-Project-Id
+         */
+        'X-Project-Id': number;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/agent/hermes/api/sessions';
+};
+
+export type CreateHermesSessionErrors = {
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    400: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    401: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    403: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    404: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    409: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    429: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    503: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+};
+
+export type CreateHermesSessionError = CreateHermesSessionErrors[keyof CreateHermesSessionErrors];
+
+export type CreateHermesSessionResponses = {
+    /**
+     * 创建 Hermes 会话
+     */
+    201: HermesSessionEnvelope;
+};
+
+export type CreateHermesSessionResponse = CreateHermesSessionResponses[keyof CreateHermesSessionResponses];
+
+export type DeleteHermesSessionData = {
+    body?: never;
+    headers: {
+        /**
+         * X-Project-Id
+         */
+        'X-Project-Id': number;
+    };
+    path: {
+        /**
+         * sessionId
+         */
+        sessionId: string;
+    };
+    query?: never;
+    url: '/api/agent/hermes/api/sessions/{sessionId}';
+};
+
+export type DeleteHermesSessionErrors = {
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    400: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    401: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    403: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    404: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    409: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    429: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    503: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+};
+
+export type DeleteHermesSessionError = DeleteHermesSessionErrors[keyof DeleteHermesSessionErrors];
+
+export type DeleteHermesSessionResponses = {
+    /**
+     * 删除 Hermes 会话
+     */
+    204: void;
+};
+
+export type DeleteHermesSessionResponse = DeleteHermesSessionResponses[keyof DeleteHermesSessionResponses];
+
+export type UpdateHermesSessionData = {
+    /**
+     * 会话所有者明确设置的联网状态。
+     */
+    body: {
+        internet_enabled: boolean;
+    };
+    headers: {
+        /**
+         * X-Project-Id
+         */
+        'X-Project-Id': number;
+    };
+    path: {
+        /**
+         * sessionId
+         */
+        sessionId: string;
+    };
+    query?: never;
+    url: '/api/agent/hermes/api/sessions/{sessionId}';
+};
+
+export type UpdateHermesSessionErrors = {
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    400: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    401: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    403: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    404: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+};
+
+export type UpdateHermesSessionError = UpdateHermesSessionErrors[keyof UpdateHermesSessionErrors];
+
+export type UpdateHermesSessionResponses = {
+    /**
+     * 已保存当前会话联网设置。
+     */
+    200: HermesSessionEnvelope;
+};
+
+export type UpdateHermesSessionResponse = UpdateHermesSessionResponses[keyof UpdateHermesSessionResponses];
+
+export type ListHermesMessagesData = {
+    body?: never;
+    headers: {
+        /**
+         * X-Project-Id
+         */
+        'X-Project-Id': number;
+    };
+    path: {
+        /**
+         * sessionId
+         */
+        sessionId: string;
+    };
+    query?: never;
+    url: '/api/agent/hermes/api/sessions/{sessionId}/messages';
+};
+
+export type ListHermesMessagesErrors = {
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    400: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    401: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    403: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    404: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    409: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    429: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    503: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+};
+
+export type ListHermesMessagesError = ListHermesMessagesErrors[keyof ListHermesMessagesErrors];
+
+export type ListHermesMessagesResponses = {
+    /**
+     * 读取 Hermes 对话历史
+     */
+    200: HermesMessageList;
+};
+
+export type ListHermesMessagesResponse = ListHermesMessagesResponses[keyof ListHermesMessagesResponses];
+
+export type CreateHermesRunData = {
+    body: HermesRunCreate;
+    headers: {
+        /**
+         * X-Project-Id
+         */
+        'X-Project-Id': number;
+        /**
+         * Idempotency-Key
+         */
+        'Idempotency-Key': string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/agent/hermes/v1/runs';
+};
+
+export type CreateHermesRunErrors = {
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    400: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    401: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    403: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    404: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    409: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    429: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    503: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+};
+
+export type CreateHermesRunError = CreateHermesRunErrors[keyof CreateHermesRunErrors];
+
+export type CreateHermesRunResponses = {
+    /**
+     * 提交 Hermes 运行
+     */
+    202: HermesRunAdmission;
+};
+
+export type CreateHermesRunResponse = CreateHermesRunResponses[keyof CreateHermesRunResponses];
+
+export type GetHermesRunData = {
+    body?: never;
+    headers: {
+        /**
+         * X-Project-Id
+         */
+        'X-Project-Id': number;
+    };
+    path: {
+        /**
+         * runId
+         */
+        runId: string;
+    };
+    query?: never;
+    url: '/api/agent/hermes/v1/runs/{runId}';
+};
+
+export type GetHermesRunErrors = {
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    400: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    401: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    403: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    404: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    409: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    429: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    503: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+};
+
+export type GetHermesRunError = GetHermesRunErrors[keyof GetHermesRunErrors];
+
+export type GetHermesRunResponses = {
+    /**
+     * 读取 Hermes 运行状态
+     */
+    200: HermesRunStatus;
+};
+
+export type GetHermesRunResponse = GetHermesRunResponses[keyof GetHermesRunResponses];
+
+export type StreamHermesRunData = {
+    body?: never;
+    headers: {
+        /**
+         * X-Project-Id
+         */
+        'X-Project-Id': number;
+        /**
+         * Last-Event-ID
+         */
+        'Last-Event-ID'?: number;
+    };
+    path: {
+        /**
+         * runId
+         */
+        runId: string;
+    };
+    query?: {
+        /**
+         * last_seq
+         */
+        last_seq?: number;
+    };
+    url: '/api/agent/hermes/v1/runs/{runId}/events';
+};
+
+export type StreamHermesRunErrors = {
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    400: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    401: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    403: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    404: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    409: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    429: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    503: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+};
+
+export type StreamHermesRunError = StreamHermesRunErrors[keyof StreamHermesRunErrors];
+
+export type StreamHermesRunResponses = {
+    /**
+     * Hermes 原生 SSE。data 为含 event、run_id 和 seq 的 JSON，支持重连游标。
+     */
+    200: string;
+};
+
+export type StreamHermesRunResponse = StreamHermesRunResponses[keyof StreamHermesRunResponses];
+
+export type StopHermesRunData = {
+    body?: never;
+    headers: {
+        /**
+         * X-Project-Id
+         */
+        'X-Project-Id': number;
+    };
+    path: {
+        /**
+         * runId
+         */
+        runId: string;
+    };
+    query?: never;
+    url: '/api/agent/hermes/v1/runs/{runId}/stop';
+};
+
+export type StopHermesRunErrors = {
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    400: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    401: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    403: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    404: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    409: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    429: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    503: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+};
+
+export type StopHermesRunError = StopHermesRunErrors[keyof StopHermesRunErrors];
+
+export type StopHermesRunResponses = {
+    /**
+     * 停止 Hermes 运行
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type StopHermesRunResponse = StopHermesRunResponses[keyof StopHermesRunResponses];
+
+export type ClarifyHermesRunData = {
+    body: {
+        request_id: string;
+        execution_generation: number;
+        answer: string;
+    };
+    headers: {
+        /**
+         * X-Project-Id
+         */
+        'X-Project-Id': number;
+    };
+    path: {
+        /**
+         * runId
+         */
+        runId: string;
+    };
+    query?: never;
+    url: '/api/agent/hermes/v1/runs/{runId}/clarify';
+};
+
+export type ClarifyHermesRunErrors = {
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    400: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    401: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    403: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    404: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    409: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    429: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    503: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+};
+
+export type ClarifyHermesRunError = ClarifyHermesRunErrors[keyof ClarifyHermesRunErrors];
+
+export type ClarifyHermesRunResponses = {
+    /**
+     * 回答 Hermes 澄清问题
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type ClarifyHermesRunResponse = ClarifyHermesRunResponses[keyof ClarifyHermesRunResponses];
+
+export type ApprovalHermesRunData = {
+    body: {
+        request_id: string;
+        execution_generation: number;
+        choice: 'once' | 'deny';
+    };
+    headers: {
+        /**
+         * X-Project-Id
+         */
+        'X-Project-Id': number;
+    };
+    path: {
+        /**
+         * runId
+         */
+        runId: string;
+    };
+    query?: never;
+    url: '/api/agent/hermes/v1/runs/{runId}/approval';
+};
+
+export type ApprovalHermesRunErrors = {
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    400: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    401: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    403: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    404: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    409: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    429: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * 平台或 Hermes 网关返回的错误
+     */
+    503: {
+        detail?: string;
+        error?: {
+            [key: string]: unknown;
+        };
+    };
+};
+
+export type ApprovalHermesRunError = ApprovalHermesRunErrors[keyof ApprovalHermesRunErrors];
+
+export type ApprovalHermesRunResponses = {
+    /**
+     * 回应 Hermes 批准请求
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type ApprovalHermesRunResponse = ApprovalHermesRunResponses[keyof ApprovalHermesRunResponses];
 
 export type ListAgentCapabilitiesData = {
     body?: never;

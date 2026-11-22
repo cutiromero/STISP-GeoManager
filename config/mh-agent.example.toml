@@ -1,0 +1,7 @@
+# Save as config/mh-agent.toml under the configured application data directory.
+enabled = true
+runtime = "/root/autodl-tmp/mh-agent-runtime/0f602c5/.venv/bin/hermes"
+port = 18642
+model_port = 19000
+model = "Qwen/Qwen3.8-27B"
+context_length = 32768

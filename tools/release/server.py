@@ -199,14 +199,56 @@ def active_counts(config):
         counts["parked_workflows"] = db.execute(
             "SELECT COUNT(*) FROM agent_agentworkflow WHERE status IN ('waiting_approval','paused')"
         ).fetchone()[0]
+    gateway = mh_agent_config(config)
+    if gateway:
+        health = mh_agent_health(config, gateway, detailed=True)
+        if health:
+            counts["mh_agent_runs"] = int(
+                health.get("api_server", {}).get("active_runs", 0)
+            )
     return counts
+
+
+def mh_agent_config(config):
+    path = Path(config["appData"]) / "config/mh-agent.toml"
+    try:
+        value = tomllib.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None
+    if not value.get("enabled"):
+        return None
+    require(
+        type(value.get("port")) is int and 1024 <= value["port"] <= 65535,
+        "Invalid MH-agent port",
+    )
+    return value
+
+
+def mh_agent_health(config, gateway, *, detailed=False):
+    url = f"http://127.0.0.1:{gateway['port']}/health"
+    headers = {}
+    if detailed:
+        file = Path(config["appData"]) / "config/mh-agent/credentials.json"
+        if not file.is_file():
+            return None
+        credentials = json.loads(file.read_text(encoding="utf-8"))
+        headers["Authorization"] = f"Bearer {credentials['gateway_key']}"
+        url += "/detailed"
+    try:
+        opener = build_opener(ProxyHandler({}), NoRedirect())
+        with opener.open(Request(url, headers=headers), timeout=3) as response:
+            return json.load(response)
+    except (OSError, ValueError):
+        return None
 
 
 def drain(config):
     deadline = time.monotonic() + config["drainSeconds"]
     while True:
         counts = active_counts(config)
-        if not any(counts[table] for table in ACTIVE):
+        if not any(counts[table] for table in ACTIVE) and not counts.get(
+            "mh_agent_runs"
+        ):
             return counts
         require(
             time.monotonic() < deadline,
@@ -1134,6 +1176,19 @@ def gate(config, release, processes, started_at, old=False):
         json.loads(http(config, config["healthPath"])).get("status") == "ok",
         "Health endpoint is not healthy",
     )
+    gateway = mh_agent_config(config)
+    if (
+        gateway
+        and not old
+        and "backend/apps/agent/hermes_service.py" in release["files"]
+    ):
+        status = mh_agent_health(config, gateway)
+        require(
+            status
+            and status.get("status") == "ok"
+            and status.get("platform") == "hermes-agent",
+            "MH-agent gateway is not healthy",
+        )
     html = http(config, "/").decode()
     assets = entry_scripts(html)
     require(bool(assets), "Homepage has no recognized static JavaScript")
@@ -1324,8 +1379,10 @@ def cutover(config, release, lock_state):
         for role in ROLES[1:]:
             stop(config, old[role])
             stopped.add(role)
+        counts = active_counts(config)
         require(
-            not any(active_counts(config)[table] for table in ACTIVE),
+            not any(counts[table] for table in ACTIVE)
+            and not counts.get("mh_agent_runs"),
             "Work appeared after final drain",
         )
         if not config.get("developmentMode", False):

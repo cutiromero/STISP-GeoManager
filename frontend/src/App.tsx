@@ -72,7 +72,8 @@ const ComputePage = lazy(() => import("./compute/ComputePage"));
 const NonGeoPage = lazy(() => import("./pages/NonGeoPage"));
 const ResultsPage = lazy(() => import("./pages/ResultsPage"));
 const EcologyMonitorPage = lazy(() => import("./pages/EcologyMonitorPage"));
-const AgentPage = lazy(() => import("./agent/AgentPage"));
+const AgentPage = lazy(() => import("./agent/HermesPage"));
+const AgentHistoryPage = lazy(() => import("./agent/AgentPage"));
 const BusinessFlowsPage = lazy(
   () => import("./businessflows/BusinessFlowsPage"),
 );
@@ -362,6 +363,7 @@ export default function App({
                 />
                 <Route path="/agent/chat" element={<AgentPage />} />
                 <Route path="/agent/workbench" element={<AgentPage />} />
+                <Route path="/agent/history" element={<AgentHistoryPage />} />
 
                 <Route
                   path="/about"
