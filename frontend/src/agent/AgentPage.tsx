@@ -1197,7 +1197,9 @@ function AgentWorkspace() {
         </span>
         <div>
           <Typography.Title level={4}>{ui("智能体", "Agent")}</Typography.Title>
-          <span>{ui("项目研究助手", "Research workspace")}</span>
+          <span>
+            {ui("会话按项目查看", "Conversations are organized by project")}
+          </span>
         </div>
         <Button
           ref={historyCloseButton}

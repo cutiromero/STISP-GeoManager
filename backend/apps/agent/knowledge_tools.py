@@ -39,7 +39,12 @@ def search_knowledge(run, user, query, *, allow_documents=True):
         },
         "truncated": False,
         "citationGuide": "只使用各条目的citation引用；id/documentId是存储标识，不是证据编号。",
-        "retrievalGuide": "documents已含知识文献原文；documentId不是数据resourceId。需要更多原文时使用read_knowledge_document(documentId,offset,limit)，或以具体主题再次search_knowledge；不要传给read_document。",
+        "retrievalGuide": (
+            "documents是当前项目的候选原文片段，按内容确认是否能回答问题。"
+            "如未找到相关依据，通用概念可根据有把握的知识继续解释，说明尚未核实的具体细节。"
+            "需要更多原文时用read_knowledge_document(documentId,offset,limit)，"
+            "documentId属于知识库。"
+        ),
     }
     pairs = []
 
