@@ -10,7 +10,7 @@ class Migration(migrations.Migration):
     dependencies = [
         ("agent", "0024_governed_operation_previews"),
         ("projects", "0004_project_deleted_at"),
-        migrations.swappable_dependency(settings.AUTH_USER_MODEL),
+        # agent.0001 already depends on the configured user model.
     ]
 
     operations = [
@@ -27,6 +27,10 @@ class Migration(migrations.Migration):
                     ),
                 ),
                 ("mode", models.CharField(max_length=10)),
+                (
+                    "internet_enabled",
+                    models.BooleanField(db_default=False, default=False),
+                ),
                 ("title", models.CharField(max_length=120)),
                 ("last_run_id", models.CharField(blank=True, max_length=36)),
                 ("created_at", models.DateTimeField(auto_now_add=True)),
@@ -57,5 +61,34 @@ class Migration(migrations.Migration):
                     )
                 ],
             },
+        ),
+        migrations.CreateModel(
+            name="HermesToolReceipt",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("turn_id", models.CharField(max_length=200)),
+                ("tool_call_id", models.CharField(blank=True, max_length=200)),
+                ("name", models.CharField(max_length=80)),
+                ("contract_version", models.CharField(max_length=24)),
+                ("argument_hash", models.CharField(max_length=64)),
+                ("evidence", models.JSONField(default=list)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                (
+                    "session",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="tool_receipts",
+                        to="agent.hermessession",
+                    ),
+                ),
+            ],
         ),
     ]
