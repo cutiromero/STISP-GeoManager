@@ -307,3 +307,21 @@ def test_native_project_tool_returns_scoped_catalog_with_a_receipt(
     receipt = HermesToolReceipt.objects.get(session=session, name="search_resources")
     assert receipt.tool_call_id == "tool-1"
     assert receipt.evidence[0]["resourceId"] == environment["resource"].pk
+    monkeypatch.setattr(
+        gateway,
+        "request",
+        lambda *args, **kwargs: {
+            "run_id": RUN,
+            "session_id": identifier,
+            "status": "completed",
+        },
+    )
+    address = BASE + f"/v1/runs/{RUN}"
+    assert (
+        environment["client"].get(address, **environment["header"]).status_code == 200
+    )
+    resource = environment["resource"]
+    type(resource)._base_manager.filter(pk=resource.pk).update(status="disabled")
+    assert (
+        environment["client"].get(address, **environment["header"]).status_code == 403
+    )

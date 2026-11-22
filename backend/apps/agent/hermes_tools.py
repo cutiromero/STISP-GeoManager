@@ -56,6 +56,18 @@ def execution_context(session, user, *, model=""):
     )
 
 
+def authorize_project_evidence(user, policy, identities, context):
+    from .resource_discovery import discover_resources
+
+    visible = set(
+        discover_resources(user, policy, sorted(identities)).values_list(
+            "id", flat=True
+        )
+    )
+    if visible != identities:
+        raise PermissionDenied("会话中的资料已失效或无权访问")
+
+
 def reauthorize_transcript(session, user, policy):
     from .tools import check_evidence
 
@@ -65,7 +77,9 @@ def reauthorize_transcript(session, user, policy):
     for name in {item["tool"] for item in context.evidence}:
         if not enabled(name, user, policy, run=context):
             raise PermissionDenied("本会话的工具访问权限已变更，请新建会话后继续")
-    check_evidence(context, user, policy)
+    check_evidence(
+        context, user, policy, authorize_resources=authorize_project_evidence
+    )
 
 
 def record(session, name, fingerprint, turn_id, call_id, pairs):

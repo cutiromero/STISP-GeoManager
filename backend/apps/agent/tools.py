@@ -352,14 +352,16 @@ def brief(r):
     }
 
 
-def check_evidence(run, user, p, *, history=False):
+def check_evidence(run, user, p, *, history=False, authorize_resources=None):
     from .resource_discovery import discovery_scope
 
     with discovery_scope():
-        _check_evidence(run, user, p, history=history)
+        _check_evidence(
+            run, user, p, history=history, authorize_resources=authorize_resources
+        )
 
 
-def _check_evidence(run, user, p, *, history=False):
+def _check_evidence(run, user, p, *, history=False, authorize_resources=None):
     from .selections import knowledge_domains, require_task_selection
     from .deleted_resources import historical_deletion
     from .workflow_resources import authorize_run_resource_ids
@@ -371,7 +373,9 @@ def _check_evidence(run, user, p, *, history=False):
     if any(type(identity) is not int or identity <= 0 for identity in references):
         raise ValidationError("资源依据编号无效")
     identities = set(references)
-    if identities and history:
+    if identities and authorize_resources is not None:
+        authorize_resources(user, p, identities, run)
+    elif identities and history:
         visible = set(
             acl_resources(user, p, run.resource_ids, active=False)
             .filter(pk__in=identities)

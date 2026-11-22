@@ -82,7 +82,9 @@ def main():
     for line in stream.streaming_content:
         if line.startswith(b"data: "):
             frames.append(json.loads(line[6:]))
-    status = client.get(path).json()
+    response = client.get(path)
+    assert response.status_code == 200, (response.status_code, response.json())
+    status = response.json()
     assert status["status"] == "completed", (
         status["status"],
         [f.get("event") for f in frames],
