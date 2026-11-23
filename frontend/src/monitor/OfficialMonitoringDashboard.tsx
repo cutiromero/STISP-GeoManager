@@ -7,7 +7,6 @@ import {
 } from "@ant-design/icons";
 import { Alert, Button, Space, Spin } from "antd";
 import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
 import { requestJson } from "../api/client";
 import type {
   OfficialMonitoringList,
@@ -97,7 +96,6 @@ export default function OfficialMonitoringDashboard({
   const [failure, setFailure] = useState("");
   const [revision, setRevision] = useState(0);
   const [showOriginal, setShowOriginal] = useState(false);
-  const [showReferences, setShowReferences] = useState(false);
   const { animated } = useMonitorActivity();
   const selected = useRef<number | undefined>(undefined);
   selected.current = items[current]?.id;
@@ -167,7 +165,6 @@ export default function OfficialMonitoringDashboard({
   const isGlacier = scene === "glacier";
   const comparison = isGlacier && showOriginal ? product?.comparison : null;
   const display = comparison?.display ?? product?.display;
-  const references = isGlacier ? (product?.references ?? []) : [];
   const hasMap = Boolean(display || product?.resource.dataType === "vector");
   const explanation = product?.interpretation || product?.statisticsMethod;
   return (
@@ -389,43 +386,12 @@ export default function OfficialMonitoringDashboard({
                         ))}
                     </div>
                   </MonitorPanel>
-                ) : explanation ? (
+                ) : !isGlacier && explanation ? (
                   <MonitorPanel title="成果说明">
-                    <p className="official-interpretation" title={isGlacier ? explanation : undefined}>{explanation}</p>
+                    <p className="official-interpretation">{explanation}</p>
                   </MonitorPanel>
                 ) : null}
               </div>
-            )}
-            {!failure && references.length > 0 && (
-              <MonitorPanel
-                title="参考资料"
-                className="official-reference-card"
-                extra={
-                  <Button
-                    size="small"
-                    aria-expanded={showReferences}
-                    onClick={() => setShowReferences((value) => !value)}
-                  >
-                    {showReferences ? "收起" : `查看 ${references.length} 项`}
-                  </Button>
-                }
-              >
-                {showReferences && (
-                  <ul className="official-glacier-references">
-                    {references.map((reference) => (
-                      <li key={reference.id}>
-                        <Link
-                          to={`/resources/catalog?${new URLSearchParams({ q: reference.name, resourceId: String(reference.id), projectTagId: String(reference.projectTagId) })}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          {reference.name}
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </MonitorPanel>
             )}
             {!failure &&
               product &&

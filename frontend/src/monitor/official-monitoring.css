@@ -379,18 +379,8 @@
 .official-glacier-map-toggle small {
   white-space: nowrap;
 }
-.official-glacier-references {
-  max-height: 10rem;
-  overflow: auto;
-  margin: 0;
-  padding-inline-start: 18px;
-  overflow-wrap: anywhere;
-}
-.official-glacier-references li + li {
-  margin-top: 5px;
-}
 
-/* The glacier sidebar stays in view. Only the two collections scroll. */
+/* Keep the glacier sidebar fixed; only the region list scrolls. */
 .monitor-showcase[data-scene="glacier"] .official-insights {
   overflow: hidden;
   padding-right: 0;
@@ -421,11 +411,6 @@
   scrollbar-width: thin;
   scrollbar-color: #365666 transparent;
 }
-.monitor-showcase[data-scene="glacier"] .official-glacier-references {
-  max-height: min(12vh, 8rem);
-  overscroll-behavior: contain;
-  scrollbar-width: thin;
-}
 .monitor-showcase[data-scene="glacier"] .official-hero-stat strong {
   font-size: clamp(24px, 6vh, 66px);
 }
@@ -435,13 +420,25 @@
 .monitor-showcase[data-scene="glacier"] .official-metric-strip dd {
   font-size: clamp(13px, 2vh, 22px);
 }
-.monitor-showcase[data-scene="glacier"] .official-interpretation {
-  font-size: clamp(11px, 1.6vh, 15px);
-  line-height: 1.45;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+.monitor-showcase[data-scene="glacier"] .official-glacier-change {
+  --monitor-accent: #ffc87a;
+  border-color: #d69a514d;
+  background: linear-gradient(115deg, #ffc87a12, #ffc87a04);
+}
+.official-glacier-change .monitor-panel-heading h2,
+.official-glacier-change .official-metric-strip dd {
+  color: var(--monitor-accent);
+}
+.official-glacier-change .monitor-panel-heading h2::before {
+  box-shadow: 0 0 9px #ffc87a52;
+}
+.official-glacier-change .monitor-panel-caption,
+.official-glacier-change .official-metric-strip dt,
+.official-glacier-change .official-metric-strip small {
+  color: #e2c6a4;
+}
+.official-glacier-change .official-metric-strip {
+  border-top-color: #d69a5138;
 }
 .official-glacier-change p {
   margin: 4px 0 0;

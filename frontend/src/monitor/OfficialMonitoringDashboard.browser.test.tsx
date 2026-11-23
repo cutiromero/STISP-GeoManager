@@ -306,7 +306,7 @@ it.each([
   },
 );
 
-it("冰川成果切换同区原始影像并链接项目参考资料，不触发计算", async () => {
+it("冰川成果切换同区原始影像，不显示参考资料和成果说明", async () => {
   vi.mocked(requestJson).mockClear();
   vi.mocked(requestJson).mockResolvedValue({
     scene: "glacier",
@@ -340,12 +340,8 @@ it("冰川成果切换同区原始影像并链接项目参考资料，不触发�
   expect(screen.getByTestId("official-map-handoff")).toHaveTextContent(
     '[81,true,"style-81"]',
   );
-  fireEvent.click(screen.getByRole("button", { name: "查看 1 项" }));
-  const reference = screen.getByRole("link", { name: "冰川图集" });
-  const href = new URL(reference.getAttribute("href")!, window.location.origin);
-  expect(href.pathname).toBe("/resources/catalog");
-  expect(href.searchParams.get("resourceId")).toBe("91");
-  expect(href.searchParams.get("projectTagId")).toBe("8");
+  expect(screen.queryByRole("region", { name: "参考资料" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("region", { name: "成果说明" })).not.toBeInTheDocument();
   expect(
     within(screen.getByRole("region", { name: "正式成果地图" })).getByText(
       "登记期：2026-11-22",
@@ -354,7 +350,7 @@ it("冰川成果切换同区原始影像并链接项目参考资料，不触发�
   expect(vi.mocked(requestJson)).toHaveBeenCalledTimes(1);
 });
 
-it("冰川固定右栏，仅卡片列表滚动并显示登记期差异", async () => {
+it("冰川固定右栏，暖色区分登记期变化，仅成果列表滚动", async () => {
   const before = [...Array(9)].map((_, i) => item(90 + i, `样区-${i + 1}`, i));
   vi.mocked(requestJson).mockResolvedValue({
     scene: "glacier",
@@ -382,12 +378,13 @@ it("冰川固定右栏，仅卡片列表滚动并显示登记期差异", async (
   await waitFor(() => expect(within(changes).getByText("2026-11-22 → 2026-11-23")).toBeVisible());
   expect(within(changes).getByText("编码变化占比")).toBeVisible();
   expect(within(changes).queryByText("冰川分类面积净变化")).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", {name:"查看 9 项"}));
   const column = screen.getByRole("complementary", {name:"区域观测指标"});
   const overview = within(column).getByRole("region", {name:"区域成果一览"});
-  const refs = within(column).getByRole("region", {name:"参考资料"});
   expect(getComputedStyle(column).overflowY).toBe("hidden");
   expect(getComputedStyle(within(overview).getByRole("list")).overflowY).toBe("auto");
-  expect(getComputedStyle(within(refs).getByRole("list")).overflowY).toBe("auto");
   expect(within(overview).getAllByRole("listitem")).toHaveLength(10);
+  const value = within(changes).getByText("15.25", { exact: false }).closest("dd")!;
+  const current = within(column).getByText("14.89", { selector: ".official-hero-stat strong" });
+  expect(getComputedStyle(value).color).toBe("rgb(255, 200, 122)");
+  expect(getComputedStyle(value).color).not.toBe(getComputedStyle(current).color);
 });
