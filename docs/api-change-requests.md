@@ -1,5 +1,18 @@
 # API Change Requests
 
+## API-20261124-001 - 原始影像全景流式计算和波段顺序
+
+- Status: BackendReady
+- Owner: codex/xintao。
+- Endpoints: 计算中心算子清单、预检、任务执行及监测成果读取。
+- Change type: 栅格合同扩展两个可选能力。
+- OpenAPI change: 可选的 `raster.bandNames` 匹配原始波段顺序；已授权的原生流式算子可省略窗口，沿用完整原始网格。
+- Mock examples: 沿用既有端点与响应，真实示例见玛纳斯冰川算子及其自检样例。
+- Frontend reason: 选一景玛纳斯原始影像即可处理全景。
+- Backend implementation notes: 复用输入版本、源依赖、输出网格检查及现有正式登记接口。玛纳斯冰川成果采用二分类指标及真实观测日期。
+- Verification: 栅格合同、冰川展示和算子小样例验证。
+- Result: 玛纳斯冰川解译及监测展示。
+
 ## API-20261123-002 - 冰川登记期与变化指标
 
 - Status: BackendReady
@@ -990,6 +1003,7 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| API-20261124-001 | BackendReady | 计算中心算子及预检 | 栅格合同 | 波段顺序与全景流式读取 | 算子自检 | 复用现有权限和快照 | 输入与大屏回归 | 玛纳斯冰川解译 |
 | API-20261123-002 | BackendReady | 冰川登记期与变化指标 |
 | API-20261123-001 | BackendReady | v2 通用业务流简版定义 |
 | API-20261122-002 | BackendReady | Hermes 会话的公开网页检索 |

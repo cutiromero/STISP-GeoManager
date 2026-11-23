@@ -1,6 +1,7 @@
 """Declarative raster grid requirements using the existing input metadata read."""
 
 import math
+import re
 
 from .packages import ComputeError
 
@@ -10,6 +11,7 @@ DTYPES = {"uint8", "uint16", "uint32", "int8", "int16", "int32", "float32", "flo
 def validate_contract(value):
     if not isinstance(value, dict) or set(value) - {
         "bandCount",
+        "bandNames",
         "dtypes",
         "pixelSizeMeters",
         "minSide",
@@ -36,7 +38,9 @@ def validate_contract(value):
             or "window" not in value
         ):
             raise ComputeError("原生观测合同须声明变量、时间、序列参数和研究区")
-    for name in ("streaming", "defaultExtent", "sameYear"):
+    if "streaming" in value and type(value["streaming"]) is not bool:
+        raise ComputeError("流式栅格声明须为布尔值")
+    for name in ("defaultExtent", "sameYear"):
         if name in value and (type(value[name]) is not bool or "window" not in value):
             raise ComputeError("流式处理和默认全域须绑定有效的研究区窗口")
     if "months" in value and (
@@ -62,6 +66,16 @@ def validate_contract(value):
             type(value[name]) is not int or not 1 <= value[name] <= maximum
         ):
             raise ComputeError("栅格输入合同数量无效")
+    if "bandNames" in value and (
+        not isinstance(value["bandNames"], list)
+        or not 1 <= len(value["bandNames"]) <= 1024
+        or any(
+            not isinstance(v, str) or not 1 <= len(v.strip()) <= 120
+            for v in value["bandNames"]
+        )
+        or ("bandCount" in value and len(value["bandNames"]) != value["bandCount"])
+    ):
+        raise ComputeError("原始波段名称必须按模型输入顺序声明")
     if "dtypes" in value and (
         not isinstance(value["dtypes"], list)
         or not value["dtypes"]
@@ -115,6 +129,17 @@ def gaps(spec, info, max_band_pixels=None):
         add("RASTER_SIZE", max_band_pixels, working_pixels * len(bands))
     if contract.get("bandCount") is not None and len(bands) != contract["bandCount"]:
         add("BAND_COUNT", contract["bandCount"], len(bands))
+    if "bandNames" in contract:
+        names = [
+            re.sub(
+                r" \([0-9]+(?:\.[0-9]+)? Nanometers\)$",
+                "",
+                row.get("description", "").strip(),
+            )
+            for row in bands
+        ]
+        if names != contract["bandNames"]:
+            add("RASTER_BAND_NAMES", contract["bandNames"], names)
     if contract.get("dtypes") and any(
         row["type"] not in contract["dtypes"] for row in bands
     ):

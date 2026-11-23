@@ -69,8 +69,12 @@ function formatMetric(value: number | null | undefined) {
   );
 }
 
+function isManans(product: OfficialMonitoringProduct) {
+  return product.model?.variant === "manans-s2-dlinknet34";
+}
+
 function observedPeriod(product: OfficialMonitoringProduct) {
-  if (product.scene === "glacier") {
+  if (product.scene === "glacier" && !isManans(product)) {
     return product.registrationDate ? `登记期：${product.registrationDate}` : "登记期待补充";
   }
   const { observedStart: start, observedEnd: end } = product;
@@ -186,7 +190,9 @@ export default function OfficialMonitoringDashboard({
       updatedAt={items[0]?.registeredAt}
       status={() =>
         isGlacier
-          ? "按登记期查看分类变化"
+          ? product && isManans(product)
+            ? "查看 Sentinel-2 冰川解译与面积统计"
+            : "按登记期查看分类变化"
           : product
             ? "正式成果展示 · 只读"
             : "正式成果展示"
@@ -235,7 +241,7 @@ export default function OfficialMonitoringDashboard({
                   >
                     原始影像
                   </Button>
-                  {comparison && <small>第 1 波段灰度</small>}
+                  {comparison && <small>{isManans(product) ? "B4/B3/B2 真彩色" : "第 1 波段灰度"}</small>}
                 </Space>
               )}
             </div>
@@ -355,7 +361,7 @@ export default function OfficialMonitoringDashboard({
                     </dl>
                   )}
                 </MonitorPanel>
-                {isGlacier && product.kind === "model" && <GlacierChange product={product} />}
+                {isGlacier && product.kind === "model" && !isManans(product) && <GlacierChange product={product} />}
                 {product.classification?.categories.length ? (
                   <MonitorPanel title="地类面积占比">
                     <div className="official-composition">

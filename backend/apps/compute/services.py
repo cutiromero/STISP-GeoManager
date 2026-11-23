@@ -398,6 +398,12 @@ def validate_submission(user, body):
             info = windowed_metadata(
                 spec, info, parameter_values(manifest, {}, params, check_inputs=False)
             )
+        elif resource.data_type == "raster" and (spec.get("raster") or {}).get(
+            "streaming"
+        ):
+            from .raster_windows import whole_grid_metadata
+
+            info = whole_grid_metadata(info)
         if resource.data_type == "raster":
             from .raster_contracts import gaps as raster_gaps
 

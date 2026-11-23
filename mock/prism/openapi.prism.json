@@ -52822,6 +52822,17 @@
                 "maximum": 1024,
                 "description": "所需波段数量。"
               },
+              "bandNames": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 1024,
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 120
+                },
+                "description": "按原始影像波段顺序精确匹配名称。"
+              },
               "dtypes": {
                 "type": "array",
                 "minItems": 1,
@@ -52866,7 +52877,7 @@
               },
               "streaming": {
                 "type": "boolean",
-                "description": "原生地理模型按有界块读取已授权原件，输入快照为无重采样视图。"
+                "description": "原生地理模型按块读取已授权原件；未声明窗口时使用完整原始网格；快照无重采样。"
               },
               "defaultExtent": {
                 "type": "boolean",

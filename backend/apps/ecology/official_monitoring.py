@@ -17,6 +17,7 @@ from apps.raster.services.renderer import register_tile_style, tile_style_is_rea
 from apps.raster.services.exceptions import RasterRenderError
 from .models import RemoteSensingProduct
 from .monitoring import configured_scenes, visible_resources, normalize_product, METRICS
+from .glacier import MANANS_VARIANT
 
 # Display overview is intentionally bounded. Rotation changes the view, not the data.
 MAX_PRODUCTS = 240
@@ -282,7 +283,15 @@ def official_snapshot(user, scene):
         source = sources[item["sourceResourceIds"][0]]
         extra = {}
         if scene == "glacier":
-            comparison = prepared_default(datasets.get(source.pk))
+            original = datasets.get(source.pk)
+            source_style = (
+                row.metadata.get("formalDisplay", {}).get("sourceDisplay") or {}
+            )
+            comparison = (
+                source_style
+                if original and (original.pk, source_style.get("styleHash")) in styles
+                else prepared_default(original)
+            )
             change = row.metadata.get("glacierChange")
             extra = {
                 "glacierChange": change
@@ -300,6 +309,12 @@ def official_snapshot(user, scene):
                     if sources[pk].data_type in {"document", "image"}
                 ],
             }
+        manans = (item.get("model") or {}).get("variant") == MANANS_VARIANT
+        glacier_labels = (
+            {"class_1_percent": "冰川占有效区"}
+            if manans
+            else {"class_1_percent": "洁净冰川占比", "class_2_percent": "表碛冰川占比"}
+        )
         featured[key] = (
             rank,
             {
@@ -318,10 +333,7 @@ def official_snapshot(user, scene):
                         "key": key,
                         "label": label
                         if scene != "glacier" or item["kind"] != "model"
-                        else {
-                            "class_1_percent": "洁净冰川占比",
-                            "class_2_percent": "表碛冰川占比",
-                        }.get(key, label),
+                        else glacier_labels.get(key, label),
                         "unit": unit,
                         "value": item["statistics"].get(key),
                     }

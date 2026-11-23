@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 2,
+  "identifier": "manans-glacier-infer",
+  "version": "1.0.0",
+  "author": "STISP",
+  "name": "玛纳斯冰川范围提取",
+  "description": "以 AGRS DLinkNet34 提取 10 米 Sentinel-2 冰川范围，交付二分类图及有效区统计。",
+  "runtime": "python-geospatial-gpu-v1",
+  "deterministic": false,
+  "timeoutSeconds": 1500,
+  "agent": {"enabled": true},
+  "qualityReport": {"file": "quality.json"},
+  "capabilities": {
+    "operations": ["infer"],
+    "dataTypes": ["raster"],
+    "summary": "生成冰川二分类与原生网格面积统计。",
+    "useWhen": "玛纳斯原始 Sentinel-2 四波段 B2/B3/B4/B8 影像。",
+    "avoidWhen": "历史分类图、15 波段冰川影像及其他波段顺序的数据。"
+  },
+  "inputs": [{
+    "key": "image", "label": "玛纳斯原始影像", "kind": "raster", "required": true,
+    "description": "北向上 UTM 45N、10 米、B2/B3/B4/B8 的四波段 Byte 原始影像。",
+    "fields": [],
+    "crs": {"mode": "projected"},
+    "raster": {"bandCount": 4, "bandNames": ["B2", "B3", "B4", "B8"],
+               "dtypes": ["uint8"], "pixelSizeMeters": 10, "northUp": true, "streaming": true}
+  }],
+  "parameters": [],
+  "outputs": [{
+    "key": "classification", "label": "玛纳斯冰川分类图", "file": "classification.tif",
+    "kind": "raster", "description": "同网格 GeoTIFF，0 非冰川、1 冰川、255 缺测。",
+    "fields": [], "required": true, "final": true
+  }, {
+    "key": "statistics", "label": "冰川面积与有效覆盖统计", "file": "statistics.csv",
+    "kind": "table", "description": "全景像元、有效像元、缺测像元、冰川像元及面积和占比。",
+    "fields": [], "required": true, "final": true
+  }],
+  "resources": {"duration": "minutes", "memory": "large", "scaling": "256 像元模型窗口，每批最多 8 个窗口。"},
+  "errors": [
+    {"code": "MANANS_SOURCE", "meaning": "影像范围、波段、网格或有效覆盖不适用", "precondition": "请选择包含有效像元的玛纳斯原始四波段影像。", "remedy": "replace_data"},
+    {"code": "MANANS_RUNTIME", "meaning": "受管运行环境或权重异常", "precondition": "核对 GPU 租约、运行依赖和发布权重摘要。", "remedy": "human_review"}
+  ],
+  "selfTests": [{
+    "name": "GPU 分类、NoData 与面积交付",
+    "fixture": "selftest/valid.json",
+    "expect": {"files": {"classification.tif": {"bands": 1}, "statistics.csv": {"rows": 1}}}
+  }]
+}

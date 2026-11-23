@@ -15,6 +15,9 @@ from apps.raster.models import RasterDataset
 from .models import RemoteSensingProduct
 
 FLOW_CODE = "glacier-monitoring-dynamic"
+MANANS_FLOW_CODE = "manans-glacier-interpretation"
+MANANS_OPERATOR = "manans-glacier-infer"
+MANANS_VARIANT = "manans-s2-dlinknet34"
 TASK_KEY = "glacier-classification"
 PRODUCT_TYPE = "monitoring_glacier"
 PRODUCT_LIMIT = 240
@@ -171,7 +174,9 @@ def resolve_registered(workflow, user, source):
     }
 
 
-def _workflow_classification(workflow, user, value):
+def _workflow_classification(
+    workflow, user, value, *, flow_code=FLOW_CODE, algorithm="glacier-b15-infer"
+):
     from apps.business_flows.models import BusinessFlowDefinition
     from apps.business_flows.state import binding
 
@@ -180,7 +185,7 @@ def _workflow_classification(workflow, user, value):
         workflow.status != "succeeded"
         or workflow.owner_id != user.pk
         or not BusinessFlowDefinition.objects.filter(
-            pk=spec["flowId"], code=FLOW_CODE
+            pk=spec["flowId"], code=flow_code, project_tag_id=workflow.project_tag_id
         ).exists()
     ):
         raise PermissionDenied("只有已完成的冰川业务流可以自动登记分类图")
@@ -205,7 +210,7 @@ def _workflow_classification(workflow, user, value):
             resource__project_tag_id=workflow.project_tag_id,
             output__key="classification",
             output__task_id=infer.get("computeTaskId"),
-            output__task__version__algorithm__identifier="glacier-b15-infer",
+            output__task__version__algorithm__identifier=algorithm,
             output__task__trial=False,
             output__task__status="succeeded",
             output__task__owner=user,
@@ -375,7 +380,101 @@ def publish_workflow(workflow_id, user_id):
     return row
 
 
-def publish_after_finish(workflow_id, user_id):
+def publish_manans(workflow_id, user_id):
+    """Register a finished binary glacier map with its actual observed date."""
+    from django.contrib.auth import get_user_model
+
+    from apps.agent.models import AgentWorkflow
+    from apps.business_flows.state import state
+    from apps.compute.access import require_actor
+    from apps.raster.services.renderer import register_tile_style
+    from .monitoring import register_product
+
+    workflow = AgentWorkflow.objects.get(pk=workflow_id, status="succeeded")
+    if workflow.owner_id != user_id:
+        raise PermissionDenied("任务归属已变化")
+    user = get_user_model().objects.get(pk=user_id)
+    require_actor(
+        user,
+        workflow.project_tag_id,
+        "catalog.add_dataresource",
+        "core.load_raster_layer",
+    )
+    record = _workflow_classification(
+        workflow,
+        user,
+        state(workflow),
+        flow_code=MANANS_FLOW_CODE,
+        algorithm=MANANS_OPERATOR,
+    )
+    output = record.output
+    require_automatic_quality(output)
+    raw = output.task.input_records.select_related("resource").get(key="image")
+    if raw.snapshot.get("updatedAt") != raw.resource.updated_at.isoformat():
+        raise ComputeError("原始影像登记信息已更新，请重新核对本次观测日期")
+    summary = output.metadata["qualityCheck"]["metrics"]
+    total, valid, ice = (
+        summary[key] for key in ("scene_pixels", "valid_pixels", "glacier_pixels")
+    )
+    if not 0 <= ice <= valid <= total or valid == 0:
+        raise ComputeError("冰川面积统计与有效像元范围不一致")
+    date = raw.resource.data_date.isoformat() if raw.resource.data_date else None
+    product = {
+        "schemaVersion": 1,
+        "code": f"manans-glacier-workflow-{workflow.pk}",
+        "name": raw.resource.name.replace("玛纳斯原始影像", "玛纳斯冰川"),
+        "resourceId": record.resource_id,
+        "scene": "glacier",
+        "kind": "model",
+        "quality": "passed",
+        "registrationDate": period_day(workflow),
+        "observedStart": date,
+        "observedEnd": date,
+        "sourceResourceIds": [raw.resource_id],
+        "sourceLabel": raw.resource.name,
+        "interpretation": "在有源像元的范围内解译冰川，背景像元计入有效区。",
+        "limitations": ["单景光学分类中的季节性积雪和冰川混淆需靠多时相影像复核。"],
+        "statistics": {
+            "valid_coverage_percent": 100 * valid / total,
+            "class_1_percent": 100 * ice / valid,
+            "valid_pixels": valid,
+            "ice_area_km2": ice / 10_000,
+        },
+        "statisticsMethod": "在原始10米网格上统计，每个冰川像元面积为100平方米。",
+        "model": {
+            "name": "AGRS DLinkNet34",
+            "version": output.task.version.version,
+            "variant": MANANS_VARIANT,
+            "checkpointSha256": output.metadata["knowledgeFacts"]["checkpointSha256"],
+            "forecastLeadDays": None,
+        },
+    }
+    original = RasterDataset.objects.get(
+        data_resource_id=raw.resource_id, status="ready"
+    )
+    original_style = register_tile_style(original, original.default_rules)
+    dataset = RasterDataset.objects.get(
+        data_resource_id=record.resource_id, status="ready"
+    )
+    style = prepare_classification_display(dataset)
+    with transaction.atomic():
+        row, created = register_product(user, product, computed_import=record)
+        if created:
+            row.metadata = {
+                **row.metadata,
+                "glacierTask": MANANS_FLOW_CODE,
+                "glacierRegion": f"source-{raw.resource_id}",
+                "formalDisplay": {
+                    "version": 1,
+                    "display": style,
+                    "sourceDisplay": original_style,
+                },
+            }
+            row.save(update_fields=["metadata"])
+    return row
+
+
+def publish_after_finish(workflow_id, user_id, *, manans=False):
     """A registry failure does not undo successful classification or report."""
     import logging
 
@@ -385,7 +484,8 @@ def publish_after_finish(workflow_id, user_id):
     logger = logging.getLogger(__name__)
     for attempt in range(4):
         try:
-            return publish_workflow(workflow_id, user_id)
+            publish = publish_manans if manans else publish_workflow
+            return publish(workflow_id, user_id)
         except OperationalError as error:
             if "database is locked" in str(error).lower() and attempt < 3:
                 sleep(0.15 * (attempt + 1))

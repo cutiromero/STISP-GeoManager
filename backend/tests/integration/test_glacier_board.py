@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from io import BytesIO
 from types import SimpleNamespace
 
@@ -19,7 +19,15 @@ from apps.compute.models import (
     ComputeOutput,
     ComputeTask,
 )
-from apps.ecology.glacier import TASK_KEY, publish_workflow, resolve_registered
+from apps.ecology.glacier import (
+    MANANS_FLOW_CODE,
+    MANANS_OPERATOR,
+    MANANS_VARIANT,
+    TASK_KEY,
+    publish_manans,
+    publish_workflow,
+    resolve_registered,
+)
 from apps.ecology.models import RemoteSensingProduct
 from apps.ecology.monitoring import register_product
 from apps.ecology.official_monitoring import official_snapshot
@@ -299,3 +307,146 @@ def test_registered_previous_intersection_and_only_publish_classification(
             if item["id"] == product.pk
         )
         assert chosen["glacierChange"] is None
+
+
+def test_manans_binary_map_retains_acquisition_date_and_original_display(
+    setup_monitor, monkeypatch, tmp_path
+):
+    admin, reader, project, _, feature, _, raw, _ = setup_monitor
+    set_feature(
+        admin,
+        feature,
+        project=project,
+        enabled=True,
+        config={
+            "source": "remote_sensing_products",
+            "scenes": ["glacier"],
+            "title": "冰川",
+            "initialView": {"center": [87, 43], "zoom": 3, "regionZoom": 10},
+        },
+    )
+    path = tmp_path / "display.tif"
+    path.touch()
+    monkeypatch.setattr(renderer, "raster_processed_path", lambda _: path)
+    with project_scope(ProjectScope((project.pk,), project.pk, admin.pk)):
+        raw.name = "玛纳斯原始影像 · T45TUJ"
+        raw.data_date = date(2021, 9, 8)
+        raw.save(update_fields=["name", "data_date"])
+        RasterDataset.objects.create(
+            data_resource=raw,
+            status="ready",
+            code="manans-raw",
+            source_relative_path="manans-raw.tif",
+        )
+        result = DataResource.objects.create(
+            name="玛纳斯冰川结果",
+            code="manans-result",
+            data_type="raster",
+            storage_path="result.tif",
+            coordinate_system="EPSG:32645",
+            maintainer=admin,
+            is_compute_result=True,
+        )
+        RasterDataset.objects.create(
+            data_resource=result,
+            status="ready",
+            code="manans-out",
+            source_relative_path="manans-out.tif",
+            raster_kind="categorical",
+            processed_gdalinfo={"geoManager": {"dynamicTiles": True}},
+        )
+        algo = AlgorithmResource.objects.create(
+            identifier=MANANS_OPERATOR,
+            name="玛纳斯",
+            created_by=admin,
+        )
+        version = AlgorithmVersion.objects.create(algorithm=algo, version="1.0.0")
+        task = ComputeTask.objects.create(
+            owner=admin,
+            name="玛纳斯",
+            status="succeeded",
+            version=version,
+            idempotency_key="manans-compute",
+        )
+        ComputeInput.objects.create(
+            task=task,
+            key="image",
+            resource=raw,
+            snapshot={"updatedAt": raw.updated_at.isoformat()},
+        )
+        output = ComputeOutput.objects.create(
+            task=task,
+            key="classification",
+            kind="raster",
+            file_name="classification.tif",
+            path="classification.tif",
+            size_bytes=99,
+            checksum="a" * 64,
+            metadata={
+                "qualityCheck": {
+                    **QUALITY,
+                    "metrics": {
+                        "scene_pixels": 100,
+                        "valid_pixels": 80,
+                        "glacier_pixels": 20,
+                    },
+                },
+                "knowledgeFacts": {"checkpointSha256": "b" * 64},
+            },
+        )
+        flow = BusinessFlowDefinition.objects.create(
+            code=MANANS_FLOW_CODE, name="玛纳斯", owner=admin
+        )
+        workflow = AgentWorkflow.objects.create(
+            owner=admin,
+            workflow_type="business_flow",
+            status="succeeded",
+            idempotency_key="manans-flow",
+            parameters={
+                "_businessFlow": {
+                    "flowId": flow.pk,
+                    "definitionSnapshot": {"nodes": []},
+                }
+            },
+            plan={
+                "businessFlow": {
+                    "nodes": {
+                        "interpret": {
+                            "status": "succeeded",
+                            "computeTaskId": str(task.pk),
+                            "contractOutputs": [
+                                {
+                                    "name": "classification",
+                                    "evidenceId": f"output-{output.pk}",
+                                }
+                            ],
+                        }
+                    }
+                }
+            },
+        )
+        ComputeImport.objects.create(
+            output=output,
+            status="ready",
+            resource=result,
+            requested_by=admin,
+            request_source=f"workflow:{workflow.pk}",
+        )
+        registered = publish_manans(workflow.pk, admin.pk)
+        assert publish_manans(workflow.pk, admin.pk).pk == registered.pk
+        registered.refresh_from_db()
+        assert registered.acquired_on == date(2021, 9, 8)
+
+    with project_scope(ProjectScope((project.pk,), project.pk, reader.pk)):
+        item = official_snapshot(reader, "glacier")["items"][0]
+        assert (
+            item["model"]["variant"] == MANANS_VARIANT
+            and item["observedStart"] == "2021-09-08"
+        )
+        assert item["comparison"]["resource"]["id"] == raw.pk
+        assert item["glacierChange"] is None
+        values = {value["key"]: value for value in item["metrics"]}
+        assert values["class_1_percent"]["label"] == "冰川占有效区"
+        assert values["class_1_percent"]["value"] == 25
+        assert values["class_2_percent"]["value"] is None
+        assert values["ice_area_km2"]["value"] == 0.002

@@ -407,6 +407,8 @@ def validate_model_import(resource, item):
 @transaction.atomic
 def register_product(user, value, *, computed_import=None):
     if computed_import is not None:
+        from .glacier import MANANS_OPERATOR
+
         if (
             computed_import.requested_by_id != user.pk
             or computed_import.status != "ready"
@@ -421,6 +423,7 @@ def register_product(user, value, *, computed_import=None):
                 ("spartina-rf-infer", "spartina"),
                 ("wildfire-observe", "wildfire"),
                 ("glacier-b15-infer", "glacier"),
+                (MANANS_OPERATOR, "glacier"),
             }
             or computed_import.resource_id != value.get("resourceId")
         ):

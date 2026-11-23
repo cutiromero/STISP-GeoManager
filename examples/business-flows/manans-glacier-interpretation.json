@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 2,
+  "adapter": "research_flow",
+  "skill": {
+    "title": "玛纳斯冰川解译",
+    "instructions": "从选定的玛纳斯原始影像提取冰川范围。交付同网格分类图、有效区面积统计与报告，供冰川遥感监测大屏展示。"
+  },
+  "inputRequirements": [{
+    "key": "image",
+    "label": "玛纳斯原始影像",
+    "description": "选择一景玛纳斯 Sentinel-2 原始影像。每次对所选影像的有效区解译。",
+    "dataTypes": ["raster"],
+    "required": true,
+    "requiredFields": [],
+    "multiple": false
+  }],
+  "nodes": [{
+    "id": "interpret",
+    "title": "提取冰川并统计面积",
+    "kind": "operator",
+    "description": "区分冰川、非冰川与缺测，按有效像元统计冰川面积和占比。",
+    "dependsOn": [],
+    "dataRoles": [],
+    "inputBindings": {"image": {"role": "image"}},
+    "contract": {
+      "requiredOutputs": [
+        {"name": "classification", "semanticType": "raster"},
+        {"name": "statistics", "semanticType": "table"}
+      ],
+      "importOutputs": ["classification"]
+    }
+  }, {
+    "id": "handover",
+    "title": "交付解译报告",
+    "kind": "result",
+    "description": "说明观测日期、冰川面积、有效区占比及缺测范围。",
+    "instruction": "用统计表核对面积和分母。历史预测为同景参考，报告只解读本次二分类。",
+    "dependsOn": ["interpret"],
+    "dataRoles": []
+  }],
+  "outputRequirements": ["冰川分类图", "面积统计和解译报告"]
+}

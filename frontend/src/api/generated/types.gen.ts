@@ -12225,6 +12225,10 @@ export type ComputeInputSpec = {
          */
         bandCount?: number;
         /**
+         * 按原始影像波段顺序精确匹配名称。
+         */
+        bandNames?: Array<string>;
+        /**
          * 允许的波段类型。
          */
         dtypes?: Array<'uint8' | 'uint16' | 'uint32' | 'int8' | 'int16' | 'int32' | 'float32' | 'float64'>;
@@ -12250,7 +12254,7 @@ export type ComputeInputSpec = {
             string
         ];
         /**
-         * 原生地理模型按有界块读取已授权原件，输入快照为无重采样视图。
+         * 原生地理模型按块读取已授权原件；未声明窗口时使用完整原始网格；快照无重采样。
          */
         streaming?: boolean;
         /**

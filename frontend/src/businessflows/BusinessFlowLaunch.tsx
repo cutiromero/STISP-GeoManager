@@ -107,8 +107,9 @@ export default function BusinessFlowLaunch({
     : suppliedModel;
   const [version, setVersion] = useState<BusinessFlowVersion>();
   const [flowCode, setFlowCode] = useState("");
-  const glacierPilot =
-    version?.definition.schemaVersion === 2 && flowCode === "glacier-monitoring-dynamic";
+  const manans = flowCode === "manans-glacier-interpretation";
+  const glacierPilot = version?.definition.schemaVersion === 2 &&
+    (flowCode === "glacier-monitoring-dynamic" || manans);
   const [wildfireSelection, setWildfireSelection] =
     useState<WildfireLaunchSelection>();
   const [loading, setLoading] = useState(true);
@@ -374,7 +375,7 @@ export default function BusinessFlowLaunch({
     setResourceState("loading");
     setResourceError("");
     try {
-      const result = await agentApi.resources(query, {
+      const result = await agentApi.resources(manans ? `玛纳斯原始影像 ${query}`.trim().slice(0, 200) : query, {
         signal: controller.signal,
         source,
       });
@@ -500,7 +501,7 @@ export default function BusinessFlowLaunch({
     setResourceSearch(wantedQuery.current);
     void loadCandidates(wantedQuery.current, true);
   };
-  const taskGoal = goal.trim() || (glacierPilot ? "提取本期冰川，统计面积和变化。" : "");
+  const taskGoal = goal.trim() || (manans ? "提取这景玛纳斯影像的冰川，统计面积和有效区占比。" : glacierPilot ? "提取本期冰川，统计面积和变化。" : "");
   const start = async () => {
     if (inFlight.current || !version) return;
     if (!taskGoal) {
@@ -682,7 +683,7 @@ export default function BusinessFlowLaunch({
                     id="business-flow-launch-goal"
                     value={goal}
                     disabled={busy}
-                    placeholder={glacierPilot ? "例如：重点看表碛冰川面积。" : undefined}
+                    placeholder={manans ? "例如：重点说明有效覆盖范围。" : glacierPilot ? "例如：重点看表碛冰川面积。" : undefined}
                     onChange={(event) => setGoal(event.target.value)}
                     maxLength={12000}
                     autoSize={{ minRows: 2, maxRows: 5 }}

@@ -392,3 +392,32 @@ it("冰川固定右栏，用不同文字颜色区分变化指标与正负面积�
   expect(getComputedStyle(entries.getByText("+0.2")).color).toBe("rgb(167, 235, 155)");
   expect(getComputedStyle(entries.getByText("-0.3")).color).toBe("rgb(255, 163, 182)");
 });
+
+it("玛纳斯显示影像日期、冰川面积和真彩色原图", async () => {
+  await page.viewport(1600, 900);
+  vi.mocked(requestJson).mockResolvedValue({
+    scene: "glacier",
+    items: [{
+      ...item(102, "玛纳斯冰川 · T45TUJ", 14.89),
+      scene: "glacier",
+      kind: "model",
+      model: {variant: "manans-s2-dlinknet34"},
+      observedStart: "2021-09-08",
+      observedEnd: "2021-09-08",
+      registrationDate: "2026-11-24",
+      metrics: [
+        {key: "ice_area_km2", label: "本期冰川分类面积", unit: "km²", value: 14.89},
+        {key: "class_1_percent", label: "冰川占有效区", unit: "%", value: 12.25},
+      ],
+      comparison: {resource: {id: 101, name: "玛纳斯原始影像"}, display: {styleHash: "raw-101"}},
+    }],
+  });
+  show("glacier");
+  const original = await screen.findByRole("button", {name: "原始影像"});
+  expect(within(screen.getByRole("region", {name: "正式成果地图"})).getByText("2021-09-08")).toBeVisible();
+  await waitFor(() => expect(screen.getByText("冰川占有效区")).toBeVisible());
+  expect(screen.queryByRole("region", {name: "登记期变化"})).not.toBeInTheDocument();
+  fireEvent.click(original);
+  expect(screen.getByText("B4/B3/B2 真彩色")).toBeVisible();
+  expect(screen.getByTestId("official-map-handoff")).toHaveTextContent('[102,true,"raw-101"]');
+});

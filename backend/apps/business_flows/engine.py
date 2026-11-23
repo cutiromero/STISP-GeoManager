@@ -1139,3 +1139,15 @@ def _finish(workflow, user, policy):
             transaction.on_commit(
                 lambda: glacier.publish_after_finish(workflow.pk, user.pk)
             )
+        elif AlgorithmVersion.objects.filter(
+            pk__in=[
+                node.get("algorithmVersionId")
+                for node in nodes
+                if node["id"] == "interpret"
+            ],
+            algorithm__identifier=glacier.MANANS_OPERATOR,
+            version="1.0.0",
+        ).exists():
+            transaction.on_commit(
+                lambda: glacier.publish_after_finish(workflow.pk, user.pk, manans=True)
+            )
