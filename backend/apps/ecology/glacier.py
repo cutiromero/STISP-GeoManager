@@ -18,6 +18,31 @@ FLOW_CODE = "glacier-monitoring-dynamic"
 TASK_KEY = "glacier-classification"
 PRODUCT_TYPE = "monitoring_glacier"
 PRODUCT_LIMIT = 240
+BACKGROUND_COLOR = "#364a5c"
+
+
+def prepare_classification_display(dataset):
+    """Prepare the board's palette separately from the imported raster's defaults."""
+    from apps.raster.services.renderer import (
+        build_static_xyz_tile_pyramid,
+        register_tile_style,
+        tile_style_is_ready,
+    )
+
+    rules = dataset.default_rules
+    if rules.get("mode") == "unique":
+        # Model code 0 is valid non-ice; the source NoData mask still applies.
+        rules = {
+            **rules,
+            "uniqueValues": [
+                {**entry, "color": BACKGROUND_COLOR} if entry["value"] == 0 else entry
+                for entry in rules["uniqueValues"]
+            ],
+        }
+    display = register_tile_style(dataset, rules)
+    if not tile_style_is_ready(dataset, display["styleHash"]):
+        build_static_xyz_tile_pyramid(dataset, display["styleHash"])
+    return display
 
 
 def period_day(workflow):
@@ -201,7 +226,6 @@ def publish_workflow(workflow_id, user_id):
     from apps.agent.models import AgentWorkflow
     from apps.business_flows.state import state
     from apps.compute.access import require_actor
-    from apps.raster.services.renderer import register_tile_style
     from .monitoring import register_product
 
     workflow = AgentWorkflow.objects.get(pk=workflow_id, status="succeeded")
@@ -336,7 +360,7 @@ def publish_workflow(workflow_id, user_id):
     dataset = RasterDataset.objects.get(
         data_resource_id=record.resource_id, status="ready"
     )
-    style = register_tile_style(dataset, dataset.default_rules)
+    style = prepare_classification_display(dataset)
     with transaction.atomic():
         row, created = register_product(user, product, computed_import=record)
         if created or row.metadata.get("glacierTask") != TASK_KEY:

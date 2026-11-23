@@ -421,24 +421,25 @@
   font-size: clamp(13px, 2vh, 22px);
 }
 .monitor-showcase[data-scene="glacier"] .official-glacier-change {
-  --monitor-accent: #ffc87a;
-  border-color: #d69a514d;
-  background: linear-gradient(115deg, #ffc87a12, #ffc87a04);
+  --monitor-accent: #d2c2ff;
 }
-.official-glacier-change .monitor-panel-heading h2,
-.official-glacier-change .official-metric-strip dd {
+.official-glacier-change .monitor-panel-heading h2 {
   color: var(--monitor-accent);
 }
-.official-glacier-change .monitor-panel-heading h2::before {
-  box-shadow: 0 0 9px #ffc87a52;
+.official-glacier-change .glacier-change-overlap :is(dt, dd) {
+  color: #79e2cb;
 }
-.official-glacier-change .monitor-panel-caption,
-.official-glacier-change .official-metric-strip dt,
-.official-glacier-change .official-metric-strip small {
-  color: #e2c6a4;
+.official-glacier-change .glacier-change-share :is(dt, dd) {
+  color: #ffc87a;
 }
-.official-glacier-change .official-metric-strip {
-  border-top-color: #d69a5138;
+.glacier-change-signed {
+  white-space: nowrap;
+}
+.glacier-change-signed[data-direction="positive"] {
+  color: #a7eb9b;
+}
+.glacier-change-signed[data-direction="negative"] {
+  color: #ffa3b6;
 }
 .official-glacier-change p {
   margin: 4px 0 0;

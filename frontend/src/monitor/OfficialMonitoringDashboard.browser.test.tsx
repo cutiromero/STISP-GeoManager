@@ -350,7 +350,7 @@ it("冰川成果切换同区原始影像，不显示参考资料和成果说明"
   expect(vi.mocked(requestJson)).toHaveBeenCalledTimes(1);
 });
 
-it("冰川固定右栏，暖色区分登记期变化，仅成果列表滚动", async () => {
+it("冰川固定右栏，用不同文字颜色区分变化指标与正负面积差", async () => {
   const before = [...Array(9)].map((_, i) => item(90 + i, `样区-${i + 1}`, i));
   vi.mocked(requestJson).mockResolvedValue({
     scene: "glacier",
@@ -383,8 +383,12 @@ it("冰川固定右栏，暖色区分登记期变化，仅成果列表滚动", a
   expect(getComputedStyle(column).overflowY).toBe("hidden");
   expect(getComputedStyle(within(overview).getByRole("list")).overflowY).toBe("auto");
   expect(within(overview).getAllByRole("listitem")).toHaveLength(10);
-  const value = within(changes).getByText("15.25", { exact: false }).closest("dd")!;
   const current = within(column).getByText("14.89", { selector: ".official-hero-stat strong" });
-  expect(getComputedStyle(value).color).toBe("rgb(255, 200, 122)");
-  expect(getComputedStyle(value).color).not.toBe(getComputedStyle(current).color);
+  const entries = within(changes);
+  expect(getComputedStyle(current).color).toBe("rgb(139, 214, 242)");
+  expect(getComputedStyle(entries.getByText("共同有效面积")).color).toBe("rgb(121, 226, 203)");
+  expect(getComputedStyle(entries.getByText("19.942", { selector: "dd" })).color).toBe("rgb(121, 226, 203)");
+  expect(getComputedStyle(entries.getByText("15.25", { selector: "dd" })).color).toBe("rgb(255, 200, 122)");
+  expect(getComputedStyle(entries.getByText("+0.2")).color).toBe("rgb(167, 235, 155)");
+  expect(getComputedStyle(entries.getByText("-0.3")).color).toBe("rgb(255, 163, 182)");
 });

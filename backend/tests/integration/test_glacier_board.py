@@ -1,7 +1,12 @@
 from datetime import datetime, timezone
+from io import BytesIO
 from types import SimpleNamespace
 
+import numpy as np
 import pytest
+import rasterio
+from PIL import Image
+from rasterio.transform import from_bounds
 
 from apps.agent.models import AgentWorkflow
 from apps.business_flows.models import BusinessFlowDefinition
@@ -21,6 +26,8 @@ from apps.ecology.official_monitoring import official_snapshot
 from apps.projects.context import ProjectScope, project_scope
 from apps.projects.features import set_feature
 from apps.raster.models import RasterDataset
+from apps.raster.services import renderer
+from apps.raster.services.geo_utils import tile_bounds_3857
 from tests.integration.test_ecology_monitoring import setup_monitor
 
 __all__ = ["setup_monitor"]
@@ -30,7 +37,7 @@ QUALITY = {"status": "passed", "version": 1, "summary": "分类通过", "metrics
 
 
 def test_registered_previous_intersection_and_only_publish_classification(
-    setup_monitor, monkeypatch
+    setup_monitor, monkeypatch, tmp_path
 ):
     admin, reader, project, _, feature, _, raw, base = setup_monitor
     set_feature(
@@ -121,6 +128,36 @@ def test_registered_previous_intersection_and_only_publish_classification(
         assert previous.acquired_on is None
 
         classification = raster("current", [71, 38, 73, 40], result=True)
+        tile = (3, 5, 3)
+        bounds = tile_bounds_3857(*tile)
+        raster_path = tmp_path / "current.tif"
+        with rasterio.open(
+            raster_path,
+            "w",
+            driver="GTiff",
+            width=4,
+            height=1,
+            count=1,
+            dtype="uint8",
+            crs="EPSG:3857",
+            transform=from_bounds(*bounds, 4, 1),
+            nodata=255,
+        ) as dst:
+            dst.write(np.array([[0, 1, 2, 255]], dtype=np.uint8), 1)
+        colors = [
+            {"value": 0, "color": "#00000000", "label": "背景"},
+            {"value": 1, "color": "#4bade8", "label": "洁净冰川"},
+            {"value": 2, "color": "#eab764", "label": "表碛冰川"},
+            {"value": 255, "color": "#00000000", "label": "缺测"},
+        ]
+        dataset = RasterDataset.objects.get(data_resource=classification)
+        dataset.bounds_3857 = list(bounds)
+        dataset.default_rules = {"mode": "unique", "uniqueValues": colors}
+        dataset.processed_gdalinfo = {"geoManager": {"dynamicTiles": True}}
+        dataset.save(
+            update_fields=["bounds_3857", "default_rules", "processed_gdalinfo"]
+        )
+        monkeypatch.setattr(renderer, "raster_processed_path", lambda _: raster_path)
         infer = compute("glacier-b15-infer", "1.1.0")
         output = ComputeOutput.objects.create(
             task=infer,
@@ -221,9 +258,6 @@ def test_registered_previous_intersection_and_only_publish_classification(
             requested_by=admin,
             request_source=f"workflow:{workflow.pk}",
         )
-        monkeypatch.setattr(
-            "apps.raster.services.renderer.register_tile_style", lambda *a: {}
-        )
         product = publish_workflow(workflow.pk, admin.pk)
         assert publish_workflow(workflow.pk, admin.pk).pk == product.pk
         assert product.data_resource_id == classification.pk
@@ -244,6 +278,19 @@ def test_registered_previous_intersection_and_only_publish_classification(
         )
         assert chosen["glacierChange"]["changedPercent"] == 20
         assert not chosen["observedStart"]
+        assert chosen["display"]["rules"]["uniqueValues"][0]["color"] == "#364a5c"
+        assert (
+            RasterDataset.objects.get(pk=dataset.pk).default_rules["uniqueValues"]
+            == colors
+        )
+        rendered = renderer.render_xyz_tile(
+            dataset.pk, chosen["display"]["styleHash"], *tile
+        )
+        with Image.open(BytesIO(rendered)) as png:
+            assert png.getpixel((32, 128)) == (54, 74, 92, 255)
+            assert png.getpixel((96, 128)) == (75, 173, 232, 255)
+            assert png.getpixel((160, 128)) == (234, 183, 100, 255)
+            assert png.getpixel((224, 128))[3] == 0
         baseline.owner_only = True
         baseline.save(update_fields=["owner_only"])
         chosen = next(

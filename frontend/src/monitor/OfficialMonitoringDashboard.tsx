@@ -413,9 +413,17 @@ export default function OfficialMonitoringDashboard({
   );
 }
 
+function SignedGlacierChange({ value }: { value: number }) {
+  const direction = value > 0 ? "positive" : value < 0 ? "negative" : "unchanged";
+  return (
+    <span className="glacier-change-signed" data-direction={direction}>
+      {value > 0 ? "+" : ""}{formatMetric(value)}
+    </span>
+  );
+}
+
 function GlacierChange({ product }: { product: OfficialMonitoringProduct }) {
   const change = product.glacierChange;
-  const signed = (value: number) => (value > 0 ? "+" : "") + formatMetric(value);
   const codeOnly = change?.basis === "registered_codes";
   return (
     <MonitorPanel title="登记期变化" className="official-glacier-change"
@@ -423,10 +431,29 @@ function GlacierChange({ product }: { product: OfficialMonitoringProduct }) {
       {change ? (
         <>
           <dl className="official-metric-strip">
-            <div><dt>共同有效面积</dt><dd>{formatMetric(change.commonAreaKm2)} <small>km²</small></dd></div>
-            <div><dt>{codeOnly ? "编码变化占比" : "分类变化占比"}</dt><dd>{formatMetric(change.changedPercent)} <small>%</small></dd></div>
-            {change.netIceAreaKm2 != null && <div><dt>冰川分类面积净变化</dt><dd>{signed(change.netIceAreaKm2)} <small>km²</small></dd></div>}
-            {codeOnly && <div><dt>编码 1 / 2 面积差</dt><dd>{signed(change.netClass1Km2)} / {signed(change.netClass2Km2)} <small>km²</small></dd></div>}
+            <div className="glacier-change-overlap">
+              <dt>共同有效面积</dt>
+              <dd>{formatMetric(change.commonAreaKm2)} <small>km²</small></dd>
+            </div>
+            <div className="glacier-change-share">
+              <dt>{codeOnly ? "编码变化占比" : "分类变化占比"}</dt>
+              <dd>{formatMetric(change.changedPercent)} <small>%</small></dd>
+            </div>
+            {change.netIceAreaKm2 != null && (
+              <div>
+                <dt>冰川分类面积净变化</dt>
+                <dd><SignedGlacierChange value={change.netIceAreaKm2} /> <small>km²</small></dd>
+              </div>
+            )}
+            {codeOnly && (
+              <div>
+                <dt>编码 1 / 2 面积差</dt>
+                <dd>
+                  <SignedGlacierChange value={change.netClass1Km2} /> /{" "}
+                  <SignedGlacierChange value={change.netClass2Km2} /> <small>km²</small>
+                </dd>
+              </div>
+            )}
           </dl>
           <p>{codeOnly ? "上期为交接标准图，只比较类别编码。" : "只统计两期共同有效范围。"}</p>
         </>
