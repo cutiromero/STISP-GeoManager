@@ -377,6 +377,8 @@ it("冰川固定右栏，仅卡片列表滚动并显示登记期差异", async (
   });
   show("glacier");
   const changes = await screen.findByRole("region", {name:"登记期变化"});
+  expect(screen.getByText("登记期不是影像拍摄日期")).toBeVisible();
+  expect(screen.queryByText("以登记的实际观测期与统计口径为准")).not.toBeInTheDocument();
   await waitFor(() => expect(within(changes).getByText("2026-11-22 → 2026-11-23")).toBeVisible());
   expect(within(changes).getByText("编码变化占比")).toBeVisible();
   expect(within(changes).queryByText("冰川分类面积净变化")).not.toBeInTheDocument();

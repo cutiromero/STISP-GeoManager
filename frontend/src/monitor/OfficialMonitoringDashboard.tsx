@@ -189,7 +189,7 @@ export default function OfficialMonitoringDashboard({
       updatedAt={items[0]?.registeredAt}
       status={() =>
         isGlacier
-          ? "历史分类 · 非实时预警"
+          ? "按登记期查看分类变化"
           : product
             ? "正式成果展示 · 只读"
             : "正式成果展示"
