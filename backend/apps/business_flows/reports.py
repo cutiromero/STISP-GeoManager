@@ -1,11 +1,14 @@
 """Render only completed, source-bound outcomes; no model or filesystem rescan."""
 
+from .definitions import concise_definition
 from .state import binding, state
 
 
 def render_report(workflow):
     spec = binding(workflow)
     value = state(workflow)
+    if concise_definition(spec["definitionSnapshot"]):
+        return concise_report(workflow, spec, value)
     lines = [
         f"# {spec['name']}报告",
         "",
@@ -58,3 +61,30 @@ def render_report(workflow):
     for event in value.get("events", []):
         lines.append(f"- {event['createdAt']} · {event['actor']} · {event['message']}")
     return ("\n".join(lines) + "\n").encode()
+
+
+def concise_report(workflow, spec, value):
+    lines = [
+        f"# {spec['name']}报告",
+        "",
+        value.get("answer") or workflow.detail,
+    ]
+    definition = spec["definitionSnapshot"]
+    names = {row["key"]: row["label"] for row in definition["inputRequirements"]}
+    inputs = spec.get("inputVersions", {})
+    if inputs:
+        lines.extend(["", "## 本次资料", ""])
+        for role, source in inputs.items():
+            lines.append(
+                f"- {names.get(role.split(':', 1)[0], role)}：{source['name']}"
+            )
+    rows = {}
+    for node in definition["nodes"]:
+        item = value["nodes"][node["id"]]
+        for entry in item.get("outputs", {}).get("evidence", []):
+            if entry["id"].startswith("output-"):
+                rows[entry["id"]] = entry.get("title") or node["title"]
+    if rows:
+        lines.extend(["", "## 成果", ""])
+        lines.extend(f"- {title}（{identity}）" for identity, title in rows.items())
+    return ("\n".join(lines).rstrip() + "\n").encode("utf-8")

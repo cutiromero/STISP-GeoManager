@@ -131,3 +131,50 @@ it("keeps consecutive tool steps instead of collapsing their activity", () => {
   ]);
   expect(events).toHaveLength(2);
 });
+
+it("v2 offers a named image picker instead of asking the user for JSON", async () => {
+  const flow = businessFlowRun();
+  flow.definitionSnapshot.schemaVersion = 2;
+  flow.definitionSnapshot.inputRequirements = [
+    { key: "source", label: "原始影像", description: "", dataTypes: ["raster"], required: true, requiredFields: [] },
+  ];
+  flow.definitionSnapshot.nodes[0]!.dataRoles = ["source"];
+  flow.nodes[0]!.status = "waiting_recovery";
+  flow.nodes[0]!.recovery = {
+    reason: "选到的是已经分类的图。",
+    attempts: [],
+    allowSkip: false,
+    options: ["retry_recovery", "cancel"],
+    failure: { code: "BAND_COUNT", remedy: "replace_data" },
+  };
+  const { agentApi } = await import("../api/agent");
+  vi.spyOn(agentApi, "resources").mockResolvedValue({
+    items: [
+      { id: 17, name: "T43 原始影像", dataType: "raster", description: "" },
+      { id: 18, name: "文本资料", dataType: "document", description: "" },
+    ],
+  });
+  render(
+    <App>
+      <MemoryRouter>
+        <BusinessFlowActivity flow={flow} onChanged={vi.fn()} />
+      </MemoryRouter>
+    </App>,
+  );
+  const button = screen.getByRole("button", { name: "换图并继续" });
+  expect(button).toBeDisabled();
+  expect(screen.queryByLabelText("恢复输入数据")).not.toBeInTheDocument();
+  fireEvent.mouseDown(screen.getByRole("combobox", { name: "换一幅原始影像" }));
+  fireEvent.click(await screen.findByText("T43 原始影像"));
+  expect(screen.queryByText("文本资料")).not.toBeInTheDocument();
+  fireEvent.click(button);
+  await waitFor(() =>
+    expect(businessFlowsApi.decide).toHaveBeenCalledWith(
+      flow.id,
+      expect.objectContaining({
+        decision: "retry_recovery",
+        recoveryInputs: { source: 17 },
+      }),
+    ),
+  );
+});

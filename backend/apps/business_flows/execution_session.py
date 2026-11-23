@@ -76,7 +76,9 @@ def initialize(workflow):
     if not bind.get("agentEnabled", True):
         return
     definition = bind["definitionSnapshot"]
-    if definition.get("executionMode") != "main_agent":
+    from .definitions import task_executor
+
+    if not task_executor(definition):
         return
     skill = normalize_skill(
         definition.get("skill") or default_skill(definition["adapter"]),
@@ -101,6 +103,12 @@ def guidance(workflow, node_id, role="executor"):
         return ""
     skill = value["skill"]
     note = skill.get("nodeInstructions", {}).get(node_id, "")
+    from .definitions import concise_definition
+
+    if concise_definition(workflow.parameters["_businessFlow"]["definitionSnapshot"]):
+        return (
+            "\n本流程：" + skill["instructions"] + ("\n本步：" + note if note else "")
+        )
     return (
         (EXECUTOR_INSTRUCTION if role == "executor" else REVIEWER_INSTRUCTION)
         + "\n流程科研目的与判断依据："

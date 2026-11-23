@@ -54187,17 +54187,17 @@
           "goal": {
             "type": "string",
             "maxLength": 2000,
-            "description": "节点要达成的目标"
+            "description": "v2 省略时使用节点名称；v1 必填"
           },
           "acceptance": {
             "type": "array",
-            "minItems": 1,
+            "minItems": 0,
             "maxItems": 8,
             "items": {
               "type": "string",
               "maxLength": 160
             },
-            "description": "全部需要满足的验收条件"
+            "description": "仅写额外的科研验收条件；v2 可省略，v1 至少一项"
           },
           "requiredOutputs": {
             "type": "array",
@@ -54242,7 +54242,7 @@
                 "finish_node"
               ]
             },
-            "description": "本节点允许的平台工具白名单"
+            "description": "节点工具；v2 可交给平台按节点类型配置，v1 必填"
           },
           "maxSteps": {
             "type": "integer",
@@ -54309,10 +54309,7 @@
           }
         },
         "required": [
-          "goal",
-          "acceptance",
-          "requiredOutputs",
-          "tools"
+          "requiredOutputs"
         ],
         "additionalProperties": false
       },
@@ -55139,9 +55136,10 @@
         "properties": {
           "schemaVersion": {
             "type": "integer",
-            "description": "定义规范版本",
+            "description": "定义版本；2 为简版通用业务流，由同一任务会话执行。",
             "enum": [
-              1
+              1,
+              2
             ]
           },
           "adapter": {
@@ -55186,7 +55184,7 @@
           },
           "executionMode": {
             "type": "string",
-            "description": "main_agent由一个任务级主循环选择合法目标、组织输入适配并调用工具继续；省略保留旧节点方式。",
+            "description": "仅用于 v1 定义；v2 不声明，由平台默认使用同一任务会话。",
             "enum": [
               "nodes",
               "main_agent"

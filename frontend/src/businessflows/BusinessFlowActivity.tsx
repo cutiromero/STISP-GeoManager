@@ -607,17 +607,17 @@ export default function BusinessFlowActivity({
             )}
           </section>
         )}
-      {!unavailable && currentDefinition?.contract && (
+      {!unavailable && definition.schemaVersion === 1 && currentDefinition?.contract && (
         <section aria-label="节点执行合同">
           <strong>节点目标：{currentDefinition.contract.goal}</strong>
-          <p>验收条件：{currentDefinition.contract.acceptance.join("；")}</p>
+          <p>验收条件：{currentDefinition.contract.acceptance?.join("；")}</p>
           <p>
             必需输出：
             {currentDefinition.contract.requiredOutputs
               .map((output) => `${output.name}（${output.semanticType}）`)
               .join("、")}
           </p>
-          <p>允许工具：{currentDefinition.contract.tools.join("、")}</p>
+          <p>允许工具：{currentDefinition.contract.tools?.join("、")}</p>
           <p>
             步数 {current?.toolProgress?.steps ?? 0}/
             {currentDefinition.contract.maxSteps ?? 32}；模型调用{" "}
@@ -637,6 +637,17 @@ export default function BusinessFlowActivity({
             node={current}
             busy={Boolean(busy)}
             legacy={isLegacy}
+            concise={definition.schemaVersion === 2}
+            imageRole={definition.schemaVersion === 2
+              ? definition.inputRequirements.find((input) =>
+                  !input.multiple && input.dataTypes.length === 1 &&
+                  input.dataTypes[0] === "raster" &&
+                  (currentDefinition?.dataRoles?.includes(input.key) ||
+                    Object.values(currentDefinition?.inputBindings ?? {}).some((source) =>
+                      "role" in source && source.role === input.key,
+                    )),
+                )?.key
+              : undefined}
             onDecide={(options) => {
               const value = {
                 nodeId: current.nodeId,

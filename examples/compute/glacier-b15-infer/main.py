@@ -27,7 +27,7 @@ PROFILE = Profile.parse(
         "halo": 0,
         "edge": "constant",
         "fill": 0,
-        "mask": "require_explicit",
+        "mask": "trust_all_valid_metadata",
         "stitch": "center_crop",
     }
 )
@@ -77,9 +77,16 @@ def run(context):
             {
                 "version": 1,
                 "status": "passed",
-                "summary": "工程技术核验通过：冻结的b15原值推理，保留有效掩膜与原生格网。未经科学核验，不作监测发布或预警依据。",
+                "summary": (
+                    "按影像标记排除缺测像元。"
+                    if stats["hasExplicitMask"]
+                    else "影像未标记缺测像元，按整幅影像计算。"
+                ),
                 "metrics": stats,
                 "knowledgeFacts": {
+                    "coverageBasis": "source_mask"
+                    if stats["hasExplicitMask"]
+                    else "image_extent",
                     "purpose": PROFILE.purpose,
                     "profileSha256": PROFILE.sha256,
                     "checkpointSha256": WEIGHTS_SHA256,

@@ -1,28 +1,15 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "adapter": "research_flow",
-  "executionMode": "main_agent",
-  "inputPreparation": {
-    "allowScripts": false,
-    "reviewScripts": true
-  },
   "skill": {
-    "title": "冰川批次解译与变化复核（工程版）",
-    "instructions": "按交付原波段顺序和原始DN运行固定十五波段模型，解译新影像。自动查询当前项目中同系列、同格网、同模型的最近前期分类；使用已登记的真实观测日。没有可比历史或共同有效区时仅报告本期面积及原因，不推测日期或变化。工程结果不作为正式监测、预警或物理变化结论。",
-    "knowledgeQuestions": [
-      "项目知识是否有本样区的积雪、云影或表碛复核规范？如命中，核对其时段、传感器和适用范围并提供引用；未命中则仅解释算子证据，不补写观测结论。"
-    ],
-    "nodeInstructions": {
-      "interpret": "原波段顺序、原始DN和分块由固定工程算子处理，不调整，不以旧分类代替原始影像。",
-      "compare": "调用预检查询可比前期，再复用预检执行动作。时相和前期由预检从项目资料与成功计算记录获取，不让用户补选，不在工具参数里填写。",
-      "handover": "从统计表引用单期面积、共同有效覆盖及双期差值。日期或历史缺失时写明未提供，不写零变化。"
-    }
+    "title": "冰川解译",
+    "instructions": "分别统计洁净冰川和表碛冰川。找到可比较的上期影像时，说明哪一类面积变了、变了多少。"
   },
   "inputRequirements": [
     {
       "key": "image",
-      "label": "本期冰川影像",
-      "description": "选择本次要解译的原始15波段 GeoTIFF。历史分类由业务流自动查找，不需要另外选择。",
+      "label": "本期原始影像",
+      "description": "选一幅要分析的冰川原始影像（15 波段 TIFF），不要选彩色分类图。",
       "dataTypes": [
         "raster"
       ],
@@ -34,26 +21,18 @@
   "nodes": [
     {
       "id": "interpret",
-      "title": "新影像解译与质量核验",
+      "title": "提取冰川",
       "kind": "operator",
-      "description": "形成同原生网格的洁净冰川、表碛冰川与背景分类。",
-      "instruction": "只用绑定影像调用固定b15算子，使用预检返回的方案执行，不重排波段、不改变原始DN。检查分类与掩膜技术质量后，按合同将分类入库。日期未证实不影响单期工程验证，不猜测日期。",
+      "description": "生成洁净冰川和表碛冰川的分类图。",
+      "instruction": "",
       "dependsOn": [],
-      "dataRoles": [
-        "image"
-      ],
-      "parameters": {},
+      "dataRoles": [],
       "inputBindings": {
         "image": {
           "role": "image"
         }
       },
       "contract": {
-        "goal": "以交付原始 forward 生成保留原生格网和有效范围的工程分类。",
-        "acceptance": [
-          "保留原生格网，0为背景，255为缺测",
-          "模型真实推理通过技术检查并入库，不作科学质量或正式监测发布声明"
-        ],
         "requiredOutputs": [
           {
             "name": "classification",
@@ -62,40 +41,19 @@
         ],
         "importOutputs": [
           "classification"
-        ],
-        "tools": [
-          "operator_catalog",
-          "preflight_operator",
-          "run_operator",
-          "read_evidence",
-          "read_task_record",
-          "ask_user",
-          "finish_node"
-        ],
-        "maxSteps": 24,
-        "maxModelCalls": 24,
-        "maxOperatorCalls": 2,
-        "maxRecoveries": 2,
-        "maxSeconds": 1800
-      },
-      "review": {
-        "ai": false,
-        "human": false,
-        "maxRevisions": 0
-      },
-      "allowSkip": false
+        ]
+      }
     },
     {
       "id": "compare",
-      "title": "核对历史基线与计算变化",
+      "title": "统计面积和变化",
       "kind": "operator",
-      "description": "在共同有效区域量化同样区的冰川面积变化和类别转换。",
-      "instruction": "调用本节点预检，由平台自动绑定上游分类并检索同系列的前期。先查看实际检索结果，再复用预检执行；不提供额外的历史输入或日期参数。用覆盖表说明是否找到前期及其观测日期；首期差值留空。",
+      "description": "统计本期面积，自动查找可以对比的上期成果。",
+      "instruction": "取同样区最近一期可比结果。两期都覆盖的地方才算变化；没有可比前期时只统计本期。",
       "dependsOn": [
         "interpret"
       ],
       "dataRoles": [],
-      "parameters": {},
       "inputBindings": {
         "current": {
           "nodeId": "interpret",
@@ -103,11 +61,6 @@
         }
       },
       "contract": {
-        "goal": "给出可核验的本期、基线及共同有效区的编码面积指标。",
-        "acceptance": [
-          "有可比基线时保留实际前后观测日期、同一计量范围和完整转移矩阵",
-          "首次观测的差值应为空，不能写成没有变化"
-        ],
         "requiredOutputs": [
           {
             "name": "areas",
@@ -121,48 +74,23 @@
             "name": "coverage",
             "semanticType": "table"
           }
-        ],
-        "tools": [
-          "operator_catalog",
-          "preflight_operator",
-          "run_operator",
-          "read_evidence",
-          "read_task_record",
-          "finish_node"
-        ],
-        "maxSteps": 24,
-        "maxModelCalls": 24,
-        "maxOperatorCalls": 2,
-        "maxRecoveries": 2,
-        "maxSeconds": 1200
-      },
-      "review": {
-        "ai": false,
-        "human": false,
-        "maxRevisions": 0
-      },
-      "allowSkip": false
+        ]
+      }
     },
     {
       "id": "handover",
-      "title": "变化分析与交付报告",
+      "title": "整理报告",
       "kind": "result",
-      "description": "解释新旧结果差异及其证据，生成可审核的样区报告。",
-      "instruction": "引用真实分类图与面积、覆盖及转移表。若做了比较，说明自动查到的前期、前后观测日期、共同有效区与差异；否则说明没有产生变化量的真实原因。区分分类差异和物理冰川变化。结果不自动发布到大屏。",
+      "description": "交付分类图并说明冰川面积。",
+      "instruction": "先给本期面积和图表。有上期结果则写明日期、增减及共同覆盖范围；没找到则说明原因。若按整幅统计，注明影像没有缺测标记。",
       "dependsOn": [
         "compare"
       ],
-      "dataRoles": [],
-      "review": {
-        "ai": false,
-        "human": false,
-        "maxRevisions": 0
-      }
+      "dataRoles": []
     }
   ],
   "outputRequirements": [
-    "新一期同原生网格的分类地图",
-    "面积与净变化表、转移矩阵和覆盖统计",
-    "包含真实输入、计算成果与适用界限的对照报告"
+    "冰川分类图",
+    "面积统计和变化报告"
   ]
 }

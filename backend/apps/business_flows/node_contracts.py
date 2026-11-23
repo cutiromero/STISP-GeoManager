@@ -24,7 +24,11 @@ MAX_FRAGMENT_BYTES = 4096
 MAX_EVIDENCE_BYTES = 96 * 1024
 
 
-def normalize_contract(value):
+READ_AND_FINISH = ["read_evidence", "read_task_record", "ask_user", "finish_node"]
+COMPUTE_TOOLS = ["operator_catalog", "preflight_operator", "run_operator"]
+
+
+def normalize_contract(value, *, defaults=None):
     keys(
         value,
         {
@@ -39,6 +43,16 @@ def normalize_contract(value):
         "节点合同",
     )
     result = dict(value)
+    if defaults is not None:
+        result.setdefault("goal", defaults["title"])
+        result.setdefault("acceptance", [])
+        result.setdefault(
+            "tools",
+            [
+                *(COMPUTE_TOOLS if defaults["kind"] == "operator" else []),
+                *READ_AND_FINISH,
+            ],
+        )
     if "sourceCoverage" in result:
         coverage = result["sourceCoverage"]
         keys(coverage, {"inputRole", "outputKey"}, "来源覆盖合同")
@@ -48,7 +62,7 @@ def normalize_contract(value):
         result["importOutputs"] = strings(result["importOutputs"], "自动入库输出", 30)
     result["goal"] = text(result.get("goal"), "节点目标", 2000)
     result["acceptance"] = strings(result.get("acceptance"), "验收条件", 8)
-    if not result["acceptance"]:
+    if defaults is None and not result["acceptance"]:
         invalid("节点合同须提供验收条件")
     result["tools"] = strings(result.get("tools"), "允许工具", len(TOOLS))
     if set(result["tools"]) - TOOLS or "finish_node" not in result["tools"]:

@@ -67,6 +67,20 @@ def node_roles(node):
     )
 
 
+def concise_definition(definition):
+    return (
+        definition.get("schemaVersion") == 2
+        and definition.get("adapter") == "research_flow"
+    )
+
+
+def task_executor(definition):
+    return (
+        concise_definition(definition)
+        or definition.get("executionMode") == "main_agent"
+    )
+
+
 def normalize_definition(value, *, authored=False):
     keys(
         value,
@@ -90,12 +104,17 @@ def normalize_definition(value, *, authored=False):
         invalid("流程定义超过128KiB限制")
     if (
         type(value.get("schemaVersion")) is not int
-        or value["schemaVersion"] != 1
+        or value["schemaVersion"] not in {1, 2}
         or not isinstance(value.get("adapter"), str)
         or value.get("adapter") not in ADAPTERS
     ):
         invalid("流程定义版本或执行适配器无效")
     result = json.loads(encoded)
+    concise = concise_definition(result)
+    if result["schemaVersion"] == 2 and not concise:
+        invalid("新版定义适用于通用业务流")
+    if concise and "executionMode" in result:
+        invalid("新版业务流自动沿用任务执行方式，请省略executionMode")
     if not isinstance(result.get("executionMode", "nodes"), str) or result.get(
         "executionMode", "nodes"
     ) not in {"nodes", "main_agent"}:
@@ -189,8 +208,10 @@ def normalize_definition(value, *, authored=False):
                 invalid("仅通用分析或算子节点可声明执行合同")
             from .node_contracts import normalize_contract
 
-            node["contract"] = normalize_contract(node["contract"])
-            if result.get("executionMode") == "main_agent":
+            node["contract"] = normalize_contract(
+                node["contract"], defaults=node if concise else None
+            )
+            if task_executor(result):
                 contract = node["contract"]
                 tools = set(contract["tools"])
                 if "run_operator" in tools and (
@@ -401,6 +422,7 @@ def normalize_definition(value, *, authored=False):
         authored
         and result["adapter"] == "research_flow"
         and result.get("executionMode") == "main_agent"
+        and not concise
     ):
         if not result.get("skill"):
             invalid("请填写流程要回答的科研问题和判断依据")

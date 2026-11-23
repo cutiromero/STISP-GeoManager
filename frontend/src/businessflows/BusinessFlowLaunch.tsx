@@ -107,6 +107,8 @@ export default function BusinessFlowLaunch({
     : suppliedModel;
   const [version, setVersion] = useState<BusinessFlowVersion>();
   const [flowCode, setFlowCode] = useState("");
+  const glacierPilot =
+    version?.definition.schemaVersion === 2 && flowCode === "glacier-monitoring-dynamic";
   const [wildfireSelection, setWildfireSelection] =
     useState<WildfireLaunchSelection>();
   const [loading, setLoading] = useState(true);
@@ -498,9 +500,10 @@ export default function BusinessFlowLaunch({
     setResourceSearch(wantedQuery.current);
     void loadCandidates(wantedQuery.current, true);
   };
+  const taskGoal = goal.trim() || (glacierPilot ? "提取本期冰川，统计面积和变化。" : "");
   const start = async () => {
     if (inFlight.current || !version) return;
-    if (!goal.trim()) {
+    if (!taskGoal) {
       setError("请说明本次任务目标。");
       return;
     }
@@ -532,7 +535,7 @@ export default function BusinessFlowLaunch({
       goal:
         needsWildfireSelection && wildfireSelection
           ? `${goal.trim()}\n本次确认的观测选择：${wildfireSelection.summary}`
-          : goal.trim(),
+          : taskGoal,
       model,
       reviewerModel,
       ...(thinkingAvailable ? { reasoningEffort: effort } : {}),
@@ -608,9 +611,9 @@ export default function BusinessFlowLaunch({
     inputReady &&
     wildfireReady &&
     !missing.length &&
-    goal.trim(),
+    taskGoal,
   );
-  const SettingsTag = presentation === "task" ? "details" : "div";
+  const SettingsTag = presentation === "task" || glacierPilot ? "details" : "div";
   return (
     <section
       className={`business-flow-launch-panel${presentation === "task" && fixedInputs ? " monitor-concise-launch" : ""}`}
@@ -672,11 +675,14 @@ export default function BusinessFlowLaunch({
                   className="business-flow-launch-field"
                   htmlFor="business-flow-launch-goal"
                 >
-                  {ui("本次任务目标", "Task goal")}
+                  {glacierPilot
+                    ? ui("想补充什么？（可选）", "Additional instructions (optional)")
+                    : ui("本次任务目标", "Task goal")}
                   <Input.TextArea
                     id="business-flow-launch-goal"
                     value={goal}
                     disabled={busy}
+                    placeholder={glacierPilot ? "例如：重点看表碛冰川面积。" : undefined}
                     onChange={(event) => setGoal(event.target.value)}
                     maxLength={12000}
                     autoSize={{ minRows: 2, maxRows: 5 }}
@@ -684,7 +690,7 @@ export default function BusinessFlowLaunch({
                 </label>
                 {
                   <SettingsTag className="business-flow-launch-settings">
-                    {presentation === "task" && (
+                    {(presentation === "task" || glacierPilot) && (
                       <summary>{ui("高级设置", "Advanced settings")}</summary>
                     )}
                     <div className="business-flow-launch-roles">
@@ -825,8 +831,8 @@ export default function BusinessFlowLaunch({
                   </div>
                 ) : version.definition.inputRequirements.length ? (
                   <div className="business-flow-launch-inputs">
-                    <h3>{ui("任务资料", "Task data")}</h3>
-                    <Segmented<AgentResourceSource>
+                    <h3>{glacierPilot ? ui("选择影像", "Select an image") : ui("任务资料", "Task data")}</h3>
+                    {!glacierPilot && <Segmented<AgentResourceSource>
                       aria-label={ui("资料来源", "Data source")}
                       value={resourceSource}
                       options={[
@@ -841,7 +847,7 @@ export default function BusinessFlowLaunch({
                       ]}
                       disabled={busy}
                       onChange={changeResourceSource}
-                    />
+                    />}
                     {version.definition.inputRequirements.map((input) => (
                       <label
                         className="business-flow-launch-field"
@@ -901,11 +907,15 @@ export default function BusinessFlowLaunch({
                           onOpenChange={(open) =>
                             openCandidates(input.key, open)
                           }
-                          placeholder={ui(
-                            "搜索资料名称或说明，空格分隔多个关键词",
-                            "Search names or descriptions; separate required terms with spaces",
-                          )}
-                          options={resources.map((resource) => ({
+                          placeholder={glacierPilot
+                            ? ui("按样区或影像名称查找", "Search by site or image name")
+                            : ui(
+                                "搜索资料名称或说明，空格分隔多个关键词",
+                                "Search names or descriptions; separate required terms with spaces",
+                              )}
+                          options={(glacierPilot
+                            ? resources.filter((resource) => resource.dataType === "raster")
+                            : resources).map((resource) => ({
                             value: resource.id,
                             label: resource.name,
                             description: resource.description,

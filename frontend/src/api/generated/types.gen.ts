@@ -13145,13 +13145,13 @@ export type BusinessFlowNode = {
  */
 export type BusinessFlowNodeContract = {
     /**
-     * 节点要达成的目标
+     * v2 省略时使用节点名称；v1 必填
      */
-    goal: string;
+    goal?: string;
     /**
-     * 全部需要满足的验收条件
+     * 仅写额外的科研验收条件；v2 可省略，v1 至少一项
      */
-    acceptance: Array<string>;
+    acceptance?: Array<string>;
     /**
      * 必须交付的具名真实证据
      */
@@ -13166,9 +13166,9 @@ export type BusinessFlowNodeContract = {
         semanticType: string;
     }>;
     /**
-     * 本节点允许的平台工具白名单
+     * 节点工具；v2 可交给平台按节点类型配置，v1 必填
      */
-    tools: Array<'read_evidence' | 'read_task_record' | 'operator_catalog' | 'preflight_operator' | 'run_operator' | 'prepare_input' | 'ask_user' | 'finish_node'>;
+    tools?: Array<'read_evidence' | 'read_task_record' | 'operator_catalog' | 'preflight_operator' | 'run_operator' | 'prepare_input' | 'ask_user' | 'finish_node'>;
     /**
      * 节点动作步数硬上限，恢复不重置
      */
@@ -13716,9 +13716,9 @@ export type BusinessFlowInputClarification = {
  */
 export type BusinessFlowSpec = {
     /**
-     * 定义规范版本
+     * 定义版本；2 为简版通用业务流，由同一任务会话执行。
      */
-    schemaVersion: 1;
+    schemaVersion: 1 | 2;
     /**
      * 平台注册执行适配器
      */
@@ -13738,7 +13738,7 @@ export type BusinessFlowSpec = {
     inputPreparation?: BusinessFlowInputPreparationPolicy;
     skill?: BusinessFlowSkill;
     /**
-     * main_agent由一个任务级主循环选择合法目标、组织输入适配并调用工具继续；省略保留旧节点方式。
+     * 仅用于 v1 定义；v2 不声明，由平台默认使用同一任务会话。
      */
     executionMode?: 'nodes' | 'main_agent';
 };

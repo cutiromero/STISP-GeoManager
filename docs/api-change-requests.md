@@ -1,5 +1,18 @@
 # API Change Requests
 
+## API-20261123-001 - v2 通用业务流简版定义
+
+- Status: BackendReady
+- Owner: codex/xintao。
+- Endpoints: 业务流注册、发布、版本详情及运行详情；使用原路径。
+- Change type: 新增版本化定义格式，原 v1 定义、项目权限和执行行为不变。
+- OpenAPI change: `BusinessFlowSpec.schemaVersion` 支持 2；v2 省略 `executionMode`。节点合同仍有具名成果，目标、补充验收条件与工具可沿用默认值。
+- Mock examples: 冰川 v2 真实定义见 `examples/business-flows/glacier-monitoring-dynamic.json`；浏览器回归覆盖 v1 与 v2 的恢复界面。
+- Frontend reason: 新建流程不必重复声明执行方式、节点职责和默认门槛；冰川用户可只选择原图。
+- Backend implementation notes: 同一任务会话推进；单一路径直接进入下一节点，分支仍由智能体决定。审核、数据权限及真实成果校验沿用原边界。
+- Verification: v2 规范与报告单测、旧版回归、冰川历史匹配集成测试、浏览器与正式站真实影像验收。
+- Result: 先应用到冰川解译示范，不迁移其他已发布业务流。
+
 ## API-20261122-002 - Hermes 会话的公开网页检索
 
 - Status: BackendReady
@@ -964,6 +977,7 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| API-20261123-001 | BackendReady | v2 通用业务流简版定义 |
 | API-20261122-002 | BackendReady | Hermes 会话的公开网页检索 |
 | API-20261122-001 | BackendReady | Hermes 网页会话、工具发现与 SSE |
 | API-20261121-002 | BackendReady | 业务流科研目的校验与节点图编辑 |

@@ -322,9 +322,7 @@ it("keeps edited node identity stable and prevents duplicate publish requests", 
     target: { value: "research_summary" },
   });
   const publish = screen.getByRole("button", { name: "保存并发布" });
-  fireEvent.click(publish);
-  await screen.findByText("请写明流程要回答的科研问题，以及判断结果的依据。");
-  expect(save).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("radio", { name: "科研目的" }));
   const instructions =
     "确定哪些岩性差异值得现场复核，用区域地质标准核对可比的字段。";
   fireEvent.change(
@@ -770,7 +768,8 @@ it("lets a researcher create and edit definitions when the server grants authori
   }
   fireEvent.click(fields.getByRole("button", { name: "保存并发布" }));
   await waitFor(() => expect(create).toHaveBeenCalledOnce());
-  expect(create.mock.calls[0]?.[0].definition.executionMode).toBe("main_agent");
+  expect(create.mock.calls[0]?.[0].definition.schemaVersion).toBe(2);
+  expect(create.mock.calls[0]?.[0].definition.executionMode).toBeUndefined();
   await waitFor(() => expect(createDialog).not.toBeVisible());
 
   fireEvent.click(
