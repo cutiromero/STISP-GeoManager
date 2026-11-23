@@ -16,14 +16,13 @@ NODATA = 255
 PIXEL_METRES = 3
 MAX_PIXELS = 36_000_000
 PIXEL_KM2 = PIXEL_METRES**2 / 1_000_000
-EVIDENCE_FIELDS = (
-    "current_date",
-    "baseline_date",
-    "current_source",
-    "baseline_source",
-    "comparable",
-)
-EVIDENCE_MAX_BYTES = 16_384
+BASELINE_REASONS = {
+    "no_current_date": "本期原始影像未登记可核实的观测日，不能确定前后顺序。",
+    "no_series": "本期影像未登记观测系列，无法核实同样区的历史资料。",
+    "no_prior": "项目内没有通过同系列、同格网、同模型及日期筛选的前期分类。",
+    "no_common_coverage": "检索到前期分类，但两期没有共同有效像元。",
+    "matched": "自动检索到时间最近的可比前期分类，差值仅统计共同有效像元。",
+}
 
 
 def stop(context, code, detail, ports, remedy="replace_data"):
@@ -76,79 +75,36 @@ def csv_rows(context, name, header, rows):
         writer.writerows(rows)
 
 
-def read_observation_evidence(context, has_baseline):
-    if "observations" not in context.inputs:
-        if not has_baseline:
-            return None, None
-        stop(
-            context,
-            "GLACIER_COMPARABILITY",
-            "双期比较必须绑定项目内已核对的观测依据表，不能推测时相或代为确认可比性。",
-            ["baseline", "observations"],
-            "human_review",
-        )
-    path = context.input_path("observations")
-    rows = []
-    if path.stat().st_size <= EVIDENCE_MAX_BYTES:
-        with path.open(encoding="utf-8-sig", newline="") as stream:
-            reader = csv.DictReader(stream)
-            fields = reader.fieldnames or []
-            if len(fields) == len(EVIDENCE_FIELDS) and set(fields) == set(
-                EVIDENCE_FIELDS
-            ):
-                rows = list(reader)
+def run(context):
+    has_baseline = "baseline" in context.inputs
+    current_value = context.parameters.get("current_date", "")
+    baseline_value = context.parameters.get("baseline_date", "")
+    current_day = exact_date(current_value)
+    baseline_day = exact_date(baseline_value)
+    reason = context.parameters.get("baseline_reason", "no_prior")
     if (
-        len(rows) != 1
-        or set(rows[0]) != set(EVIDENCE_FIELDS)
-        or any(not isinstance(value, str) for value in rows[0].values())
-    ):
-        stop(
-            context,
-            "GLACIER_EVIDENCE",
-            "观测依据必须是含五个规定字段和一条记录的UTF-8 CSV。",
-            ["observations"],
+        (current_value and not current_day)
+        or (
+            has_baseline
+            and (not current_day or not baseline_day or baseline_day >= current_day)
         )
-    evidence = rows[0]
-    current_day = exact_date(evidence["current_date"])
-    baseline_day = exact_date(evidence["baseline_date"])
-    if (
-        not current_day
-        or (has_baseline and (not baseline_day or baseline_day >= current_day))
-        or (not has_baseline and evidence["baseline_date"])
+        or (not has_baseline and baseline_value)
     ):
         stop(
             context,
             "GLACIER_DATE_ORDER",
-            "请填写有源数据依据的YYYY-MM-DD观测日；有基线时，基线日期必须早于新观测。",
-            ["observations"],
+            "双期观测日必须有据可查，前期必须早于本期。",
+            ["current", "baseline"] if has_baseline else ["current"],
             "human_review",
         )
-    if (
-        not evidence["current_source"].strip()
-        or (
-            has_baseline
-            and (
-                not evidence["baseline_source"].strip()
-                or evidence["comparable"] != "yes"
-            )
-        )
-        or (
-            not has_baseline and (evidence["baseline_source"] or evidence["comparable"])
-        )
-    ):
+    if reason not in BASELINE_REASONS or has_baseline != (reason == "matched"):
         stop(
             context,
             "GLACIER_COMPARABILITY",
-            "请提供日期依据；双期须人工核实同样区、传感器与季节可比、同模型同处理，并填写comparable=yes。",
-            ["observations"],
+            "前期影像必须通过同系列、同格网、同规约及真实日期核验。",
+            ["current", "baseline"] if has_baseline else ["current"],
             "human_review",
         )
-    return current_day, baseline_day
-
-
-def run(context):
-    has_baseline = "baseline" in context.inputs
-    current_day, baseline_day = read_observation_evidence(context, has_baseline)
 
     with ExitStack() as stack:
         current = stack.enter_context(rasterio.open(context.input_path("current")))
@@ -190,12 +146,8 @@ def run(context):
     if coverage == 0:
         stop(context, "GLACIER_NO_COVERAGE", "新一期不存在有效观测像元。", ["current"])
     if has_baseline and not common_pixels:
-        stop(
-            context,
-            "GLACIER_NO_OVERLAP",
-            "两期没有共同有效覆盖，不生成变化值。",
-            ["current", "baseline"],
-        )
+        has_baseline = False
+        reason = "no_common_coverage"
     # Rows use a consistent common mask only in a real comparison.
     comparable_now = transitions.sum(axis=0)
     comparable_prev = transitions.sum(axis=1)
@@ -272,6 +224,7 @@ def run(context):
             "baseline_valid_pixels",
             "common_valid_pixels",
             "common_valid_pct",
+            "baseline_reason",
         ),
         [
             (
@@ -284,6 +237,7 @@ def run(context):
                 earlier_valid if has_baseline else None,
                 common_pixels if has_baseline else None,
                 round(100 * common_pixels / total, 8) if has_baseline else None,
+                reason,
             )
         ],
     )
@@ -293,11 +247,10 @@ def run(context):
             {
                 "version": 1,
                 "status": "passed",
-                "summary": "共同有效区的时相差值，供对照复核。"
-                if has_baseline
-                else "第一期基线；无历史差值。",
+                "summary": BASELINE_REASONS[reason],
                 "metrics": {
                     "comparisonStatus": "compared" if has_baseline else "baseline_only",
+                    "baselineReason": reason,
                     "currentDate": current_day.isoformat() if current_day else None,
                     "baselineDate": baseline_day.isoformat() if has_baseline else None,
                     "commonValidPixels": common_pixels if has_baseline else None,

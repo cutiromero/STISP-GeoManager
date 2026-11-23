@@ -90,9 +90,18 @@ def authorized_task(
         if history:
             resolve_acl_resource(user, policy_value, item.resource_id, active=False)
         elif workflow is not None:
+            from apps.business_flows.glacier_history import is_bound_baseline
             from .workflow_resources import resolve_workflow_resource
 
-            resolve_workflow_resource(user, policy_value, item.resource_id, workflow)
+            if is_bound_baseline(workflow, task, item):
+                # This exact historical input has already been attached by the
+                # workflow's validated comparison submission. The live object
+                # ACL still applies, including owner-only changes.
+                resolve_acl_resource(user, policy_value, item.resource_id)
+            else:
+                resolve_workflow_resource(
+                    user, policy_value, item.resource_id, workflow
+                )
         else:
             resolve_discoverable_resource(user, policy_value, item.resource_id)
     return task

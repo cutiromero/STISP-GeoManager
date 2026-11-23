@@ -401,4 +401,4 @@ def run(context):
 
 专用算子可用 `[compute.gpu_profiles.<算子标识>]` 配置项目、GPU 子集、资源预算及单份权重文件与 SHA-256。设备必须属于 `[compute.gpu]` 的设备池；解释器、GDAL/PROJ 路径及排他租约目录由后者统一配置。专用配置不继承旧算子的项目授权或模型资产；存在专用段时不回退到旧授权。权重放于独立只读目录，由运行环境传入，不接受用户路径或把权重当任务输入。既有地表覆盖模型仍按原五权重清单绑定。
 
-冰川工程算子使用 `glacier-b15-infer`，首期无可信历史资料只统计本期。双期必须另外绑定项目内的观测核验 CSV，规范见 `examples/compute/glacier-temporal-compare/README.md`。
+冰川工程算子使用 `glacier-b15-infer`，首期无可信历史资料只统计本期。双期由业务流预检依据登记的观测日、分类结果和数据权限自动绑定，规范见 `examples/compute/glacier-temporal-compare/README.md`。

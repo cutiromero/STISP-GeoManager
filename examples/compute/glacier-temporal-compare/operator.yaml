@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "identifier": "glacier-temporal-compare",
   "name": "冰川同样区双期变化统计",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "author": "STISP",
   "description": "按共同有效区统计冰川编码变化；首期只生成基线，不填零变化。",
   "runtime": "python-geospatial-v1",
@@ -66,61 +66,54 @@
         "pixelSizeMeters": 3,
         "northUp": true
       }
-    },
-    {
-      "key": "observations",
-      "label": "观测日期与可比性核验表",
-      "kind": "table",
-      "required": false,
-      "description": "双期必选。单行CSV，人工核对日期和来源，确认同样区、同法且可比后comparable填yes。",
-      "fields": [
-        {
-          "role": "current_date",
-          "description": "新一期观测日期",
-          "types": [
-            "string"
-          ],
-          "required": true
-        },
-        {
-          "role": "baseline_date",
-          "description": "前一期观测日期",
-          "types": [
-            "string"
-          ],
-          "required": true
-        },
-        {
-          "role": "current_source",
-          "description": "新期影像及日期来源",
-          "types": [
-            "string"
-          ],
-          "required": true
-        },
-        {
-          "role": "baseline_source",
-          "description": "历史分类及日期来源",
-          "types": [
-            "string"
-          ],
-          "required": true
-        },
-        {
-          "role": "comparable",
-          "description": "可比人工确认",
-          "types": [
-            "string"
-          ],
-          "required": true
-        }
-      ],
-      "crs": {
-        "mode": "any"
-      }
     }
   ],
-  "parameters": [],
+  "parameters": [
+    {
+      "key": "current_date",
+      "label": "本期观测日",
+      "type": "string",
+      "required": false,
+      "maxLength": 10,
+      "default": "",
+      "agent": {
+        "adjustable": false,
+        "advice": "由预检核验并固定，不由 Agent 编写。"
+      },
+      "help": "由冰川业务流预检根据项目原始影像时相和前期分类填写。"
+    },
+    {
+      "key": "baseline_date",
+      "label": "前期观测日",
+      "type": "string",
+      "required": false,
+      "maxLength": 10,
+      "default": "",
+      "agent": {
+        "adjustable": false,
+        "advice": "由预检核验并固定，不由 Agent 编写。"
+      },
+      "help": "由冰川业务流预检根据项目原始影像时相和前期分类填写。"
+    },
+    {
+      "key": "baseline_reason",
+      "label": "历史核验结果",
+      "type": "enum",
+      "required": false,
+      "default": "no_prior",
+      "choices": [
+        "no_current_date",
+        "no_series",
+        "no_prior",
+        "matched"
+      ],
+      "agent": {
+        "adjustable": false,
+        "advice": "由预检核验并固定，不由 Agent 编写。"
+      },
+      "help": "由冰川业务流预检根据项目原始影像时相和前期分类填写。"
+    }
+  ],
   "outputs": [
     {
       "key": "areas",
@@ -361,6 +354,15 @@
           ],
           "required": true,
           "unit": "%"
+        },
+        {
+          "role": "baseline_reason",
+          "name": "baseline_reason",
+          "types": [
+            "string"
+          ],
+          "required": true,
+          "description": "是否及为何采用历史分类"
         }
       ],
       "required": true,
@@ -387,12 +389,6 @@
       "remedy": "replace_data"
     },
     {
-      "code": "GLACIER_NO_OVERLAP",
-      "meaning": "两期没有共同有效像元",
-      "precondition": "选择共同覆盖的可比资料。",
-      "remedy": "replace_data"
-    },
-    {
       "code": "GLACIER_NO_COVERAGE",
       "meaning": "本期没有有效像元",
       "precondition": "更换具有有效观测覆盖的资料。",
@@ -409,12 +405,6 @@
       "meaning": "可比条件未确认",
       "precondition": "核对数据与处理口径，不能确认则转为建基线。",
       "remedy": "human_review"
-    },
-    {
-      "code": "GLACIER_EVIDENCE",
-      "meaning": "观测依据表的字段、行数或编码不合约",
-      "precondition": "上传含规定五列和一条观测记录的UTF-8 CSV。",
-      "remedy": "replace_data"
     }
   ],
   "resources": {
@@ -477,10 +467,18 @@
       }
     },
     {
-      "name": "拒绝无共同覆盖",
+      "name": "无共同覆盖仅交付单期",
       "fixture": "selftest/no-overlap.json",
       "expect": {
-        "errorCode": "GLACIER_NO_OVERLAP"
+        "files": {
+          "observation_coverage.csv": {
+            "rows": 1,
+            "contains": ",no_common_coverage"
+          },
+          "glacier_transitions.csv": {
+            "rows": 0
+          }
+        }
       }
     },
     {
@@ -498,10 +496,10 @@
       }
     },
     {
-      "name": "拒绝没有时相依据的双期",
+      "name": "拒绝没有实际日期的双期",
       "fixture": "selftest/missing-evidence.json",
       "expect": {
-        "errorCode": "GLACIER_COMPARABILITY"
+        "errorCode": "GLACIER_DATE_ORDER"
       }
     }
   ]

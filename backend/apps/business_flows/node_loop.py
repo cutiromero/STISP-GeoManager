@@ -424,7 +424,7 @@ def submission(workflow, user, policy, node, loop, arguments, *, source_state=No
     from apps.compute.preflight import expand_bindings
     from apps.agent.business_flow_operator_repair import _effective, _specs
 
-    from . import logic_nodes
+    from . import glacier_history, logic_nodes
     from .execution_session import session
 
     version = version_for(
@@ -437,7 +437,21 @@ def submission(workflow, user, policy, node, loop, arguments, *, source_state=No
     )
     if not all(isinstance(value, dict) for value in (inputs, parameters, mappings)):
         raise ComputeError("输入、参数与字段映射必须为对象")
+    automatic_history = glacier_history.enabled(node, version)
+    if automatic_history and (set(inputs) - {"current"} or parameters or mappings):
+        raise ComputeError("冰川前期分类与时相由平台预检查询，不能手工指定")
     defaults = known_role_bindings(workflow, node)
+    if automatic_history and "current" not in inputs:
+        source = node.get("inputBindings", {}).get("current", {}).get("nodeId")
+        upstream = state(workflow)["nodes"].get(source, {})
+        matches = [
+            row["evidenceId"].removeprefix("output-")
+            for row in upstream.get("contractOutputs", [])
+            if row.get("name") == "classification"
+            and row["evidenceId"].startswith("output-")
+        ]
+        if len(matches) == 1 and matches[0].isdigit():
+            defaults["current"] = {"outputId": int(matches[0])}
     if logic_nodes.enabled(workflow) and session(workflow):
         # These bindings come from the current frozen recipe, including
         # generated rules and approvals that have no user-facing input role.
@@ -518,6 +532,19 @@ def submission(workflow, user, policy, node, loop, arguments, *, source_state=No
                 != parameters.get(parameter, specs[parameter].get("default"))
             ):
                 raise ComputeError("字段映射不能修改未声明agent.adjustable的关联参数")
+    if automatic_history:
+        prior, receipt = glacier_history.resolve(
+            workflow, user, policy, node, inputs["current"]
+        )
+        parameters = glacier_history.parameters(receipt)
+        if prior is not None:
+            inputs["baseline"] = prior.pk
+        if source_state is not None:
+            source_state["glacierHistory"] = receipt
+            if prior is not None:
+                from apps.compute.input_versions import source_version
+
+                source_state[str(prior.pk)] = source_version(prior)
     _effective(
         parameters, [{**spec, "required": False} for spec in _specs(version.manifest)]
     )
@@ -1228,9 +1255,18 @@ def execute_tool(
                 for key, item in body.items()
                 if key in {"versionId", "inputs", "parameters", "fieldMappings"}
             }
+            history = sources.get("glacierHistory")
+            if history:
+                # Only replay model-visible inputs; preflight rechecks the
+                # independently authorized historical result and dates at submit.
+                loop["validatedLaunch"]["inputs"] = {
+                    "current": body["inputs"]["current"]
+                }
+                loop["validatedLaunch"]["parameters"] = {}
             return {
                 "valid": True,
                 "gaps": [],
+                **({"glacierHistory": history} if history else {}),
                 "message": f"{note}预检通过，尚未提交计算；若按预检方案执行，请调用runAction。",
                 "runAction": {
                     "action": "run_operator",

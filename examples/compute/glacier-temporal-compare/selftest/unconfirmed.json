@@ -96,26 +96,11 @@
           2
         ]
       ]
-    },
-    "observations": {
-      "kind": "table",
-      "columns": [
-        "current_date",
-        "baseline_date",
-        "current_source",
-        "baseline_source",
-        "comparable"
-      ],
-      "rows": [
-        {
-          "current_date": "2025-09-01",
-          "baseline_date": "2024-09-01",
-          "current_source": "fixture-current",
-          "baseline_source": "fixture-earlier",
-          "comparable": ""
-        }
-      ]
     }
   },
-  "parameters": {}
+  "parameters": {
+    "current_date": "2025-09-01",
+    "baseline_date": "2024-09-01",
+    "baseline_reason": "no_prior"
+  }
 }
