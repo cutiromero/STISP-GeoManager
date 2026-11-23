@@ -55,7 +55,7 @@
       "kind": "raster",
       "shape": [
         2,
-        4
+        3
       ],
       "crs": "EPSG:32643",
       "transform": [

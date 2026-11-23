@@ -1,5 +1,18 @@
 # API Change Requests
 
+## API-20261123-002 - 冰川登记期与变化指标
+
+- Status: BackendReady
+- Owner: codex/xintao。
+- Endpoints: GET /api/ecology/monitoring/official/?scene=glacier。
+- Change type: 增量读取字段，仅冰川显示登记期和共同有效区变化。
+- OpenAPI change: `registrationDate` 与实际观测时间分别保存；`glacierChange` 带前期登记、比较口径及计算指标。
+- Mock examples: 大屏浏览器回归覆盖登记日期、标准图编码差异与卡片内滚动。
+- Frontend reason: 大屏读真实已登记结果并自动刷新，不需要人工上传统计表。
+- Backend implementation notes: 业务流完成后只登记已入库主分类图；仅比较同样区与任务、上个登记期的共同有效像元。前期在当前项目被撤权后不返回其指标。
+- Verification: 区域错位和 NoData 工具自检、实算发布和访问回归、正式大屏页面。
+- Result: 冰川场景和相应业务流，不修改其他业务流。
+
 ## API-20261123-001 - v2 通用业务流简版定义
 
 - Status: BackendReady
@@ -977,6 +990,7 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| API-20261123-002 | BackendReady | 冰川登记期与变化指标 |
 | API-20261123-001 | BackendReady | v2 通用业务流简版定义 |
 | API-20261122-002 | BackendReady | Hermes 会话的公开网页检索 |
 | API-20261122-001 | BackendReady | Hermes 网页会话、工具发现与 SSE |

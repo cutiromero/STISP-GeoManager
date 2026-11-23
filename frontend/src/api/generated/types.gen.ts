@@ -4283,6 +4283,10 @@ export type MonitoringProductManifest = {
      */
     quality: 'unverified' | 'passed' | 'needs_review';
     /**
+     * 冰川成果登记期，不是卫星影像拍摄日期。
+     */
+    registrationDate?: string | null;
+    /**
      * 真实观测周期起始日期，未知为null。
      */
     observedStart: string | null;
@@ -4587,6 +4591,22 @@ export type OfficialMonitoringProduct = MonitoringProduct & {
     comparison?: {
         resource: DataResource;
         display: RasterRenderResult;
+    } | null;
+    /**
+     * 冰川前一登记期共同有效区的实算差异；无合格前期或前期撤权时为 null。
+     */
+    glacierChange?: {
+        baselineProductId: number;
+        baselineDate: string;
+        basis: 'classification' | 'registered_codes';
+        commonAreaKm2: number;
+        changedPercent: number;
+        netClass1Km2: number;
+        netClass2Km2: number;
+        /**
+         * 交接标准按编码比较时不计算冰川总净变化。
+         */
+        netIceAreaKm2: number | null;
     } | null;
     /**
      * 冰川场景下可访问的交接文档与参考影像目录条目。

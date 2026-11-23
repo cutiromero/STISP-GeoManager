@@ -1123,3 +1123,19 @@ def _finish(workflow, user, policy):
         data = generate_report(workflow, user, policy)
         value["report"] = report_json(workflow, user, data)
         emit(workflow, "system", "", "completed", workflow.detail)
+        from apps.ecology import glacier
+        from .glacier_history import REGISTRATION_VERSION
+        from apps.compute.models import AlgorithmVersion
+
+        compare = next((node for node in nodes if node["id"] == "compare"), None)
+        if (
+            compare
+            and AlgorithmVersion.objects.filter(
+                pk=compare.get("algorithmVersionId"),
+                algorithm__identifier="glacier-temporal-compare",
+                version=REGISTRATION_VERSION,
+            ).exists()
+        ):
+            transaction.on_commit(
+                lambda: glacier.publish_after_finish(workflow.pk, user.pk)
+            )

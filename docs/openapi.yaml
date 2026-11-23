@@ -14731,6 +14731,7 @@ components:
         referenceRole: {type: string, enum: [standard, historical], description: 外部成果的登记用途；不将系统解译成果标为上传标准。}
         kind: {type: string, enum: [historical, model, observation], description: 历史成果、模型结果或观测资料。}
         quality: {type: string, enum: [unverified, passed, needs_review], description: 未验证、已核验或待复核；不代表自动拥有精度报告。}
+        registrationDate: {type: [string, 'null'], format: date, description: 冰川成果登记期，不是卫星影像拍摄日期。}
         observedStart: {type: [string, 'null'], format: date, description: 真实观测周期起始日期，未知为null。}
         observedEnd: {type: [string, 'null'], format: date, description: 真实观测周期结束日期，未知为null。}
         sourceResourceIds:
@@ -14911,6 +14912,19 @@ components:
                 resource: {$ref: '#/components/schemas/ResourceListItem'}
                 display: {$ref: '#/components/schemas/RasterRenderResult'}
             - {type: 'null'}
+          glacierChange:
+            type: [object, 'null']
+            description: 冰川前一登记期共同有效区的实算差异；无合格前期或前期撤权时为 null。
+            required: [baselineProductId, baselineDate, basis, commonAreaKm2, changedPercent, netClass1Km2, netClass2Km2, netIceAreaKm2]
+            properties:
+              baselineProductId: {type: integer, minimum: 1}
+              baselineDate: {type: string, format: date}
+              basis: {type: string, enum: [classification, registered_codes]}
+              commonAreaKm2: {type: number}
+              changedPercent: {type: number}
+              netClass1Km2: {type: number}
+              netClass2Km2: {type: number}
+              netIceAreaKm2: {type: [number, 'null'], description: 交接标准按编码比较时不计算冰川总净变化。}
           references:
             type: array
             description: 冰川场景下可访问的交接文档与参考影像目录条目。

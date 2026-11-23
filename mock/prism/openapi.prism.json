@@ -39296,6 +39296,14 @@
             ],
             "description": "未验证、已核验或待复核；不代表自动拥有精度报告。"
           },
+          "registrationDate": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date",
+            "description": "冰川成果登记期，不是卫星影像拍摄日期。"
+          },
           "observedStart": {
             "type": [
               "string",
@@ -39845,6 +39853,59 @@
                     "type": "null"
                   }
                 ]
+              },
+              "glacierChange": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "description": "冰川前一登记期共同有效区的实算差异；无合格前期或前期撤权时为 null。",
+                "required": [
+                  "baselineProductId",
+                  "baselineDate",
+                  "basis",
+                  "commonAreaKm2",
+                  "changedPercent",
+                  "netClass1Km2",
+                  "netClass2Km2",
+                  "netIceAreaKm2"
+                ],
+                "properties": {
+                  "baselineProductId": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "baselineDate": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "basis": {
+                    "type": "string",
+                    "enum": [
+                      "classification",
+                      "registered_codes"
+                    ]
+                  },
+                  "commonAreaKm2": {
+                    "type": "number"
+                  },
+                  "changedPercent": {
+                    "type": "number"
+                  },
+                  "netClass1Km2": {
+                    "type": "number"
+                  },
+                  "netClass2Km2": {
+                    "type": "number"
+                  },
+                  "netIceAreaKm2": {
+                    "type": [
+                      "number",
+                      "null"
+                    ],
+                    "description": "交接标准按编码比较时不计算冰川总净变化。"
+                  }
+                }
               },
               "references": {
                 "type": "array",

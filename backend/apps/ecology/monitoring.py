@@ -65,6 +65,7 @@ METRICS = {
         "class_1_percent": ("类别 1 占有效像元", "%"),
         "class_2_percent": ("类别 2 占有效像元", "%"),
         "valid_pixels": ("有效像元", "个"),
+        "ice_area_km2": ("本期冰川分类面积", "km²"),
     },
     "landcover": {
         "valid_area_km2": ("有效统计面积", "km²"),
@@ -98,6 +99,7 @@ FIELDS = {
     "quality",
     "observedStart",
     "observedEnd",
+    "registrationDate",
     "sourceResourceIds",
     "sourceLabel",
     "limitations",
@@ -224,19 +226,30 @@ def normalize_product(value):
             invalid(f"统计项{key}超出范围或不是有限数值")
         if key == "patch_count" and number != int(number):
             invalid("斑块数量须为整数")
+    if "registrationDate" in item:
+        if scene != "glacier":
+            invalid("登记期仅用于冰川大屏")
+        item["registrationDate"] = optional_date(item["registrationDate"], "登记期")
     if scene == "glacier":
-        if item["kind"] != "historical":
-            invalid("冰川场景只接受历史交接分类，不作为预测产品")
+        if item["kind"] not in {"historical", "model"} or (
+            item["kind"] == "model" and not item.get("registrationDate")
+        ):
+            invalid("冰川场景只接受已登记的交接分类或业务流分类")
+
         if ids[0] == item["resourceId"]:
             invalid("冰川历史分类须有独立配对的原始影像")
         pixels = statistics.get("valid_pixels")
         if pixels is not None and pixels != int(pixels):
             invalid("有效像元数须为整数")
         shares = [statistics.get(f"class_{code}_percent") for code in (1, 2)]
-        if all(share is not None for share in shares) and not math.isclose(
-            sum(shares), 100, abs_tol=1e-5
-        ):
-            invalid("类别 1 和类别 2 必须覆盖全部有效像元")
+        if all(share is not None for share in shares):
+            total_share = sum(shares)
+            if (
+                item["kind"] == "historical"
+                and not math.isclose(total_share, 100, abs_tol=1e-5)
+                or total_share > 100 + 1e-5
+            ):
+                invalid("类别像元占比不符合该分类产品口径")
     item["statistics"] = statistics
     if "observation" in item:
         from .wildfire import normalize_observation
@@ -333,8 +346,12 @@ def normalize_product(value):
             != model["forecastLeadDays"]
         ):
             invalid("预测提前天数须与输入截至时间、有效开始日期一致")
-    if scene == "glacier" and (model is not None or threshold is not None):
-        invalid("冰川历史分类不登记模型预报或警戒阈值")
+    if scene == "glacier" and (
+        threshold is not None
+        or model is not None
+        and (item["kind"] != "model" or model["forecastLeadDays"] is not None)
+    ):
+        invalid("冰川登记的是分类图，不是预报或预警")
     item["timing"] = timing
     return item
 
@@ -361,11 +378,11 @@ def validate_model_import(resource, item):
         ComputeImport.objects.filter(
             resource=resource,
             status="ready",
-            output__expired=False,
             output__task__status="succeeded",
             output__task__trial=False,
             output__task__project_tag_id=resource.project_tag_id,
         )
+        .filter(**({} if item["scene"] == "glacier" else {"output__expired": False}))
         .select_related("output__task__version")
         .first()
     )
@@ -403,6 +420,7 @@ def register_product(user, value, *, computed_import=None):
                 ("landcover-unet-infer", "landcover"),
                 ("spartina-rf-infer", "spartina"),
                 ("wildfire-observe", "wildfire"),
+                ("glacier-b15-infer", "glacier"),
             }
             or computed_import.resource_id != value.get("resourceId")
         ):
@@ -410,6 +428,12 @@ def register_product(user, value, *, computed_import=None):
     elif not is_superadmin(user):
         raise PermissionDenied("只有超级管理员可以登记监测成果")
     item = normalize_product(value)
+    if (
+        item["scene"] == "glacier"
+        and item["kind"] == "model"
+        and computed_import is None
+    ):
+        invalid("冰川任务分类由业务流在完成后登记")
     project = Project.objects.select_for_update().get(pk=selected_project_id())
     if item["scene"] not in configured_scenes(project):
         invalid("当前项目尚未配置此遥感监测场景")

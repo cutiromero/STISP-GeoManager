@@ -534,7 +534,12 @@ def submission(workflow, user, policy, node, loop, arguments, *, source_state=No
                 raise ComputeError("字段映射不能修改未声明agent.adjustable的关联参数")
     if automatic_history:
         prior, receipt = glacier_history.resolve(
-            workflow, user, policy, node, inputs["current"]
+            workflow,
+            user,
+            policy,
+            node,
+            inputs["current"],
+            registration=version.version == glacier_history.REGISTRATION_VERSION,
         )
         parameters = glacier_history.parameters(receipt)
         if prior is not None:

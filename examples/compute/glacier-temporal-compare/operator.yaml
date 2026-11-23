@@ -1,10 +1,10 @@
 {
   "schemaVersion": 2,
   "identifier": "glacier-temporal-compare",
-  "name": "冰川同样区双期变化统计",
-  "version": "1.2.0",
+  "name": "冰川登记期面积与变化",
+  "version": "1.3.0",
   "author": "STISP",
-  "description": "按共同有效区统计冰川编码变化；首期只生成基线，不填零变化。",
+  "description": "统计本期分类；在共同覆盖区域比较两次登记结果。",
   "runtime": "python-geospatial-v1",
   "deterministic": true,
   "timeoutSeconds": 240,
@@ -49,14 +49,13 @@
     },
     {
       "key": "baseline",
-      "label": "可比历史分类",
+      "label": "前一登记期分类",
       "kind": "raster",
       "required": false,
-      "description": "同口径冰川分类：原生3米UTM，UInt8单波段，0背景、1洁净冰川、2表碛冰川、255 NoData。",
+      "description": "已登记的同样区前期分类；按最近邻对齐后只比较共同有效范围。",
       "fields": [],
       "crs": {
-        "mode": "same_as",
-        "input": "current"
+        "mode": "projected"
       },
       "raster": {
         "bandCount": 1,
@@ -71,29 +70,29 @@
   "parameters": [
     {
       "key": "current_date",
-      "label": "本期观测日",
+      "label": "本期登记日",
       "type": "string",
       "required": false,
       "maxLength": 10,
       "default": "",
       "agent": {
         "adjustable": false,
-        "advice": "由预检核验并固定，不由 Agent 编写。"
+        "advice": "沿用登记记录，不手填。"
       },
-      "help": "由冰川业务流预检根据项目原始影像时相和前期分类填写。"
+      "help": "由业务流查询监测登记记录后填写。"
     },
     {
       "key": "baseline_date",
-      "label": "前期观测日",
+      "label": "前期登记日",
       "type": "string",
       "required": false,
       "maxLength": 10,
       "default": "",
       "agent": {
         "adjustable": false,
-        "advice": "由预检核验并固定，不由 Agent 编写。"
+        "advice": "沿用登记记录，不手填。"
       },
-      "help": "由冰川业务流预检根据项目原始影像时相和前期分类填写。"
+      "help": "由业务流查询监测登记记录后填写。"
     },
     {
       "key": "baseline_reason",
@@ -109,9 +108,51 @@
       ],
       "agent": {
         "adjustable": false,
-        "advice": "由预检核验并固定，不由 Agent 编写。"
+        "advice": "沿用登记记录，不手填。"
       },
-      "help": "由冰川业务流预检根据项目原始影像时相和前期分类填写。"
+      "help": "由业务流查询监测登记记录后填写。"
+    },
+    {
+      "key": "region",
+      "label": "样区标识",
+      "type": "string",
+      "required": false,
+      "default": "",
+      "maxLength": 120,
+      "help": "自动匹配的登记样区。",
+      "agent": {
+        "adjustable": false,
+        "advice": "沿用登记记录，不手填。"
+      }
+    },
+    {
+      "key": "baseline_product_id",
+      "label": "前期登记编号",
+      "type": "integer",
+      "required": false,
+      "default": 0,
+      "min": 0,
+      "help": "来自本项目实际登记记录。",
+      "agent": {
+        "adjustable": false,
+        "advice": "沿用登记记录，不手填。"
+      }
+    },
+    {
+      "key": "baseline_basis",
+      "label": "对比口径",
+      "type": "enum",
+      "required": false,
+      "default": "classification",
+      "choices": [
+        "classification",
+        "registered_codes"
+      ],
+      "help": "交接标准仅作类别编码对比。",
+      "agent": {
+        "adjustable": false,
+        "advice": "沿用登记记录，不手填。"
+      }
     }
   ],
   "outputs": [
@@ -210,7 +251,7 @@
         {
           "role": "baseline_date",
           "name": "baseline_date",
-          "description": "基线观测日",
+          "description": "基线登记日",
           "types": [
             "string"
           ],
@@ -219,7 +260,7 @@
         {
           "role": "current_date",
           "name": "current_date",
-          "description": "本期观测日",
+          "description": "本期登记日",
           "types": [
             "string"
           ],
@@ -268,7 +309,7 @@
     },
     {
       "key": "coverage",
-      "label": "观测时相与有效范围",
+      "label": "登记期与共同有效范围",
       "kind": "table",
       "file": "observation_coverage.csv",
       "description": "写明是否建立基线，以及本期、前期和共同有效范围的分母。",
@@ -285,7 +326,7 @@
         {
           "role": "current_date",
           "name": "current_date",
-          "description": "本期观测日",
+          "description": "本期登记日",
           "types": [
             "string"
           ],
@@ -294,7 +335,7 @@
         {
           "role": "baseline_date",
           "name": "baseline_date",
-          "description": "前期观测日",
+          "description": "前期登记日",
           "types": [
             "string"
           ],
@@ -330,7 +371,7 @@
         {
           "role": "baseline_valid_pixels",
           "name": "baseline_valid_pixels",
-          "description": "前期有效像元包含背景",
+          "description": "前期对齐至本期图幅后的有效像元",
           "types": [
             "integer"
           ],
@@ -380,12 +421,6 @@
       "code": "GLACIER_CLASS_CODE",
       "meaning": "有效区有未登记的分类码",
       "precondition": "提供0/1/2固定编码成果。",
-      "remedy": "replace_data"
-    },
-    {
-      "code": "GLACIER_GRID_MISMATCH",
-      "meaning": "两期原生格网不一致",
-      "precondition": "换同网格成果，或先准备受控对齐的派生资料。",
       "remedy": "replace_data"
     },
     {
@@ -460,10 +495,18 @@
       }
     },
     {
-      "name": "拒绝格网偏移",
+      "name": "范围错开时按共同有效区域计量",
       "fixture": "selftest/shifted.json",
       "expect": {
-        "errorCode": "GLACIER_GRID_MISMATCH"
+        "files": {
+          "observation_coverage.csv": {
+            "rows": 1,
+            "contains": "compared,2025-09-01,2024-09-01,EPSG:32643,8,6,5,4,50.0"
+          },
+          "glacier_transitions.csv": {
+            "rows": 9
+          }
+        }
       }
     },
     {
@@ -500,6 +543,23 @@
       "fixture": "selftest/missing-evidence.json",
       "expect": {
         "errorCode": "GLACIER_DATE_ORDER"
+      }
+    },
+    {
+      "name": "标准交接按原码比较并保留0为缺测",
+      "fixture": "selftest/registered-codes.json",
+      "expect": {
+        "files": {
+          "observation_coverage.csv": {
+            "rows": 1
+          },
+          "glacier_transitions.csv": {
+            "rows": 9
+          },
+          "glacier_areas.csv": {
+            "contains": "ice,冰川合计,4,3.6e-05,,,,"
+          }
+        }
       }
     }
   ]

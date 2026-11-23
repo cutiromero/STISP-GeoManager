@@ -1,0 +1,254 @@
+from datetime import datetime, timezone
+from types import SimpleNamespace
+
+import pytest
+
+from apps.agent.models import AgentWorkflow
+from apps.business_flows.models import BusinessFlowDefinition
+from apps.catalog.models import DataResource
+from apps.compute.models import (
+    AlgorithmResource,
+    AlgorithmVersion,
+    ComputeImport,
+    ComputeInput,
+    ComputeOutput,
+    ComputeTask,
+)
+from apps.ecology.glacier import TASK_KEY, publish_workflow, resolve_registered
+from apps.ecology.models import RemoteSensingProduct
+from apps.ecology.monitoring import register_product
+from apps.ecology.official_monitoring import official_snapshot
+from apps.projects.context import ProjectScope, project_scope
+from apps.projects.features import set_feature
+from apps.raster.models import RasterDataset
+from tests.integration.test_ecology_monitoring import setup_monitor
+
+__all__ = ["setup_monitor"]
+
+pytestmark = pytest.mark.efficiency
+QUALITY = {"status": "passed", "version": 1, "summary": "分类通过", "metrics": {}}
+
+
+def test_registered_previous_intersection_and_only_publish_classification(
+    setup_monitor, monkeypatch
+):
+    admin, reader, project, _, feature, _, raw, base = setup_monitor
+    set_feature(
+        admin,
+        feature,
+        project=project,
+        enabled=True,
+        config={
+            "source": "remote_sensing_products",
+            "scenes": ["glacier"],
+            "title": "冰川",
+            "initialView": {"center": [72, 38], "zoom": 3, "regionZoom": 10},
+        },
+    )
+
+    def raster(code, extent, *, result=False):
+        resource = DataResource.objects.create(
+            name=code,
+            code=code,
+            maintainer=admin,
+            data_type="raster",
+            storage_path=code + ".tif",
+            coordinate_system="EPSG:32643",
+            is_compute_result=result,
+        )
+        RasterDataset.objects.create(
+            data_resource=resource,
+            status="ready",
+            raster_kind="categorical",
+            code=code,
+            bounds_4326=extent,
+            source_relative_path=resource.storage_path,
+        )
+        return resource
+
+    def historical(code, extent, when, region):
+        result = raster(code, extent)
+        product, _ = register_product(
+            admin,
+            {
+                **base,
+                "code": code,
+                "name": code,
+                "scene": "glacier",
+                "resourceId": result.pk,
+                "registrationDate": when,
+                "sourceResourceIds": [raw.pk],
+                "referenceRole": "standard",
+                "statistics": {"valid_pixels": 100},
+            },
+        )
+        product.metadata.update(glacierTask=TASK_KEY, glacierRegion=region)
+        product.save(update_fields=["metadata"])
+        return product
+
+    def compute(identifier, version):
+        algo = AlgorithmResource.objects.create(
+            identifier=identifier, name=identifier, created_by=admin
+        )
+        av = AlgorithmVersion.objects.create(algorithm=algo, version=version)
+        return ComputeTask.objects.create(
+            owner=admin,
+            name=identifier,
+            status="succeeded",
+            version=av,
+            idempotency_key=identifier,
+        )
+
+    with project_scope(ProjectScope((project.pk,), project.pk, admin.pk)):
+        RasterDataset.objects.create(
+            data_resource=raw,
+            status="ready",
+            bounds_4326=[71, 38, 73, 40],
+            code="source",
+        )
+        previous = historical("prior", [72, 39, 74, 41], "2026-11-22", "station")
+        historical("same-day", [72, 39, 74, 41], "2026-11-23", "station")
+        historical("outside", [80, 30, 81, 31], "2026-11-22", "outside")
+        test_workflow = SimpleNamespace(
+            created_at=datetime(2026, 11, 23, tzinfo=timezone.utc)
+        )
+        baseline, receipt = resolve_registered(
+            test_workflow, admin, SimpleNamespace(resource_id=raw.pk)
+        )
+        assert baseline.pk == previous.data_resource_id
+        assert receipt["baselineDate"] == "2026-11-22"
+        assert receipt["baselineBasis"] == "registered_codes"
+        assert previous.acquired_on is None
+
+        classification = raster("current", [71, 38, 73, 40], result=True)
+        infer = compute("glacier-b15-infer", "1.1.0")
+        output = ComputeOutput.objects.create(
+            task=infer,
+            key="classification",
+            kind="raster",
+            file_name="classification.tif",
+            size_bytes=99,
+            path="tif",
+            checksum="b" * 64,
+            metadata={
+                "qualityCheck": {
+                    **QUALITY,
+                    "metrics": {"classCounts": {"0": 80, "1": 10, "2": 10, "255": 0}},
+                },
+                "knowledgeFacts": {
+                    "checkpointSha256": "c" * 64,
+                    "coverageBasis": "image_extent",
+                },
+            },
+        )
+        ComputeInput.objects.create(task=infer, key="image", resource=raw)
+        compare = compute("glacier-temporal-compare", "1.3.0")
+        compare.parameters.update(
+            region="station",
+            baseline_product_id=previous.pk,
+            baseline_date="2026-11-22",
+            baseline_basis="registered_codes",
+        )
+        compare.save(update_fields=["parameters"])
+        ComputeInput.objects.create(
+            task=compare, key="current", resource=classification
+        )
+        ComputeInput.objects.create(task=compare, key="baseline", resource=baseline)
+        ComputeOutput.objects.create(
+            task=compare,
+            key="coverage",
+            kind="table",
+            file_name="coverage.csv",
+            path="csv",
+            size_bytes=99,
+            checksum="a" * 64,
+            metadata={
+                "qualityCheck": {
+                    **QUALITY,
+                    "metrics": {
+                        "comparisonStatus": "compared",
+                        "commonAreaKm2": 0.0009,
+                        "changedPercent": 20,
+                        "netClass1Km2": 0.00009,
+                        "netClass2Km2": -0.00009,
+                        "netIceAreaKm2": None,
+                    },
+                }
+            },
+        )
+        flow = BusinessFlowDefinition.objects.create(
+            code="glacier-monitoring-dynamic", name="冰川", owner=admin
+        )
+        workflow = AgentWorkflow.objects.create(
+            owner=admin,
+            workflow_type="business_flow",
+            status="succeeded",
+            idempotency_key="glacier-board",
+            parameters={
+                "_businessFlow": {
+                    "flowId": flow.pk,
+                    "definitionSnapshot": {"nodes": []},
+                },
+            },
+            plan={
+                "businessFlow": {
+                    "nodes": {
+                        "interpret": {
+                            "status": "succeeded",
+                            "computeTaskId": str(infer.pk),
+                            "contractOutputs": [
+                                {
+                                    "name": "classification",
+                                    "evidenceId": f"output-{output.pk}",
+                                }
+                            ],
+                        },
+                        "compare": {
+                            "status": "succeeded",
+                            "computeTaskId": str(compare.pk),
+                        },
+                    }
+                }
+            },
+        )
+        AgentWorkflow.objects.filter(pk=workflow.pk).update(
+            created_at=test_workflow.created_at
+        )
+        ComputeImport.objects.create(
+            output=output,
+            status="ready",
+            resource=classification,
+            requested_by=admin,
+            request_source=f"workflow:{workflow.pk}",
+        )
+        monkeypatch.setattr(
+            "apps.raster.services.renderer.register_tile_style", lambda *a: {}
+        )
+        product = publish_workflow(workflow.pk, admin.pk)
+        assert publish_workflow(workflow.pk, admin.pk).pk == product.pk
+        assert product.data_resource_id == classification.pk
+        assert product.acquired_on is None
+        assert product.metadata["monitoring"]["registrationDate"] == "2026-11-23"
+        assert product.metadata["glacierChange"]["baselineProductId"] == previous.pk
+        assert (
+            RemoteSensingProduct.objects.filter(
+                metadata__monitoring__kind="model"
+            ).count()
+            == 1
+        )
+    with project_scope(ProjectScope((project.pk,), project.pk, reader.pk)):
+        chosen = next(
+            item
+            for item in official_snapshot(reader, "glacier")["items"]
+            if item["id"] == product.pk
+        )
+        assert chosen["glacierChange"]["changedPercent"] == 20
+        assert not chosen["observedStart"]
+        baseline.owner_only = True
+        baseline.save(update_fields=["owner_only"])
+        chosen = next(
+            item
+            for item in official_snapshot(reader, "glacier")["items"]
+            if item["id"] == product.pk
+        )
+        assert chosen["glacierChange"] is None

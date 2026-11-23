@@ -313,8 +313,10 @@ it("冰川成果切换同区原始影像并链接项目参考资料，不触发�
     items: [
       {
         ...item(81, "冰川样区 · T42-1", 0),
+        scene: "glacier",
         observedStart: null,
         observedEnd: null,
+        registrationDate: "2026-11-22",
         comparison: {
           resource: { id: 80, name: "原始影像" },
           display: { styleHash: "raw-80" },
@@ -346,8 +348,44 @@ it("冰川成果切换同区原始影像并链接项目参考资料，不触发�
   expect(href.searchParams.get("projectTagId")).toBe("8");
   expect(
     within(screen.getByRole("region", { name: "正式成果地图" })).getByText(
-      "观测期未登记",
+      "登记期：2026-11-22",
     ),
   ).toBeVisible();
   expect(vi.mocked(requestJson)).toHaveBeenCalledTimes(1);
+});
+
+it("冰川固定右栏，仅卡片列表滚动并显示登记期差异", async () => {
+  const before = [...Array(9)].map((_, i) => item(90 + i, `样区-${i + 1}`, i));
+  vi.mocked(requestJson).mockResolvedValue({
+    scene: "glacier",
+    items: [
+      {
+        ...item(100, "冰川样区 · T43-10", 14.89),
+        scene: "glacier",
+        kind: "model",
+        registrationDate: "2026-11-23",
+        metrics: [{key:"ice_area_km2", label:"本期冰川分类面积", unit:"km²", value:14.89}],
+        glacierChange: {
+          baselineProductId:81, baselineDate:"2026-11-22", basis:"registered_codes",
+          commonAreaKm2:19.942, changedPercent:15.25, netClass1Km2:0.2, netClass2Km2:-0.3,
+          netIceAreaKm2:null,
+        },
+        references: Array.from({length:9}, (_, i)=>({id: 910+i, name:`参考图件 ${i+1}`,projectTagId:8})),
+      },
+      ...before.map((p)=>({...p,scene:"glacier",registrationDate:"2026-11-22"})),
+    ],
+  });
+  show("glacier");
+  const changes = await screen.findByRole("region", {name:"登记期变化"});
+  await waitFor(() => expect(within(changes).getByText("2026-11-22 → 2026-11-23")).toBeVisible());
+  expect(within(changes).getByText("编码变化占比")).toBeVisible();
+  expect(within(changes).queryByText("冰川分类面积净变化")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", {name:"查看 9 项"}));
+  const column = screen.getByRole("complementary", {name:"区域观测指标"});
+  const overview = within(column).getByRole("region", {name:"区域成果一览"});
+  const refs = within(column).getByRole("region", {name:"参考资料"});
+  expect(getComputedStyle(column).overflowY).toBe("hidden");
+  expect(getComputedStyle(within(overview).getByRole("list")).overflowY).toBe("auto");
+  expect(getComputedStyle(within(refs).getByRole("list")).overflowY).toBe("auto");
+  expect(within(overview).getAllByRole("listitem")).toHaveLength(10);
 });

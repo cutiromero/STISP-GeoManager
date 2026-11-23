@@ -6,7 +6,7 @@ import {
   ReloadOutlined,
 } from "@ant-design/icons";
 import { Alert, Button, Space, Spin } from "antd";
-import { type CSSProperties, type ReactNode, useEffect, useState } from "react";
+import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { requestJson } from "../api/client";
 import type {
@@ -21,6 +21,7 @@ import { useMonitorActivity } from "./useMonitor";
 import "./official-monitoring.css";
 
 const rotationMs = 13000;
+const glacierRefreshMs = 30000;
 const overviewPageSize = 4;
 const primaryNumber = new Intl.NumberFormat("zh-CN", {
   maximumFractionDigits: 3,
@@ -34,7 +35,7 @@ const registrationTime = new Intl.DateTimeFormat("zh-CN", {
   timeStyle: "short",
 });
 const sceneTitles = {
-  glacier: ["冰川遥感监测", "HISTORICAL GLACIER MAPPING"],
+  glacier: ["冰川遥感监测", "GLACIER MONITORING"],
   landcover: ["地表覆盖解译", "LAND COVER INTELLIGENCE"],
   spartina: ["互花米草分布监测", "COASTAL HABITAT MONITORING"],
   wildfire: ["野火遥感观测", "WILDFIRE EARTH OBSERVATION"],
@@ -46,7 +47,7 @@ function mainMetric(
 ) {
   const key =
     scene === "glacier"
-      ? "valid_coverage_percent"
+      ? product?.kind === "model" ? "ice_area_km2" : "valid_coverage_percent"
       : scene === "landcover"
         ? "valid_area_km2"
         : scene === "spartina"
@@ -70,6 +71,9 @@ function formatMetric(value: number | null | undefined) {
 }
 
 function observedPeriod(product: OfficialMonitoringProduct) {
+  if (product.scene === "glacier") {
+    return product.registrationDate ? `登记期：${product.registrationDate}` : "登记期待补充";
+  }
   const { observedStart: start, observedEnd: end } = product;
   return start && end && start !== end
     ? `${start} — ${end}`
@@ -95,32 +99,46 @@ export default function OfficialMonitoringDashboard({
   const [showOriginal, setShowOriginal] = useState(false);
   const [showReferences, setShowReferences] = useState(false);
   const { animated } = useMonitorActivity();
+  const selected = useRef<number | undefined>(undefined);
+  selected.current = items[current]?.id;
   useEffect(() => {
     const controller = new AbortController();
-    setLoading(true);
-    setFailure("");
-    void requestJson<OfficialMonitoringList>(
-      `/api/ecology/monitoring/official/?scene=${scene}`,
-      {
-        signal: controller.signal,
-      },
-    )
-      .then((result) => {
+    let inFlight = false;
+    async function load(initial: boolean) {
+      if (inFlight || controller.signal.aborted) return;
+      inFlight = true;
+      if (initial) {
+        setLoading(true);
+        setFailure("");
+      }
+      try {
+        const { items: next } = await requestJson<OfficialMonitoringList>(
+          `/api/ecology/monitoring/official/?scene=${scene}`,
+          { signal: controller.signal },
+        );
         if (controller.signal.aborted) return;
-        setItems(result.items);
-        setCurrent(0);
-      })
-      .catch((error: unknown) => {
+        const index = next.findIndex((row) => row.id === selected.current);
+        setItems(next);
+        setCurrent(initial || index < 0 ? 0 : index);
+        setFailure("");
+      } catch (error: unknown) {
         if (controller.signal.aborted) return;
         setItems([]);
-        setFailure(
-          error instanceof Error ? error.message : "暂时无法读取正式成果",
-        );
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
-    return () => controller.abort();
+        setCurrent(0);
+        setFailure(error instanceof Error ? error.message : "暂时无法读取正式成果");
+      } finally {
+        inFlight = false;
+        if (initial && !controller.signal.aborted) setLoading(false);
+      }
+    }
+    void load(true);
+    const timer = scene === "glacier" ? window.setInterval(() => {
+      if (document.visibilityState === "visible") void load(false);
+    }, glacierRefreshMs) : undefined;
+    return () => {
+      controller.abort();
+      window.clearInterval(timer);
+    };
   }, [scene, revision]);
   const rotating = animated && !paused && !hovered && items.length > 1;
   useEffect(() => {
@@ -193,7 +211,7 @@ export default function OfficialMonitoringDashboard({
               preparedDisplay={display}
             />
             <div className="official-map-caption">
-              <span className="official-map-caption-label">地理空间观测</span>
+              <span className="official-map-caption-label">{isGlacier ? "样区成果" : "地理空间观测"}</span>
               <h2 title={product?.regionLabel}>
                 {product?.regionLabel ?? "项目成果全景"}
               </h2>
@@ -295,7 +313,9 @@ export default function OfficialMonitoringDashboard({
                 className="official-empty"
               >
                 <p>
-                  业务流处理完成后，在数据中心登记主地图成果，即可在这里展示。
+                  {isGlacier
+                    ? "冰川业务流完成后，分类图会自动显示在这里。"
+                    : "业务流处理完成后，在数据中心登记主地图成果，即可在这里展示。"}
                 </p>
               </MonitorPanel>
             ) : (
@@ -338,6 +358,7 @@ export default function OfficialMonitoringDashboard({
                     </dl>
                   )}
                 </MonitorPanel>
+                {isGlacier && product.kind === "model" && <GlacierChange product={product} />}
                 {product.classification?.categories.length ? (
                   <MonitorPanel title="地类面积占比">
                     <div className="official-composition">
@@ -370,7 +391,7 @@ export default function OfficialMonitoringDashboard({
                   </MonitorPanel>
                 ) : explanation ? (
                   <MonitorPanel title="成果说明">
-                    <p className="official-interpretation">{explanation}</p>
+                    <p className="official-interpretation" title={isGlacier ? explanation : undefined}>{explanation}</p>
                   </MonitorPanel>
                 ) : null}
               </div>
@@ -378,6 +399,7 @@ export default function OfficialMonitoringDashboard({
             {!failure && references.length > 0 && (
               <MonitorPanel
                 title="参考资料"
+                className="official-reference-card"
                 extra={
                   <Button
                     size="small"
@@ -407,7 +429,7 @@ export default function OfficialMonitoringDashboard({
             )}
             {!failure &&
               product &&
-              (items.length > 1 ? (
+              (isGlacier || items.length > 1 ? (
                 <OfficialRegionOverview
                   scene={scene}
                   items={items}
@@ -425,6 +447,28 @@ export default function OfficialMonitoringDashboard({
   );
 }
 
+function GlacierChange({ product }: { product: OfficialMonitoringProduct }) {
+  const change = product.glacierChange;
+  const signed = (value: number) => (value > 0 ? "+" : "") + formatMetric(value);
+  const codeOnly = change?.basis === "registered_codes";
+  return (
+    <MonitorPanel title="登记期变化" className="official-glacier-change"
+      extra={change && <span className="monitor-panel-caption">{change.baselineDate} → {product.registrationDate}</span>}>
+      {change ? (
+        <>
+          <dl className="official-metric-strip">
+            <div><dt>共同有效面积</dt><dd>{formatMetric(change.commonAreaKm2)} <small>km²</small></dd></div>
+            <div><dt>{codeOnly ? "编码变化占比" : "分类变化占比"}</dt><dd>{formatMetric(change.changedPercent)} <small>%</small></dd></div>
+            {change.netIceAreaKm2 != null && <div><dt>冰川分类面积净变化</dt><dd>{signed(change.netIceAreaKm2)} <small>km²</small></dd></div>}
+            {codeOnly && <div><dt>编码 1 / 2 面积差</dt><dd>{signed(change.netClass1Km2)} / {signed(change.netClass2Km2)} <small>km²</small></dd></div>}
+          </dl>
+          <p>{codeOnly ? "上期为交接标准图，只比较类别编码。" : "只统计两期共同有效范围。"}</p>
+        </>
+      ) : <p>暂无可对比的前一登记期。</p>}
+    </MonitorPanel>
+  );
+}
+
 function OfficialRegionOverview({
   scene,
   items,
@@ -438,8 +482,9 @@ function OfficialRegionOverview({
   onSelect: (index: number) => void;
   onKeyboardFocus: () => void;
 }) {
-  const start = Math.floor(current / overviewPageSize) * overviewPageSize;
-  const end = Math.min(start + overviewPageSize, items.length);
+  const scrollable = scene === "glacier";
+  const start = scrollable ? 0 : Math.floor(current / overviewPageSize) * overviewPageSize;
+  const end = scrollable ? items.length : Math.min(start + overviewPageSize, items.length);
   return (
     <MonitorPanel
       title="区域成果一览"
@@ -447,11 +492,11 @@ function OfficialRegionOverview({
       extra={
         <div className="official-overview-nav">
           <span className="monitor-panel-caption">
-            {items.length > overviewPageSize
+            {!scrollable && items.length > overviewPageSize
               ? `${start + 1}–${end} / ${items.length} 项`
               : `${items.length} 项已登记`}
           </span>
-          {items.length > overviewPageSize && (
+          {!scrollable && items.length > overviewPageSize && (
             <Space size={4}>
               <Button
                 size="small"

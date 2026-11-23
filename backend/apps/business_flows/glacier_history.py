@@ -14,6 +14,7 @@ from .state import state
 
 COMPARISON = "glacier-temporal-compare"
 AUTOMATIC_VERSION = "1.2.0"
+REGISTRATION_VERSION = "1.3.0"
 INFERENCE = "glacier-b15-infer"
 GRID_FIELDS = (
     ("coordinateSystem", 0),
@@ -26,7 +27,7 @@ def enabled(node, version):
     return (
         node.get("algorithmVersionId") == version.pk
         and version.algorithm.identifier == COMPARISON
-        and version.version == AUTOMATIC_VERSION
+        and version.version in {AUTOMATIC_VERSION, REGISTRATION_VERSION}
     )
 
 
@@ -72,7 +73,7 @@ def _source_day(metadata, snapshot, resource):
     return None
 
 
-def resolve(workflow, user, policy, node, current_id):
+def resolve(workflow, user, policy, node, current_id, *, registration=False):
     """Use only the immediate authorized history of the same registered series."""
     link = node.get("inputBindings", {}).get("current", {})
     if (
@@ -110,6 +111,10 @@ def resolve(workflow, user, policy, node, current_id):
     )
     if source is None:
         raise ComputeError("本期原始影像未绑定或访问权限已撤回", 403)
+    if registration:
+        from apps.ecology.glacier import resolve_registered
+
+        return resolve_registered(workflow, user, source)
     metadata = ResourceObservationMetadata.objects.filter(
         resource=source.resource
     ).first()
@@ -198,6 +203,15 @@ def parameters(receipt):
         "current_date": receipt.get("currentDate", ""),
         "baseline_date": receipt.get("baselineDate", ""),
         "baseline_reason": receipt["reason"],
+        **(
+            {
+                "region": receipt["region"],
+                "baseline_product_id": receipt.get("baselineProductId", 0),
+                "baseline_basis": receipt.get("baselineBasis", "classification"),
+            }
+            if "region" in receipt
+            else {}
+        ),
     }
 
 
