@@ -1,0 +1,101 @@
+{
+  "schemaVersion": 2,
+  "identifier": "glacier-b15-infer",
+  "version": "1.0.0",
+  "author": "STISP",
+  "name": "冰川15波段原值解译（工程版）",
+  "description": "用交付b15权重和原始网络解译新影像，输出可复核的工程分类。",
+  "runtime": "python-geospatial-gpu-v1",
+  "deterministic": false,
+  "timeoutSeconds": 900,
+  "agent": {
+    "enabled": true
+  },
+  "qualityReport": {
+    "file": "quality.json"
+  },
+  "capabilities": {
+    "operations": [
+      "infer"
+    ],
+    "dataTypes": [
+      "raster"
+    ],
+    "summary": "分类背景、洁净冰川和表碛冰川。",
+    "useWhen": "已登记的十五波段、显式有效掩膜、3米北向上UTM原始UInt8 GeoTIFF。",
+    "avoidWhen": "缺少掩膜、非交付原始波段顺序、已着色影像或需形成正式科学监测观测。"
+  },
+  "inputs": [
+    {
+      "key": "image",
+      "label": "新一期15波段原始影像",
+      "kind": "raster",
+      "required": true,
+      "description": "带有效掩膜或明确NoData的15波段UInt8、3米北向上WGS84 / UTM原始影像。",
+      "fields": [],
+      "crs": {
+        "mode": "projected"
+      },
+      "raster": {
+        "bandCount": 15,
+        "dtypes": [
+          "uint8"
+        ],
+        "pixelSizeMeters": 3,
+        "northUp": true
+      }
+    }
+  ],
+  "parameters": [],
+  "outputs": [
+    {
+      "key": "classification",
+      "label": "冰川工程分类图",
+      "file": "classification.tif",
+      "kind": "raster",
+      "description": "同网格GeoTIFF，0背景、1洁净冰川、2表碛冰川，255缺测。",
+      "fields": [],
+      "required": true,
+      "final": true
+    }
+  ],
+  "resources": {
+    "duration": "minutes",
+    "memory": "large",
+    "scaling": "固定256像元窗口，复用平台GPU租约，单幅最多3000万像元。"
+  },
+  "errors": [
+    {
+      "code": "B15_RUNTIME",
+      "meaning": "受管GPU或已登记权重未就绪",
+      "precondition": "由平台运维修复 b15 运行时。",
+      "remedy": "human_review"
+    },
+    {
+      "code": "B15_SOURCE_REJECTED",
+      "meaning": "输入格网、波段或有效掩膜有误",
+      "precondition": "换用带显式有效范围的十五波段原始GeoTIFF。",
+      "remedy": "replace_data"
+    }
+  ],
+  "selfTests": [
+    {
+      "name": "受管GPU实际调用交付模型",
+      "fixture": "selftest/valid.json",
+      "expect": {
+        "files": {
+          "classification.tif": {
+            "bands": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "拒绝无显式有效范围的影像",
+      "fixture": "selftest/missing-mask.json",
+      "expect": {
+        "errorCode": "B15_SOURCE_REJECTED"
+      }
+    }
+  ]
+}

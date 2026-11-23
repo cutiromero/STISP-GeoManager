@@ -38,10 +38,32 @@ class GPUProfile:
     busy_memory_mb: int
 
 
+@dataclass(frozen=True)
+class SingleWeightGPUProfile(GPUProfile):
+    model_file: str
+    model_sha256: str
+
+
 def configured(manifest, project_id=None):
     with settings.PROJECT_CONFIG.config_path.open("rb") as stream:
         compute = tomllib.load(stream).get("compute", {})
-    raw = compute.get("gpu", {})
+    shared = compute.get("gpu", {})
+    identifier = manifest.get("identifier")
+    profiles = compute.get("gpu_profiles", {})
+    dedicated = identifier in profiles
+    if dedicated:
+        # Only operator-specific ACL, budgets and assets come from this table.
+        # All profiles use the same configured interpreter and exclusive leases.
+        raw = {
+            **profiles[identifier],
+            **{
+                key: shared.get(key)
+                for key in ("interpreter", "proj_data", "gdal_data", "lease_root")
+            },
+            "allowed_algorithms": [identifier],
+        }
+    else:
+        raw = shared
     selected = selected_project_id() if project_id is None else project_id
     if (
         compute.get("mode") != "native"
@@ -79,7 +101,17 @@ def configured(manifest, project_id=None):
         or not (Path(paths["proj_data"]) / "proj.db").is_file()
     ):
         raise ComputeError("GPU解释器或投影数据库尚未就绪", 503)
-    return GPUProfile(**paths, gpu_ids=tuple(gpu_ids), **values)
+    kwargs = {**paths, "gpu_ids": tuple(gpu_ids), **values}
+    if not dedicated:
+        return GPUProfile(**kwargs)
+    if not set(gpu_ids) <= set(shared.get("gpu_ids", [])):
+        raise ComputeError("专用模型设备必须属于平台GPU池", 503)
+    name, digest = raw.get("model_file", ""), raw.get("model_sha256", "")
+    if not re.fullmatch(r"[a-z][a-z0-9_-]{0,63}\.pth", name) or not re.fullmatch(
+        r"[a-f0-9]{64}", digest
+    ):
+        raise ComputeError("GPU专用模型资产清单无效", 503)
+    return SingleWeightGPUProfile(**kwargs, model_file=name, model_sha256=digest)
 
 
 def _asset_digest(path, expected=None):
@@ -153,9 +185,7 @@ print(json.dumps({'python':sys.version.split()[0],'packages':versions,'files':fi
         return value
 
 
-def binding(manifest, project_id=None):
-    profile = configured(manifest, project_id)
-    root = Path(profile.asset_root)
+def _landcover_assets(root):
     path = root / "models/model_manifest.json"
     if root.is_symlink() or not path.is_file() or path.stat().st_size > 65536:
         raise ComputeError("模型资产清单尚未就绪", 503)
@@ -176,6 +206,22 @@ def binding(manifest, project_id=None):
         "models/model_manifest.json",
     ]:
         assets[name] = _asset_digest(root / name)
+    return assets
+
+
+def binding(manifest, project_id=None):
+    profile = configured(manifest, project_id)
+    root = Path(profile.asset_root)
+    if isinstance(profile, SingleWeightGPUProfile):
+        if root.is_symlink() or not root.is_dir() or root.resolve() != root:
+            raise ComputeError("GPU专用模型目录缺失或路径异常", 503)
+        assets = {
+            profile.model_file: _asset_digest(
+                root / profile.model_file, profile.model_sha256
+            )
+        }
+    else:
+        assets = _landcover_assets(root)
     identity = {
         "runtime": RUNTIME,
         "projDatabase": _asset_digest(Path(profile.proj_data) / "proj.db"),

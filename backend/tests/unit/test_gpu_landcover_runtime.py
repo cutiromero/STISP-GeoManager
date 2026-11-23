@@ -117,3 +117,45 @@ def test_landcover_manifest_uses_registered_gpu_runtime():
     )
     assert manifest["runtime"] == gpu_runtime.RUNTIME
     assert manifest["parameters"][0]["default"] == "all"
+
+
+def test_dedicated_profile_is_project_scoped_and_keeps_legacy_digest(gpu):
+    from pathlib import Path
+
+    root = gpu["root"]
+    glacier = root / "glacier"
+    glacier.mkdir()
+    weight = glacier / "b15.pth"
+    weight.write_bytes(b"b15 model")
+    expected = hashlib.sha256(weight.read_bytes()).hexdigest()
+    legacy, original = gpu_runtime.binding(gpu["manifest"], 2)
+    config_path = root / "app.toml"
+    base = config_path.read_text()
+    dedicated = f'''
+[compute.gpu_profiles.glacier-b15-infer]
+enabled=true
+project_ids=[8]
+gpu_ids=[6]
+lease_root="/must/not/override"
+asset_root="{glacier}"
+model_file="b15.pth"
+model_sha256="{expected}"
+'''
+    config_path.write_text(base + dedicated)
+    assert gpu_runtime.binding(gpu["manifest"], 2) == (legacy, original)
+    manifest = {**gpu["manifest"], "identifier": "glacier-b15-infer"}
+    profile, bound = gpu_runtime.binding(manifest, 8)
+    assert profile.model_file == "b15.pth"
+    assert Path(profile.lease_root) == root / "leases"
+    assert profile.gpu_ids == (6,)
+    assert bound["imageDigest"] != original["imageDigest"]
+    with pytest.raises(ComputeError, match="权限"):
+        gpu_runtime.binding(manifest, 2)
+    with pytest.raises(ComputeError, match="权限"):
+        gpu_runtime.binding({**manifest, "identifier": "unknown"}, 8)
+    weight.write_bytes(b"wrong")
+    with pytest.raises(ComputeError, match="摘要"):
+        gpu_runtime.binding(manifest, 8)
+    config_path.write_text(base + dedicated.replace("gpu_ids=[6]", "gpu_ids=[4]"))
+    with pytest.raises(ComputeError, match="GPU池"):
+        gpu_runtime.binding(manifest, 8)

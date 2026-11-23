@@ -419,7 +419,11 @@ def _execute_native_process(
                 GEOMANAGER_MODEL_SHA256=profile.model_sha256,
             )
         task = getattr(attempt, "task", None)
-        if task and manifest.get("runtime") == "python-geospatial-gpu-v1":
+        if (
+            task
+            and manifest.get("runtime") == "python-geospatial-gpu-v1"
+            and not hasattr(profile, "model_file")
+        ):
             cache = app_path(
                 "projects",
                 str(task.project_tag_id),

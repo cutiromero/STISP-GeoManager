@@ -1,0 +1,206 @@
+{
+  "schemaVersion": 1,
+  "adapter": "research_flow",
+  "executionMode": "main_agent",
+  "inputPreparation": {
+    "allowScripts": false,
+    "reviewScripts": true
+  },
+  "skill": {
+    "title": "冰川批次解译与变化复核（工程版）",
+    "instructions": "按交付原波段顺序和原始DN运行固定十五波段模型，解译新影像。只有用户提供同样区、同口径的前期分类及人工核对的观测依据，才比较共同有效区的类别面积和转移。否则仅交付新分类与单期面积，日期未证实留空。工程结果不能作为正式监测、预警或科学变化结论。",
+    "knowledgeQuestions": [
+      "项目知识是否有本样区的积雪、云影或表碛复核规范？如命中，核对其时段、传感器和适用范围并提供引用；未命中则仅解释算子证据，不补写观测结论。"
+    ],
+    "nodeInstructions": {
+      "interpret": "原波段顺序、原始DN和分块由固定工程算子处理，不调整，不以旧分类代替原始影像。",
+      "compare": "沿用已绑定的可选历史与依据表，不搜索或猜测未绑定基线。用上游 classification 的 output-编号完成绑定。0为有效背景、255为缺测。",
+      "handover": "从统计表引用单期面积、共同有效覆盖及双期差值。日期或历史缺失时写明未提供，不写零变化。"
+    }
+  },
+  "inputRequirements": [
+    {
+      "key": "image",
+      "label": "新一期15波段原始影像",
+      "description": "已登记的带显式有效掩膜或NoData的15波段UInt8、3米北向上UTM原始GeoTIFF。建议先用T43-4-1。",
+      "dataTypes": [
+        "raster"
+      ],
+      "required": true,
+      "requiredFields": [],
+      "multiple": false
+    },
+    {
+      "key": "baseline",
+      "label": "同样区上一期可比分类",
+      "description": "可选。仅用同样区、同格网、同权重同规约、背景0／NoData 255的可比历史分类；提交时一并绑定观测依据表。",
+      "dataTypes": [
+        "raster"
+      ],
+      "required": false,
+      "requiredFields": [],
+      "multiple": false
+    },
+    {
+      "key": "observations",
+      "label": "观测日期与可比性核验表",
+      "description": "双期必选。上传单行UTF-8 CSV：current_date、baseline_date、current_source、baseline_source、comparable。真实日期用YYYY-MM-DD，来源写影像和核验出处；确认同样区、同法且可比后comparable填yes。无可信时相的首期留空此角色。",
+      "dataTypes": [
+        "table"
+      ],
+      "required": false,
+      "multiple": false,
+      "requiredFields": [
+        "current_date",
+        "baseline_date",
+        "current_source",
+        "baseline_source",
+        "comparable"
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "id": "interpret",
+      "title": "新影像解译与质量核验",
+      "kind": "operator",
+      "description": "形成同原生网格的洁净冰川、表碛冰川与背景分类。",
+      "instruction": "只用绑定影像调用固定b15算子，使用预检返回的方案执行，不重排波段、不改变原始DN。检查分类与掩膜技术质量后，按合同将分类入库。日期未证实不影响单期工程验证，不猜测日期。",
+      "dependsOn": [],
+      "dataRoles": [
+        "image"
+      ],
+      "parameters": {},
+      "inputBindings": {
+        "image": {
+          "role": "image"
+        }
+      },
+      "contract": {
+        "goal": "以交付原始 forward 生成保留原生格网和有效范围的工程分类。",
+        "acceptance": [
+          "保留原生格网，0为背景，255为缺测",
+          "模型真实推理通过技术检查并入库，不作科学质量或正式监测发布声明"
+        ],
+        "requiredOutputs": [
+          {
+            "name": "classification",
+            "semanticType": "raster"
+          }
+        ],
+        "importOutputs": [
+          "classification"
+        ],
+        "tools": [
+          "operator_catalog",
+          "preflight_operator",
+          "run_operator",
+          "read_evidence",
+          "read_task_record",
+          "ask_user",
+          "finish_node"
+        ],
+        "maxSteps": 24,
+        "maxModelCalls": 24,
+        "maxOperatorCalls": 2,
+        "maxRecoveries": 2,
+        "maxSeconds": 1800
+      },
+      "review": {
+        "ai": false,
+        "human": false,
+        "maxRevisions": 0
+      },
+      "allowSkip": false
+    },
+    {
+      "id": "compare",
+      "title": "核对历史基线与计算变化",
+      "kind": "operator",
+      "description": "在共同有效区域量化同样区的冰川面积变化和类别转换。",
+      "instruction": "current绑定上游classification的output-编号，历史分类与核验表仅使用本次所选角色。先预检再运行，不补写日期或人工确认。无前期时，输出本期面积、覆盖状态baseline_only和仅含表头的转移表；不填前期面积和差值。",
+      "dependsOn": [
+        "interpret"
+      ],
+      "dataRoles": [
+        "baseline",
+        "observations"
+      ],
+      "parameters": {},
+      "inputBindings": {
+        "current": {
+          "nodeId": "interpret",
+          "outputKey": "classification"
+        },
+        "baseline": {
+          "role": "baseline"
+        },
+        "observations": {
+          "role": "observations"
+        }
+      },
+      "contract": {
+        "goal": "给出可核验的本期、基线及共同有效区的编码面积指标。",
+        "acceptance": [
+          "有可比基线时保留实际前后观测日期、同一计量范围和完整转移矩阵",
+          "首次观测的差值应为空，不能写成没有变化"
+        ],
+        "requiredOutputs": [
+          {
+            "name": "areas",
+            "semanticType": "table"
+          },
+          {
+            "name": "transitions",
+            "semanticType": "table"
+          },
+          {
+            "name": "coverage",
+            "semanticType": "table"
+          }
+        ],
+        "tools": [
+          "operator_catalog",
+          "preflight_operator",
+          "run_operator",
+          "read_evidence",
+          "read_task_record",
+          "ask_user",
+          "finish_node"
+        ],
+        "maxSteps": 24,
+        "maxModelCalls": 24,
+        "maxOperatorCalls": 2,
+        "maxRecoveries": 2,
+        "maxSeconds": 1200
+      },
+      "review": {
+        "ai": false,
+        "human": false,
+        "maxRevisions": 0
+      },
+      "allowSkip": false
+    },
+    {
+      "id": "handover",
+      "title": "变化分析与交付报告",
+      "kind": "result",
+      "description": "解释新旧结果差异及其证据，生成可审核的样区报告。",
+      "instruction": "引用真实分类图与面积、覆盖及转移表。区分本期全幅统计与共同有效区内的两期差异；有基线才解释类别转换，缺少时相时明确说明。工程结果不作为正式监测大屏发布或预警依据。",
+      "dependsOn": [
+        "compare"
+      ],
+      "dataRoles": [],
+      "review": {
+        "ai": false,
+        "human": false,
+        "maxRevisions": 0
+      }
+    }
+  ],
+  "outputRequirements": [
+    "新一期同原生网格的分类地图",
+    "面积与净变化表、转移矩阵和覆盖统计",
+    "包含真实输入、计算成果与适用界限的对照报告"
+  ]
+}

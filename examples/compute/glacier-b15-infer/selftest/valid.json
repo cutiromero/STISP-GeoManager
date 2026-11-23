@@ -1,0 +1,77 @@
+{
+  "inputs": {
+    "image": {
+      "kind": "raster",
+      "shape": [
+        8,
+        8
+      ],
+      "crs": "EPSG:32643",
+      "transform": [
+        3,
+        0,
+        500000,
+        0,
+        -3,
+        4000000
+      ],
+      "bands": [
+        {
+          "fill": 1,
+          "pixels": [
+            [
+              0,
+              0,
+              255
+            ]
+          ]
+        },
+        {
+          "fill": 2
+        },
+        {
+          "fill": 3
+        },
+        {
+          "fill": 4
+        },
+        {
+          "fill": 5
+        },
+        {
+          "fill": 6
+        },
+        {
+          "fill": 7
+        },
+        {
+          "fill": 8
+        },
+        {
+          "fill": 9
+        },
+        {
+          "fill": 10
+        },
+        {
+          "fill": 11
+        },
+        {
+          "fill": 12
+        },
+        {
+          "fill": 13
+        },
+        {
+          "fill": 14
+        },
+        {
+          "fill": 15
+        }
+      ],
+      "dtype": "uint8",
+      "nodata": 255
+    }
+  },
+  "parameters": {}
+}

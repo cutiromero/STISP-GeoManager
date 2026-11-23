@@ -1,0 +1,2 @@
+# Preserve the exact handoff bytes for the pinned SHA-256.
+DeepLabv3_plus_SEBlock.py -text -diff
