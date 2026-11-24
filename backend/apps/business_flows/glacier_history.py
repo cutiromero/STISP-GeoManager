@@ -4,7 +4,12 @@ from django.db.models import F, Q, OuterRef, Subquery
 
 from apps.agent.resource_discovery import acl_resources
 from apps.catalog.models import ResourceObservationMetadata
-from apps.compute.models import ComputeImport, ComputeInput
+from apps.compute.models import (
+    AlgorithmVersion,
+    ComputeImport,
+    ComputeInput,
+    ComputeOutput,
+)
 from apps.compute.packages import ComputeError
 from apps.compute.quality import require_automatic_quality
 from apps.projects.context import selected_project_id
@@ -31,6 +36,78 @@ def enabled(node, version):
         and version.version
         in {AUTOMATIC_VERSION, REGISTRATION_VERSION, MANANS_REGISTRATION_VERSION}
     )
+
+
+def fixed_manans_comparison(node):
+    return (
+        node.get("id") == "compare"
+        and node.get("kind") == "operator"
+        and AlgorithmVersion.objects.filter(
+            pk=node.get("algorithmVersionId"),
+            algorithm__identifier=COMPARISON,
+            version=MANANS_REGISTRATION_VERSION,
+        ).exists()
+    )
+
+
+def comparison_action(item, contract):
+    """Describe the next mechanical action for a frozen, bound comparison."""
+    loop = item["toolLoop"]
+    if failure := loop.get("failure"):
+        raise ComputeError(
+            failure.get("message", "登记期比较未完成，请核对资料"),
+            failure=failure,
+        )
+    if successful := loop.get("successfulTaskId"):
+        outputs = {
+            row.key: row
+            for row in ComputeOutput.objects.filter(
+                task_id=successful, expired=False
+            ).select_related("task__version")
+        }
+        required = contract["requiredOutputs"]
+        if any(
+            spec["name"] not in outputs
+            or outputs[spec["name"]].kind != spec["semanticType"]
+            for spec in required
+        ):
+            raise ComputeError("登记期比较缺少可交付的实际表格")
+        coverage = outputs.get("coverage")
+        if coverage is None:
+            raise ComputeError("登记期比较缺少有效范围统计")
+        require_automatic_quality(coverage)
+        checked = coverage.metadata["qualityCheck"]
+        metrics = checked["metrics"]
+        summary = checked["summary"]
+        if metrics["comparisonStatus"] == "compared":
+            summary = (
+                f"{metrics['baselineDate']} 至 {metrics['currentDate']}，"
+                f"共同有效面积 {metrics['commonAreaKm2']} 平方公里，"
+                f"分类变化占比 {metrics['changedPercent']}%，"
+                f"冰川分类净面积差 {metrics['netIceAreaKm2']} 平方公里。"
+            )
+        delivery = [
+            {**spec, "evidenceId": f"output-{outputs[spec['name']].pk}"}
+            for spec in required
+        ]
+        return {
+            "action": "finish_node",
+            "arguments": {
+                "summary": summary,
+                "outputs": delivery,
+                "evidenceIds": [entry["evidenceId"] for entry in delivery],
+                "limitations": ["登记期变化反映分类结果差异。"]
+                if metrics["comparisonStatus"] == "compared"
+                else [checked["summary"]],
+            },
+        }
+    last_failure = loop.get("lastObservation", {}).get("result", {}).get("failure", {})
+    if (
+        loop.get("preflightRequestHash")
+        and last_failure.get("code") != "PREFLIGHT_REQUIRED"
+    ):
+        return {"action": "run_operator", "arguments": {"usePreflight": True}}
+    return {"action": "preflight_operator", "arguments": {}}
 
 
 def _classification_filters(algorithm):

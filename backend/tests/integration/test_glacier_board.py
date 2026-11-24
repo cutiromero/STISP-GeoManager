@@ -9,6 +9,10 @@ from PIL import Image
 from rasterio.transform import from_bounds
 
 from apps.agent.models import AgentWorkflow
+from apps.business_flows.glacier_history import (
+    comparison_action,
+    fixed_manans_comparison,
+)
 from apps.business_flows.models import BusinessFlowDefinition
 from apps.business_flows.state import state
 from apps.catalog.models import DataResource
@@ -536,6 +540,8 @@ def test_manans_binary_map_retains_acquisition_date_and_original_display(
                         **QUALITY,
                         "metrics": {
                             "comparisonStatus": "compared",
+                            "baselineDate": "2026-11-23",
+                            "currentDate": "2026-11-24",
                             "commonAreaKm2": 0.008,
                             "changedPercent": 15,
                             "netClass1Km2": -0.001,
@@ -545,6 +551,48 @@ def test_manans_binary_map_retains_acquisition_date_and_original_display(
                     }
                 },
             )
+            for key in ("areas", "transitions"):
+                ComputeOutput.objects.create(
+                    task=compared,
+                    key=key,
+                    kind="table",
+                    file_name=key + ".csv",
+                    path=key + ".csv",
+                    size_bytes=99,
+                    checksum="f" * 64,
+                )
+            contract = {
+                "requiredOutputs": [
+                    {"name": key, "semanticType": "table"}
+                    for key in ("areas", "transitions", "coverage")
+                ]
+            }
+            fixed_node = {
+                "id": "compare",
+                "kind": "operator",
+                "algorithmVersionId": compared.version_id,
+            }
+            assert fixed_manans_comparison(fixed_node)
+            assert not fixed_manans_comparison(
+                {**fixed_node, "algorithmVersionId": version.pk}
+            )
+            assert comparison_action({"toolLoop": {}}, contract) == {
+                "action": "preflight_operator",
+                "arguments": {},
+            }
+            assert comparison_action(
+                {"toolLoop": {"preflightRequestHash": "ready"}}, contract
+            ) == {"action": "run_operator", "arguments": {"usePreflight": True}}
+            selected = comparison_action(
+                {"toolLoop": {"successfulTaskId": str(compared.pk)}}, contract
+            )
+            assert selected["action"] == "finish_node"
+            assert {o["name"] for o in selected["arguments"]["outputs"]} == {
+                "areas",
+                "coverage",
+                "transitions",
+            }
+            assert "2026-11-23" in selected["arguments"]["summary"]
             state(workflow)["nodes"]["compare"] = {
                 "status": "succeeded",
                 "computeTaskId": str(compared.pk),
