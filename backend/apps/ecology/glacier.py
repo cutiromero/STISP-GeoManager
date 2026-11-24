@@ -18,6 +18,8 @@ FLOW_CODE = "glacier-monitoring-dynamic"
 MANANS_FLOW_CODE = "manans-glacier-interpretation"
 MANANS_OPERATOR = "manans-glacier-infer"
 MANANS_VARIANT = "manans-s2-dlinknet34"
+MANANS_STANDARD_TASK = "manans-glacier-standard"
+MANANS_SERIES = (MANANS_FLOW_CODE, MANANS_STANDARD_TASK)
 TASK_KEY = "glacier-classification"
 PRODUCT_TYPE = "monitoring_glacier"
 PRODUCT_LIMIT = 240
@@ -60,7 +62,7 @@ def overlap(left, right):
     )
 
 
-def registered_products(user):
+def registered_products(user, series=(TASK_KEY,)):
     from .monitoring import visible_resources
 
     rows = list(
@@ -68,6 +70,7 @@ def registered_products(user):
             product_type=PRODUCT_TYPE,
             project_tag_id=selected_project_id(),
             data_resource__status="active",
+            metadata__glacierTask__in=series,
         )
         .select_related("data_resource")
         .order_by("-pk")[:PRODUCT_LIMIT]
@@ -75,8 +78,7 @@ def registered_products(user):
     pairs = [
         (row, row.metadata["monitoring"])
         for row in rows
-        if row.metadata.get("glacierTask") == TASK_KEY
-        and row.metadata.get("glacierRegion")
+        if row.metadata.get("glacierRegion")
         and row.metadata.get("monitoring", {}).get("registrationDate")
     ]
     identities = {
@@ -174,6 +176,90 @@ def resolve_registered(workflow, user, source):
     }
 
 
+def resolve_manans_registered(workflow, user, source):
+    """Find the preceding authorized binary classification on the same native grid."""
+    day = period_day(workflow)
+    origin = RasterDataset.objects.filter(
+        data_resource_id=source.resource_id, status="ready"
+    ).first()
+    receipt = {
+        "currentSourceId": source.resource_id,
+        "currentDate": day,
+        "region": f"source-{source.resource_id}",
+        "reason": "no_prior",
+    }
+    if origin is None or not origin.bounds_4326:
+        return None, receipt
+
+    matches = [
+        (row, item)
+        for row, item, bounds in registered_products(user, MANANS_SERIES)
+        if bounds == origin.bounds_4326 and item["quality"] == "passed"
+    ]
+    dataset_ids = {
+        identity
+        for row, item in matches
+        for identity in (row.data_resource_id, item["sourceResourceIds"][0])
+    }
+    datasets = {
+        row.data_resource_id: row
+        for row in RasterDataset.objects.filter(
+            status="ready", data_resource_id__in=dataset_ids
+        ).only("data_resource_id", "source_gdalinfo", "source_checksum_sha256")
+    }
+    grid = {key: origin.source_gdalinfo.get(key) for key in ("size", "geoTransform")}
+    compatible = []
+    for row, item in matches:
+        original = datasets.get(item["sourceResourceIds"][0])
+        if original is None or any(
+            value is None or original.source_gdalinfo.get(key) != value
+            for key, value in grid.items()
+        ):
+            continue
+        baseline_image = None
+        if row.metadata["glacierTask"] == MANANS_STANDARD_TASK:
+            provenance = row.metadata.get("standardSource", {})
+            result = datasets.get(row.data_resource_id)
+            if (
+                item.get("referenceRole") != "standard"
+                or not provenance.get("sourceSha256")
+                or original.source_checksum_sha256 != provenance["sourceSha256"]
+                or result is None
+                or result.source_checksum_sha256 != provenance.get("resultSha256")
+            ):
+                continue
+            baseline_image = original.data_resource_id
+        elif (item.get("model") or {}).get("variant") != MANANS_VARIANT:
+            continue
+        compatible.append((row, item, baseline_image))
+
+    if compatible:
+        receipt["region"] = max(
+            compatible,
+            key=lambda entry: (
+                entry[1]["sourceResourceIds"][0] == source.resource_id,
+                entry[1]["registrationDate"],
+                entry[0].pk,
+            ),
+        )[0].metadata["glacierRegion"]
+    earlier = [entry for entry in compatible if entry[1]["registrationDate"] < day]
+    if not earlier:
+        return None, receipt
+    row, item, baseline_image = max(
+        earlier, key=lambda entry: (entry[1]["registrationDate"], entry[0].pk)
+    )
+    return row.data_resource, {
+        **receipt,
+        "reason": "matched",
+        "region": row.metadata["glacierRegion"],
+        "baselineResourceId": row.data_resource_id,
+        "baselineProductId": row.pk,
+        "baselineDate": item["registrationDate"],
+        "baselineBasis": "classification",
+        **({"baselineImageId": baseline_image} if baseline_image else {}),
+    }
+
+
 def _workflow_classification(
     workflow, user, value, *, flow_code=FLOW_CODE, algorithm="glacier-b15-infer"
 ):
@@ -224,6 +310,74 @@ def _workflow_classification(
     return record
 
 
+def _registered_comparison(workflow, user, value, record, *, version, series):
+    """Bind published metrics only to the completed comparison and its authorized registration."""
+    user_id = user.pk
+    comparison = value["nodes"].get("compare", {})
+    task_id = comparison.get("computeTaskId")
+    if not task_id or comparison.get("status") != "succeeded":
+        raise ComputeError("找不到已完成的登记期统计")
+    summary = ComputeOutput.objects.select_related("task").get(
+        task_id=task_id,
+        key="coverage",
+        task__status="succeeded",
+        task__project_tag_id=workflow.project_tag_id,
+        task__owner_id=user_id,
+        task__version__algorithm__identifier="glacier-temporal-compare",
+        task__version__version=version,
+    )
+    require_automatic_quality(summary)
+    comparison_inputs = dict(
+        summary.task.input_records.values_list("key", "resource_id")
+    )
+    if comparison_inputs.get("current") != record.resource_id:
+        raise ComputeError("统计与本次入库分类不一致")
+    parameters = summary.task.parameters
+    region = parameters["region"]
+    reference = None
+    change = None
+    if comparison_inputs.get("baseline"):
+        from .monitoring import visible_resources
+
+        reference = RemoteSensingProduct.objects.get(
+            pk=parameters["baseline_product_id"],
+            project_tag_id=workflow.project_tag_id,
+            data_resource_id=comparison_inputs["baseline"],
+            product_type=PRODUCT_TYPE,
+        )
+        early = reference.metadata["monitoring"]
+        ref_ids = set(early["sourceResourceIds"]) | {reference.data_resource_id}
+        if (
+            reference.metadata.get("glacierTask") not in series
+            or reference.metadata.get("glacierRegion") != region
+            or early["registrationDate"] != parameters["baseline_date"]
+            or set(visible_resources(user, ref_ids).values_list("pk", flat=True))
+            != ref_ids
+        ):
+            raise PermissionDenied("前期登记成果的范围或权限已变化")
+        if MANANS_STANDARD_TASK in series:
+            original = (
+                early["sourceResourceIds"][0]
+                if reference.metadata["glacierTask"] == MANANS_STANDARD_TASK
+                else None
+            )
+            if comparison_inputs.get("baseline_image") != original:
+                raise ComputeError("前期标准图与有效区来源不一致")
+        metrics = summary.metadata["qualityCheck"]["metrics"]
+        if metrics["comparisonStatus"] == "compared":
+            change = {
+                "baselineProductId": reference.pk,
+                "baselineDate": early["registrationDate"],
+                "basis": parameters["baseline_basis"],
+                "commonAreaKm2": metrics["commonAreaKm2"],
+                "changedPercent": metrics["changedPercent"],
+                "netClass1Km2": metrics["netClass1Km2"],
+                "netClass2Km2": metrics["netClass2Km2"],
+                "netIceAreaKm2": metrics["netIceAreaKm2"],
+            }
+    return region, reference, change
+
+
 def publish_workflow(workflow_id, user_id):
     """Called after successful completion, never by an upload or a trial."""
     from django.contrib.auth import get_user_model
@@ -247,61 +401,17 @@ def publish_workflow(workflow_id, user_id):
     record = _workflow_classification(workflow, user, value)
     output = record.output
     require_automatic_quality(output)
-    comparison = value["nodes"].get("compare", {})
-    task_id = comparison.get("computeTaskId")
-    if not task_id or comparison.get("status") != "succeeded":
-        raise ComputeError("找不到已完成的登记期统计")
-    summary = ComputeOutput.objects.select_related("task").get(
-        task_id=task_id,
-        key="coverage",
-        task__status="succeeded",
-        task__project_tag_id=workflow.project_tag_id,
-        task__owner_id=user_id,
-        task__version__algorithm__identifier="glacier-temporal-compare",
-        task__version__version="1.3.0",
-    )
-    require_automatic_quality(summary)
-    comparison_inputs = dict(
-        summary.task.input_records.values_list("key", "resource_id")
-    )
-    if comparison_inputs.get("current") != record.resource_id:
-        raise ComputeError("统计与本次入库分类不一致")
-    parameters = summary.task.parameters
-    region = parameters["region"]
-    raw = output.task.input_records.select_related("resource").get(key="image")
-    reference = None
-    change = None
-    if comparison_inputs.get("baseline"):
-        from .monitoring import visible_resources
+    from apps.business_flows.glacier_history import REGISTRATION_VERSION
 
-        reference = RemoteSensingProduct.objects.get(
-            pk=parameters["baseline_product_id"],
-            project_tag_id=workflow.project_tag_id,
-            data_resource_id=comparison_inputs["baseline"],
-            product_type=PRODUCT_TYPE,
-        )
-        early = reference.metadata["monitoring"]
-        ref_ids = set(early["sourceResourceIds"]) | {reference.data_resource_id}
-        if (
-            reference.metadata.get("glacierTask") != TASK_KEY
-            or reference.metadata.get("glacierRegion") != region
-            or early["registrationDate"] != parameters["baseline_date"]
-            or set(visible_resources(user, ref_ids).values_list("pk", flat=True))
-            != ref_ids
-        ):
-            raise PermissionDenied("前期登记成果的范围或权限已变化")
-        metrics = summary.metadata["qualityCheck"]["metrics"]
-        if metrics["comparisonStatus"] == "compared":
-            change = {
-                "baselineProductId": reference.pk,
-                "baselineDate": early["registrationDate"],
-                "basis": parameters["baseline_basis"],
-                "commonAreaKm2": metrics["commonAreaKm2"],
-                "changedPercent": metrics["changedPercent"],
-                "netClass1Km2": metrics["netClass1Km2"],
-                "netClass2Km2": metrics["netClass2Km2"],
-                "netIceAreaKm2": metrics["netIceAreaKm2"],
-            }
+    region, reference, change = _registered_comparison(
+        workflow,
+        user,
+        value,
+        record,
+        version=REGISTRATION_VERSION,
+        series=(TASK_KEY,),
+    )
+    raw = output.task.input_records.select_related("resource").get(key="image")
     counts = output.metadata["qualityCheck"]["metrics"]["classCounts"]
     facts = output.metadata["knowledgeFacts"]
     valid = sum(counts[k] for k in ("0", "1", "2"))
@@ -400,10 +510,11 @@ def publish_manans(workflow_id, user_id):
         "catalog.add_dataresource",
         "core.load_raster_layer",
     )
+    value = state(workflow)
     record = _workflow_classification(
         workflow,
         user,
-        state(workflow),
+        value,
         flow_code=MANANS_FLOW_CODE,
         algorithm=MANANS_OPERATOR,
     )
@@ -418,6 +529,18 @@ def publish_manans(workflow_id, user_id):
     )
     if not 0 <= ice <= valid <= total or valid == 0:
         raise ComputeError("冰川面积统计与有效像元范围不一致")
+    region, change = f"source-{raw.resource_id}", None
+    if "compare" in value["nodes"]:
+        from apps.business_flows.glacier_history import MANANS_REGISTRATION_VERSION
+
+        region, _, change = _registered_comparison(
+            workflow,
+            user,
+            value,
+            record,
+            version=MANANS_REGISTRATION_VERSION,
+            series=MANANS_SERIES,
+        )
     date = raw.resource.data_date.isoformat() if raw.resource.data_date else None
     product = {
         "schemaVersion": 1,
@@ -463,7 +586,8 @@ def publish_manans(workflow_id, user_id):
             row.metadata = {
                 **row.metadata,
                 "glacierTask": MANANS_FLOW_CODE,
-                "glacierRegion": f"source-{raw.resource_id}",
+                "glacierRegion": region,
+                "glacierChange": change,
                 "formalDisplay": {
                     "version": 1,
                     "display": style,

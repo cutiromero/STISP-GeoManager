@@ -10,6 +10,7 @@ from rasterio.transform import from_bounds
 
 from apps.agent.models import AgentWorkflow
 from apps.business_flows.models import BusinessFlowDefinition
+from apps.business_flows.state import state
 from apps.catalog.models import DataResource
 from apps.compute.models import (
     AlgorithmResource,
@@ -22,11 +23,13 @@ from apps.compute.models import (
 from apps.ecology.glacier import (
     MANANS_FLOW_CODE,
     MANANS_OPERATOR,
+    MANANS_STANDARD_TASK,
     MANANS_VARIANT,
     TASK_KEY,
     publish_manans,
     publish_workflow,
     resolve_registered,
+    resolve_manans_registered,
 )
 from apps.ecology.models import RemoteSensingProduct
 from apps.ecology.monitoring import register_product
@@ -309,10 +312,11 @@ def test_registered_previous_intersection_and_only_publish_classification(
         assert chosen["glacierChange"] is None
 
 
+@pytest.mark.parametrize("with_history", [False, True])
 def test_manans_binary_map_retains_acquisition_date_and_original_display(
-    setup_monitor, monkeypatch, tmp_path
+    setup_monitor, monkeypatch, tmp_path, with_history
 ):
-    admin, reader, project, _, feature, _, raw, _ = setup_monitor
+    admin, reader, project, _, feature, _, raw, base = setup_monitor
     set_feature(
         admin,
         feature,
@@ -332,11 +336,16 @@ def test_manans_binary_map_retains_acquisition_date_and_original_display(
         raw.name = "玛纳斯原始影像 · T45TUJ"
         raw.data_date = date(2021, 9, 8)
         raw.save(update_fields=["name", "data_date"])
+        bounds = [86, 42, 87, 43]
+        metadata = {"size": [10, 10], "geoTransform": [300000, 10, 0, 4800000, 0, -10]}
         RasterDataset.objects.create(
             data_resource=raw,
             status="ready",
             code="manans-raw",
             source_relative_path="manans-raw.tif",
+            bounds_4326=bounds,
+            source_gdalinfo=metadata,
+            source_checksum_sha256="c" * 64,
         )
         result = DataResource.objects.create(
             name="玛纳斯冰川结果",
@@ -432,19 +441,141 @@ def test_manans_binary_map_retains_acquisition_date_and_original_display(
             requested_by=admin,
             request_source=f"workflow:{workflow.pk}",
         )
+        previous_id = None
+        if with_history:
+            AgentWorkflow.objects.filter(pk=workflow.pk).update(
+                created_at=datetime(2026, 11, 24, tzinfo=timezone.utc)
+            )
+            workflow.refresh_from_db()
+            history = DataResource.objects.create(
+                name="玛纳斯标准图",
+                code="manans-standard",
+                data_type="raster",
+                storage_path="standard.tif",
+                coordinate_system="EPSG:32645",
+                maintainer=admin,
+            )
+            RasterDataset.objects.create(
+                data_resource=history,
+                status="ready",
+                code="manans-standard",
+                source_relative_path="standard.tif",
+                raster_kind="categorical",
+                bounds_4326=bounds,
+                source_checksum_sha256="d" * 64,
+            )
+            for day, region in (
+                ("2026-11-23", f"source-{raw.pk}"),
+                ("2026-11-24", f"source-{raw.pk}"),
+            ):
+                product, _ = register_product(
+                    admin,
+                    {
+                        **base,
+                        "code": f"standard-{day}",
+                        "name": "玛纳斯冰川标准图",
+                        "scene": "glacier",
+                        "resourceId": history.pk,
+                        "registrationDate": day,
+                        "sourceResourceIds": [raw.pk],
+                        "referenceRole": "standard",
+                        "quality": "passed",
+                        "statistics": {"valid_pixels": 100},
+                    },
+                )
+                product.metadata.update(
+                    glacierTask=MANANS_STANDARD_TASK,
+                    glacierRegion=region,
+                    standardSource={"sourceSha256": "c" * 64, "resultSha256": "d" * 64},
+                )
+                product.save(update_fields=["metadata"])
+                if day == "2026-11-23":
+                    previous_id = product.pk
+            match, proof = resolve_manans_registered(
+                workflow, admin, SimpleNamespace(resource_id=raw.pk)
+            )
+            assert match.pk == history.pk and proof["baselineProductId"] == previous_id
+            assert (
+                proof["baselineImageId"] == raw.pk
+                and proof["baselineBasis"] == "classification"
+            )
+            comparison = AlgorithmResource.objects.create(
+                identifier="glacier-temporal-compare", name="变化", created_by=admin
+            )
+            compared = ComputeTask.objects.create(
+                owner=admin,
+                name="变化",
+                status="succeeded",
+                version=AlgorithmVersion.objects.create(
+                    algorithm=comparison, version="1.4.0"
+                ),
+                idempotency_key="manans-compare",
+                parameters={
+                    "region": proof["region"],
+                    "baseline_product_id": previous_id,
+                    "baseline_date": "2026-11-23",
+                    "baseline_basis": "classification",
+                },
+            )
+            for key, resource in (
+                ("current", result),
+                ("baseline", history),
+                ("baseline_image", raw),
+            ):
+                ComputeInput.objects.create(task=compared, key=key, resource=resource)
+            ComputeOutput.objects.create(
+                task=compared,
+                key="coverage",
+                kind="table",
+                file_name="coverage.csv",
+                path="coverage.csv",
+                size_bytes=99,
+                checksum="e" * 64,
+                metadata={
+                    "qualityCheck": {
+                        **QUALITY,
+                        "metrics": {
+                            "comparisonStatus": "compared",
+                            "commonAreaKm2": 0.008,
+                            "changedPercent": 15,
+                            "netClass1Km2": -0.001,
+                            "netClass2Km2": None,
+                            "netIceAreaKm2": -0.001,
+                        },
+                    }
+                },
+            )
+            state(workflow)["nodes"]["compare"] = {
+                "status": "succeeded",
+                "computeTaskId": str(compared.pk),
+            }
+            workflow.save(update_fields=["plan"])
+        else:
+            match, proof = resolve_manans_registered(
+                workflow, admin, SimpleNamespace(resource_id=raw.pk)
+            )
+            assert match is None and proof["reason"] == "no_prior"
         registered = publish_manans(workflow.pk, admin.pk)
         assert publish_manans(workflow.pk, admin.pk).pk == registered.pk
         registered.refresh_from_db()
         assert registered.acquired_on == date(2021, 9, 8)
 
     with project_scope(ProjectScope((project.pk,), project.pk, reader.pk)):
-        item = official_snapshot(reader, "glacier")["items"][0]
+        item = next(
+            row
+            for row in official_snapshot(reader, "glacier")["items"]
+            if row["id"] == registered.pk
+        )
         assert (
             item["model"]["variant"] == MANANS_VARIANT
             and item["observedStart"] == "2021-09-08"
         )
         assert item["comparison"]["resource"]["id"] == raw.pk
-        assert item["glacierChange"] is None
+        if with_history:
+            assert item["glacierChange"]["baselineProductId"] == previous_id
+            assert item["glacierChange"]["netIceAreaKm2"] == -0.001
+        else:
+            assert item["glacierChange"] is None
         values = {value["key"]: value for value in item["metrics"]}
         assert values["class_1_percent"]["label"] == "冰川占有效区"
         assert values["class_1_percent"]["value"] == 25

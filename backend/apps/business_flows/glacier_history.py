@@ -15,6 +15,7 @@ from .state import state
 COMPARISON = "glacier-temporal-compare"
 AUTOMATIC_VERSION = "1.2.0"
 REGISTRATION_VERSION = "1.3.0"
+MANANS_REGISTRATION_VERSION = "1.4.0"
 INFERENCE = "glacier-b15-infer"
 GRID_FIELDS = (
     ("coordinateSystem", 0),
@@ -27,18 +28,19 @@ def enabled(node, version):
     return (
         node.get("algorithmVersionId") == version.pk
         and version.algorithm.identifier == COMPARISON
-        and version.version in {AUTOMATIC_VERSION, REGISTRATION_VERSION}
+        and version.version
+        in {AUTOMATIC_VERSION, REGISTRATION_VERSION, MANANS_REGISTRATION_VERSION}
     )
 
 
-def _classification_filters():
+def _classification_filters(algorithm):
     return {
         "status": "ready",
         "output__key": "classification",
         "output__kind": "raster",
         "output__task__trial": False,
         "output__task__status": "succeeded",
-        "output__task__version__algorithm__identifier": INFERENCE,
+        "output__task__version__algorithm__identifier": algorithm,
     }
 
 
@@ -73,7 +75,9 @@ def _source_day(metadata, snapshot, resource):
     return None
 
 
-def resolve(workflow, user, policy, node, current_id, *, registration=False):
+def resolve(
+    workflow, user, policy, node, current_id, *, registration=False, manans=False
+):
     """Use only the immediate authorized history of the same registered series."""
     link = node.get("inputBindings", {}).get("current", {})
     if (
@@ -85,8 +89,10 @@ def resolve(workflow, user, policy, node, current_id, *, registration=False):
         raise ComputeError("冰川自动对比必须绑定本次上游的真实解译成果")
     upstream = state(workflow)["nodes"][link["nodeId"]]
     scoped = acl_resources(user, policy).filter(data_type="raster")
+    from apps.ecology import glacier
+
     imports = ComputeImport.objects.filter(
-        **_classification_filters(),
+        **_classification_filters(glacier.MANANS_OPERATOR if manans else INFERENCE),
         output__task__project_tag_id=workflow.project_tag_id,
         resource__in=scoped,
     )
@@ -102,7 +108,7 @@ def resolve(workflow, user, policy, node, current_id, *, registration=False):
         else None
     )
     if current is None:
-        raise ComputeError("本期分类不是本次已完成且入库的 b15 成果")
+        raise ComputeError("本期分类不是本次解译已入库的成果")
     require_automatic_quality(current.output)
     source = (
         current.output.task.input_records.select_related("resource")
@@ -111,10 +117,10 @@ def resolve(workflow, user, policy, node, current_id, *, registration=False):
     )
     if source is None:
         raise ComputeError("本期原始影像未绑定或访问权限已撤回", 403)
+    if manans:
+        return glacier.resolve_manans_registered(workflow, user, source)
     if registration:
-        from apps.ecology.glacier import resolve_registered
-
-        return resolve_registered(workflow, user, source)
+        return glacier.resolve_registered(workflow, user, source)
     metadata = ResourceObservationMetadata.objects.filter(
         resource=source.resource
     ).first()
@@ -216,7 +222,12 @@ def parameters(receipt):
 
 
 def is_bound_baseline(workflow, task, record):
-    if record.key != "baseline" or task.trial:
+    if record.key not in {"baseline", "baseline_image"} or task.trial:
+        return False
+    if (
+        record.key == "baseline_image"
+        and task.version.version != MANANS_REGISTRATION_VERSION
+    ):
         return False
     nodes = (
         workflow.parameters.get("_businessFlow", {})

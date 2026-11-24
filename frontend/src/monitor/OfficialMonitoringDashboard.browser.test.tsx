@@ -405,6 +405,11 @@ it("玛纳斯显示影像日期、冰川面积和真彩色原图", async () => {
       observedStart: "2021-09-08",
       observedEnd: "2021-09-08",
       registrationDate: "2026-11-24",
+      glacierChange: {
+        baselineProductId: 36, baselineDate: "2026-11-23", basis: "classification",
+        commonAreaKm2: 11967.8234, changedPercent: 0.5966,
+        netClass1Km2: -0.76, netClass2Km2: null, netIceAreaKm2: -0.76,
+      },
       metrics: [
         {key: "ice_area_km2", label: "本期冰川分类面积", unit: "km²", value: 14.89},
         {key: "class_1_percent", label: "冰川占有效区", unit: "%", value: 12.25},
@@ -416,7 +421,11 @@ it("玛纳斯显示影像日期、冰川面积和真彩色原图", async () => {
   const original = await screen.findByRole("button", {name: "原始影像"});
   expect(within(screen.getByRole("region", {name: "正式成果地图"})).getByText("2021-09-08")).toBeVisible();
   await waitFor(() => expect(screen.getByText("冰川占有效区")).toBeVisible());
-  expect(screen.queryByRole("region", {name: "登记期变化"})).not.toBeInTheDocument();
+  const change = screen.getByRole("region", {name: "登记期变化"});
+  expect(within(change).getByText("2026-11-23 → 2026-11-24")).toBeVisible();
+  expect(within(change).getByText("分类变化占比")).toBeVisible();
+  expect(within(change).getByText("冰川分类面积净变化")).toBeVisible();
+  expect(within(change).queryByText("编码 1 / 2 面积差")).not.toBeInTheDocument();
   fireEvent.click(original);
   expect(screen.getByText("B4/B3/B2 真彩色")).toBeVisible();
   expect(screen.getByTestId("official-map-handoff")).toHaveTextContent('[102,true,"raw-101"]');

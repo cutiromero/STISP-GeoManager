@@ -15,9 +15,7 @@ from operator_sdk import fail
 # Configuration: stable classes and deterministic calculation policy.
 LABELS = ("背景", "洁净冰川", "表碛冰川")
 NODATA = 255
-PIXEL_METRES = 3
-MAX_PIXELS = 36_000_000
-PIXEL_KM2 = PIXEL_METRES**2 / 1_000_000
+MAX_PIXELS = {3: 36_000_000, 10: 121_000_000}
 BASELINE_REASONS = {
     "no_current_date": "本期原始影像未登记可核实的观测日，不能确定前后顺序。",
     "no_series": "本期影像未登记观测系列，无法核实同样区的历史资料。",
@@ -41,32 +39,37 @@ def exact_date(value):
     return parsed if parsed.isoformat() == value else None
 
 
-def assert_mask_contract(context, target, port, *, nodata=NODATA):
+def assert_mask_contract(context, target, port, pixel_metres, *, nodata=NODATA):
     tr = target.transform
     crs = target.crs.to_epsg() if target.crs else None
     if (
-        target.driver != "GTiff"
+        target.driver not in {"GTiff", "VRT"}
         or target.count != 1
         or target.dtypes != ("uint8",)
         or target.nodata != nodata
         or not (crs is not None and (32601 <= crs <= 32660 or 32701 <= crs <= 32760))
-        or (tr.a, tr.b, tr.d, tr.e) != (PIXEL_METRES, 0, 0, -PIXEL_METRES)
+        or (tr.a, tr.b, tr.d, tr.e) != (pixel_metres, 0, 0, -pixel_metres)
         or not np.isfinite(tuple(tr)).all()
-        or target.width * target.height > MAX_PIXELS
+        or target.width * target.height > MAX_PIXELS.get(pixel_metres, 0)
     ):
         stop(
             context,
             "GLACIER_MASK_CONTRACT",
-            "请选择已登记的3米UTM单波段分类图。图幅或缺测标记与该成果的登记类型不同。",
+            "请选择分辨率为3米或10米的已登记UTM分类，核对网格和缺测标记。",
             [port],
         )
 
 
-def read_codes(context, target, port, window):
+def read_codes(context, target, port, window, class_count):
     values = target.read(1, window=window)
     valid = (values != NODATA) & (target.read_masks(1, window=window) != 0)
-    if np.any(values[valid] > 2):
-        stop(context, "GLACIER_CLASS_CODE", "有效区中出现0、1、2以外的类别码。", [port])
+    if np.any(values[valid] >= class_count):
+        stop(
+            context,
+            "GLACIER_CLASS_CODE",
+            f"有效区只能使用0至{class_count - 1}的类别码。",
+            [port],
+        )
     return values, valid
 
 
@@ -111,15 +114,62 @@ def run(context):
 
     with ExitStack() as stack:
         current = stack.enter_context(rasterio.open(context.input_path("current")))
-        assert_mask_contract(context, current, "current")
+        metres = current.transform.a
+        assert_mask_contract(context, current, "current", metres)
+        binary = metres == 10
+        labels = ("非冰川", "冰川") if binary else LABELS
+        class_count = len(labels)
+        pixel_km2 = metres**2 / 1_000_000
         baseline = None
+        baseline_image = None
+        if "baseline_image" in context.inputs:
+            if not (binary and has_baseline and not code_only):
+                stop(
+                    context,
+                    "GLACIER_COMPARABILITY",
+                    "前期原图仅用于玛纳斯标准分类的有效范围。",
+                    ["baseline_image"],
+                )
+            baseline_image = stack.enter_context(
+                rasterio.open(context.input_path("baseline_image"))
+            )
         if has_baseline:
             baseline = stack.enter_context(
                 rasterio.open(context.input_path("baseline"))
             )
             assert_mask_contract(
-                context, baseline, "baseline", nodata=0 if code_only else NODATA
+                context,
+                baseline,
+                "baseline",
+                metres,
+                nodata=None
+                if baseline_image is not None
+                else 0
+                if code_only
+                else NODATA,
             )
+            current_grid = (current.crs, current.transform, current.shape)
+            baseline_grid = (baseline.crs, baseline.transform, baseline.shape)
+            if binary and (code_only or current_grid != baseline_grid):
+                stop(
+                    context,
+                    "GLACIER_COMPARABILITY",
+                    "玛纳斯前后期须采用同一原生10米网格。",
+                    ["baseline"],
+                )
+            if baseline_image is not None and (
+                (baseline_image.crs, baseline_image.transform, baseline_image.shape)
+                != baseline_grid
+                or baseline_image.count != 4
+                or baseline_image.dtypes != ("uint8",) * 4
+                or baseline_image.nodata != 0
+            ):
+                stop(
+                    context,
+                    "GLACIER_COMPARABILITY",
+                    "前期原图与标准分类的网格或缺测标记不一致。",
+                    ["baseline_image"],
+                )
             if code_only or (current.crs, current.transform, current.shape) != (
                 baseline.crs,
                 baseline.transform,
@@ -138,18 +188,24 @@ def run(context):
                         warp_mem_limit=64,
                     )
                 )
-        transitions = np.zeros((3, 3), dtype=np.int64)
-        current_counts = np.zeros(3, dtype=np.int64)
+        transitions = np.zeros((class_count, class_count), dtype=np.int64)
+        current_counts = np.zeros(class_count, dtype=np.int64)
         earlier_valid = 0
         for _, window in current.block_windows(1):
-            values, valid = read_codes(context, current, "current", window)
-            current_counts += np.bincount(values[valid], minlength=3)
+            values, valid = read_codes(context, current, "current", window, class_count)
+            current_counts += np.bincount(values[valid], minlength=class_count)
             if baseline is not None:
-                prev, prev_valid = read_codes(context, baseline, "baseline", window)
+                prev, prev_valid = read_codes(
+                    context, baseline, "baseline", window, class_count
+                )
+                if baseline_image is not None:
+                    prev_valid &= baseline_image.dataset_mask(window=window) != 0
                 earlier_valid += int(np.count_nonzero(prev_valid))
                 common = valid & prev_valid
-                pair_codes = prev[common] * 3 + values[common]
-                transitions += np.bincount(pair_codes, minlength=9).reshape((3, 3))
+                pair_codes = prev[common] * class_count + values[common]
+                transitions += np.bincount(
+                    pair_codes, minlength=class_count**2
+                ).reshape(transitions.shape)
 
         coverage = int(current_counts.sum())
         common_pixels = int(transitions.sum())
@@ -163,11 +219,8 @@ def run(context):
     # Rows use a consistent common mask only in a real comparison.
     comparable_now = transitions.sum(axis=0)
     comparable_prev = transitions.sum(axis=1)
-    aggregate = [
-        ("0", LABELS[0], [0]),
-        ("1", LABELS[1], [1]),
-        ("2", LABELS[2], [2]),
-        ("ice", "冰川合计", [1, 2]),
+    aggregate = [(str(code), label, [code]) for code, label in enumerate(labels)] + [
+        ("ice", "冰川合计", list(range(1, class_count)))
     ]
     rows = []
     for code, label, indexes in aggregate:
@@ -182,11 +235,11 @@ def run(context):
                 code,
                 label,
                 full,
-                round(full * PIXEL_KM2, 6),
+                round(full * pixel_km2, 6),
                 latest,
                 previous,
                 delta,
-                round(delta * PIXEL_KM2, 6) if delta is not None else None,
+                round(delta * pixel_km2, 6) if delta is not None else None,
             )
         )
     csv_rows(
@@ -217,10 +270,10 @@ def run(context):
                 old,
                 new,
                 int(transitions[old, new]),
-                round(int(transitions[old, new]) * PIXEL_KM2, 6),
+                round(int(transitions[old, new]) * pixel_km2, 6),
             )
-            for old in range(3)
-            for new in range(3)
+            for old in range(class_count)
+            for new in range(class_count)
         )
         if has_baseline
         else (),
@@ -268,7 +321,7 @@ def run(context):
                     "currentDate": current_day.isoformat() if current_day else None,
                     "baselineDate": baseline_day.isoformat() if has_baseline else None,
                     "commonValidPixels": common_pixels if has_baseline else None,
-                    "commonAreaKm2": round(common_pixels * PIXEL_KM2, 6)
+                    "commonAreaKm2": round(common_pixels * pixel_km2, 6)
                     if has_baseline
                     else None,
                     "changedPercent": round(
@@ -280,14 +333,18 @@ def run(context):
                     if has_baseline
                     else None,
                     "netClass1Km2": rows[1][7],
-                    "netClass2Km2": rows[2][7],
-                    "netIceAreaKm2": round(net * PIXEL_KM2, 6)
+                    "netClass2Km2": None if binary else rows[2][7],
+                    "netIceAreaKm2": round(net * pixel_km2, 6)
                     if net is not None and not code_only
                     else None,
                 },
                 "knowledgeFacts": {
                     "area": "原生UTM投影面积，不是坡表面积。",
-                    "coverage": "前期按最近邻对齐到本期，只统计两期共同覆盖且有效的像元。",
+                    "coverage": (
+                        "交接标准图按配对原始影像的有效掩膜统计；0是有效非冰川。"
+                        if baseline_image is not None
+                        else "变化只统计两期有效像元的交集。"
+                    ),
                     "registration": "登记期是成果入账日期，不是卫星拍摄日期。",
                     "interpretation": (
                         "上一登记期是交接标准图：0为缺测，类别含义未核实；仅对比编码，不报告冰川净增减。"

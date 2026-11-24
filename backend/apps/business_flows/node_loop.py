@@ -543,16 +543,27 @@ def submission(workflow, user, policy, node, loop, arguments, *, source_state=No
             node,
             inputs["current"],
             registration=version.version == glacier_history.REGISTRATION_VERSION,
+            manans=version.version == glacier_history.MANANS_REGISTRATION_VERSION,
         )
         parameters = glacier_history.parameters(receipt)
         if prior is not None:
+            from apps.compute.input_versions import source_version
+
             inputs["baseline"] = prior.pk
+            if source_state is not None:
+                source_state[str(prior.pk)] = source_version(prior)
+        if image_id := receipt.get("baselineImageId"):
+            from apps.catalog.models import DataResource
+            from apps.compute.input_versions import source_version
+
+            raw = DataResource.objects.get(
+                pk=image_id, project_tag_id=workflow.project_tag_id
+            )
+            inputs["baseline_image"] = raw.pk
+            if source_state is not None:
+                source_state[str(raw.pk)] = source_version(raw)
         if source_state is not None:
             source_state["glacierHistory"] = receipt
-            if prior is not None:
-                from apps.compute.input_versions import source_version
-
-                source_state[str(prior.pk)] = source_version(prior)
     _effective(
         parameters, [{**spec, "required": False} for spec in _specs(version.manifest)]
     )

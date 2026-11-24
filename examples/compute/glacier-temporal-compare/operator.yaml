@@ -2,9 +2,9 @@
   "schemaVersion": 2,
   "identifier": "glacier-temporal-compare",
   "name": "冰川登记期面积与变化",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "author": "STISP",
-  "description": "统计本期分类；在共同覆盖区域比较两次登记结果。",
+  "description": "按原生网格统计本期分类，在两期共同有效区比较登记成果。",
   "runtime": "python-geospatial-v1",
   "deterministic": true,
   "timeoutSeconds": 240,
@@ -23,9 +23,9 @@
       "raster",
       "table"
     ],
-    "summary": "输出背景/洁净冰川/表碛冰川的原生投影面积、双期变化和转移矩阵。",
-    "useWhen": "已审核的同样区、同格网、同模型和可比观测条件；可无前期建立单期基线。",
-    "avoidWhen": "两个独立样区或未具名的历史时相不能相减；0标为NoData的旧分类不是直接基线。"
+    "summary": "比较原生三分类或玛纳斯二分类的面积与转移矩阵。",
+    "useWhen": "同样区的3米三分类或10米玛纳斯二分类；交接二分类按配对原图核对缺测。",
+    "avoidWhen": "不同样区或缺少有效范围依据的历史图。"
   },
   "inputs": [
     {
@@ -33,7 +33,7 @@
       "label": "新一期冰川分类",
       "kind": "raster",
       "required": true,
-      "description": "同口径冰川分类：原生3米UTM，UInt8单波段，0背景、1洁净冰川、2表碛冰川、255 NoData。",
+      "description": "单波段UInt8冰川分类，3米三分类或10米二分类，255缺测。",
       "fields": [],
       "crs": {
         "mode": "projected"
@@ -43,8 +43,8 @@
         "dtypes": [
           "uint8"
         ],
-        "pixelSizeMeters": 3,
-        "northUp": true
+        "northUp": true,
+        "streaming": true
       }
     },
     {
@@ -62,8 +62,28 @@
         "dtypes": [
           "uint8"
         ],
-        "pixelSizeMeters": 3,
-        "northUp": true
+        "northUp": true,
+        "streaming": true
+      }
+    },
+    {
+      "key": "baseline_image",
+      "label": "前一期标准分类对应原图",
+      "kind": "raster",
+      "required": false,
+      "description": "玛纳斯10米交接二分类使用配对原图有效掩膜。",
+      "fields": [],
+      "crs": {
+        "mode": "projected"
+      },
+      "raster": {
+        "bandCount": 4,
+        "dtypes": [
+          "uint8"
+        ],
+        "pixelSizeMeters": 10,
+        "northUp": true,
+        "streaming": true
       }
     }
   ],
@@ -449,25 +469,6 @@
   },
   "selfTests": [
     {
-      "name": "首期为空差值",
-      "fixture": "selftest/first.json",
-      "expect": {
-        "files": {
-          "observation_coverage.csv": {
-            "rows": 1,
-            "contains": "baseline_only,,,EPSG:32643,8,6,,,"
-          },
-          "glacier_areas.csv": {
-            "rows": 4,
-            "contains": "ice,冰川合计,4,3.6e-05,,,,"
-          },
-          "glacier_transitions.csv": {
-            "rows": 0
-          }
-        }
-      }
-    },
-    {
       "name": "共同有效区域与背景转移",
       "fixture": "selftest/paired.json",
       "expect": {
@@ -558,6 +559,34 @@
           },
           "glacier_areas.csv": {
             "contains": "ice,冰川合计,4,3.6e-05,,,,"
+          }
+        }
+      }
+    },
+    {
+      "name": "玛纳斯交接二分类以原图排除缺测并保留有效0",
+      "fixture": "selftest/manans-standard.json",
+      "expect": {
+        "files": {
+          "observation_coverage.csv": {
+            "rows": 1
+          },
+          "glacier_transitions.csv": {
+            "rows": 4
+          }
+        }
+      }
+    },
+    {
+      "name": "玛纳斯没有较早同景时交付本期统计",
+      "fixture": "selftest/manans-no-prior.json",
+      "expect": {
+        "files": {
+          "observation_coverage.csv": {
+            "rows": 1
+          },
+          "glacier_areas.csv": {
+            "rows": 3
           }
         }
       }

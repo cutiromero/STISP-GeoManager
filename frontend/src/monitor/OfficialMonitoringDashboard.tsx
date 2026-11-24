@@ -361,7 +361,7 @@ export default function OfficialMonitoringDashboard({
                     </dl>
                   )}
                 </MonitorPanel>
-                {isGlacier && product.kind === "model" && !isManans(product) && <GlacierChange product={product} />}
+                {isGlacier && product.kind === "model" && <GlacierChange product={product} />}
                 {product.classification?.categories.length ? (
                   <MonitorPanel title="地类面积占比">
                     <div className="official-composition">
@@ -461,7 +461,9 @@ function GlacierChange({ product }: { product: OfficialMonitoringProduct }) {
               </div>
             )}
           </dl>
-          <p>{codeOnly ? "上期为交接标准图，只比较类别编码。" : "只统计两期共同有效范围。"}</p>
+          <p>{isManans(product)
+            ? "仅在两期共同有效区比较分类结果。"
+            : codeOnly ? "上期为交接标准图，只比较类别编码。" : "只统计两期共同有效范围。"}</p>
         </>
       ) : <p>暂无可对比的前一登记期。</p>}
     </MonitorPanel>

@@ -255,14 +255,24 @@ def test_preflight_uses_real_raster_binding_without_model_history_inputs(
         compare = version(
             user, glacier_history.COMPARISON, glacier_history.AUTOMATIC_VERSION
         )
-        compare.manifest = validate_manifest(
-            json.loads(
-                (
-                    settings.PROGRAM_ROOT
-                    / "examples/compute/glacier-temporal-compare/operator.yaml"
-                ).read_text()
-            )
+        manifest = json.loads(
+            (
+                settings.PROGRAM_ROOT
+                / "examples/compute/glacier-temporal-compare/operator.yaml"
+            ).read_text()
         )
+        # Recreate the frozen 1.2 layout, including its materialized 3 m input ports.
+        manifest["version"] = compare.version
+        manifest["inputs"] = manifest["inputs"][:2]
+        for port in manifest["inputs"]:
+            port["raster"].pop("streaming", None)
+            port["raster"]["pixelSizeMeters"] = 3
+        manifest["selfTests"] = [
+            row
+            for row in manifest["selfTests"]
+            if not row["fixture"].startswith("selftest/manans")
+        ]
+        compare.manifest = validate_manifest(manifest)
         compare.save(update_fields=["manifest"])
         raw, current, task = scene(user, infer, date(2025, 9, 20))
         RasterDataset.objects.create(

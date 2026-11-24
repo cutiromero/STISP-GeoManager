@@ -1,0 +1,48 @@
+{
+  "inputs": {
+    "current": {
+      "kind": "raster",
+      "shape": [
+        3,
+        4
+      ],
+      "crs": "EPSG:32645",
+      "transform": [
+        10,
+        0,
+        300000,
+        0,
+        -10,
+        4800000
+      ],
+      "dtype": "uint8",
+      "nodata": 255,
+      "bands": [
+        {
+          "fill": 0,
+          "pixels": [
+            [
+              0,
+              0,
+              1
+            ],
+            [
+              0,
+              2,
+              1
+            ],
+            [
+              1,
+              1,
+              255
+            ]
+          ]
+        }
+      ]
+    }
+  },
+  "parameters": {
+    "current_date": "2026-11-24",
+    "baseline_reason": "no_prior"
+  }
+}
