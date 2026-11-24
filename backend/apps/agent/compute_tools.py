@@ -292,6 +292,11 @@ def validate_import_intent(record):
 
     try:
         kind, identity = record.request_source.split(":", 1)
+        if kind == "hermes":
+            from .hermes_research import authorize_import
+
+            authorize_import(record, identity)
+            return
         if kind == "agent_run":
             run = AgentRun._base_manager.filter(
                 pk=identity,

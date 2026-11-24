@@ -97,7 +97,7 @@ def prepare_profile():
                 "max_concurrent_runs": 3,
             }
         },
-        "agent": {"max_turns": 24, "disabled_toolsets": ["skill_manage"]},
+        "agent": {"disabled_toolsets": ["skill_manage"]},
         "platform_toolsets": {
             "api_server": [
                 "skills",
@@ -106,12 +106,17 @@ def prepare_profile():
                 "web",
                 "stisp_business_flows",
                 "stisp_project_data",
+                "stisp_research_compute",
             ]
         },
         "web": {"backend": WEB_BACKEND, "extract_char_limit": 8000},
         "plugins": {"enabled": [plugin_name]},
         "memory": {"memory_enabled": False, "user_profile_enabled": False},
-        "skills": {"inline_shell": False, "template_vars": False},
+        "skills": {
+            "inline_shell": False,
+            "template_vars": False,
+            "project_discovery": False,
+        },
     }
     (PROFILE / "config.yaml").write_text(yaml.safe_dump(config), encoding="utf-8")
     return credentials
@@ -138,7 +143,7 @@ def main():
         ),
         "STISP_HERMES_TOOLSETS": str(ROOT / "deploy/hermes/toolsets.json"),
     }
-    os.chdir(PROFILE)
+    os.chdir(tempfile.gettempdir())
     os.execve(executable, [str(executable), "gateway", "run"], environment)
 
 

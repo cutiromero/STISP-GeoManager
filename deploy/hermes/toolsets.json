@@ -1,11 +1,6 @@
 {
-  "stisp_business_flows": [
-    "list_business_flows",
-    "prepare_business_flow_inputs",
-    "start_business_flow"
-  ],
+  "stisp_business_flows": ["list_business_flows", "get_research_workflow"],
   "stisp_project_data": [
-    "search_tools",
     "search_resources",
     "summarize_resource_catalog",
     "describe_resource",
@@ -18,5 +13,11 @@
     "list_compute_algorithms",
     "get_map_data_profile",
     "get_platform_link"
+  ],
+  "stisp_research_compute": [
+    "submit_research_compute",
+    "get_research_compute",
+    "read_research_output",
+    "register_research_output"
   ]
 }

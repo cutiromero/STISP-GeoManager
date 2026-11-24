@@ -208,3 +208,118 @@ it("keeps the classic runtime as the default and allows explicit switching", asy
   fireEvent.click(screen.getByText("经典版"));
   expect(await screen.findByText("原有记录页面")).toBeVisible();
 });
+
+it("opens a versioned research task with the shared data picker and native task list", async () => {
+  const session = { id: "stisp_research", title: "新会话", last_run_id: null };
+  const taskId = "f8c01bb8-b122-4e13-b480-aee6f4862d98";
+  const plan = {
+    revision: 1,
+    todos: [{ id: "inspect", content: "检查样点字段", status: "in_progress" }],
+  };
+  let finished = false;
+  vi.mocked(requestJson).mockImplementation(async (address, options) => {
+    if (address.endsWith("/v1/capabilities"))
+      return { session_modes: ["agent"] };
+    if (address.endsWith("/api/sessions?mode=agent")) return { data: [] };
+    if (address.endsWith("/api/sessions")) return { session };
+    if (address.includes("/workflow-uploads/references/")) {
+      return {
+        total: 1,
+        directories: [{ id: 5, name: "样地" }],
+        items: [
+          {
+            id: 42,
+            name: "调查样点",
+            dataType: "table",
+            description: "野外样点",
+          },
+        ],
+      };
+    }
+    if (address.endsWith("/v1/runs")) {
+      expect(options?.body).toMatchObject({
+        input: expect.stringMatching(/版本编号 17[\s\S]*核对调查资料[\s\S]*42/),
+        session_id: session.id,
+      });
+      return { run_id: "run_research", status: "started" };
+    }
+    if (address.endsWith("/v1/runs/run_research"))
+      return {
+        status: finished ? "completed" : "running",
+        output: "已完成资料检查",
+      };
+    if (address.endsWith(`/api/sessions/${session.id}/messages`)) {
+      return {
+        data: [
+          {
+            id: 1,
+            role: "tool",
+            tool_name: "todo_list",
+            content: JSON.stringify(plan),
+          },
+          {
+            id: 2,
+            role: "tool",
+            tool_name: "submit_research_compute",
+            content: JSON.stringify({ taskId }),
+          },
+          { id: 3, role: "assistant", content: "已完成资料检查" },
+        ],
+      };
+    }
+    throw new Error(`Unexpected request ${address}`);
+  });
+
+  let complete = () => {};
+  vi.mocked(requestEventStream).mockImplementation(async (_, onEvent) => {
+    onEvent("message", {
+      seq: 1,
+      event: "tool.completed",
+      tool: "todo_list",
+      preview: JSON.stringify(plan),
+      error: false,
+    });
+    await new Promise<void>((resolve) => {
+      complete = resolve;
+    });
+    finished = true;
+  });
+
+  render(
+    <App>
+      <MemoryRouter
+        initialEntries={[
+          {
+            pathname: "/agent/workbench",
+            search: "?runtime=hermes",
+            state: {
+              hermesWorkflow: {
+                title: "科研资料摘要",
+                goal: "核对调查资料",
+                versionId: 17,
+                projectId: "1",
+              },
+            },
+          },
+        ]}
+      >
+        <HermesPage />
+      </MemoryRouter>
+    </App>,
+  );
+  expect(await screen.findByRole("textbox", { name: "输入消息" })).toHaveValue(
+    "核对调查资料",
+  );
+  fireEvent.click(screen.getByRole("button", { name: "选择系统数据" }));
+  fireEvent.click(
+    await screen.findByRole("checkbox", { name: "选择调查样点" }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "加入本次任务" }));
+  fireEvent.click(screen.getByRole("button", { name: "发送" }));
+  const tasks = await screen.findByRole("region", { name: "任务清单" });
+  expect(within(tasks).getByText("检查样点字段")).toBeVisible();
+  complete();
+  expect(
+    await screen.findByRole("link", { name: "查看计算任务" }),
+  ).toHaveAttribute("href", `/compute?task=${taskId}&projectTagId=1`);
+});

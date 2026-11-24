@@ -1,7 +1,10 @@
 name: stisp-business-flows
-version: 0.1.0
-description: Published GeoManager research workflows
+version: 0.2.0
+description: GeoManager research plans and project tools
 provides_tools:
   - list_business_flows
-  - prepare_business_flow_inputs
-  - start_business_flow
+  - get_research_workflow
+  - submit_research_compute
+  - get_research_compute
+  - read_research_output
+  - register_research_output

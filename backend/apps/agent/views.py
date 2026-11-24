@@ -1200,9 +1200,18 @@ def workflow_catalog_references(request):
     project = request.headers.get("X-Project-Id")
     if request.method == "GET":
         query = request.GET.get("q", "")[:200]
-        available = catalog_resources(
-            request.user, project, source=_resource_source(request)
-        )
+        source = _resource_source(request)
+        usage = request.GET.get("usage", "logic")
+        if usage == "research":
+            from .resource_discovery import discover_resources
+
+            available = discover_resources(
+                request.user, require_access(request.user, "agent"), source=source
+            )
+        elif usage == "logic":
+            available = catalog_resources(request.user, project, source=source)
+        else:
+            raise ApiProblem("请选择资料目录用途")
         try:
             page = int(request.GET.get("page", "1"))
             size = int(request.GET.get("pageSize", "20"))

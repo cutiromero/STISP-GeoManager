@@ -120,6 +120,7 @@ export default function BusinessFlowsPage() {
     setEditor(null);
   }, [scope]);
   const currentProject = String(project?.current ?? "1");
+  const useHermes = searchParams.get("runtime") === "hermes";
   const linkedProject = searchParams.get("projectTagId");
   const differentProject =
     linkedProject !== null && linkedProject !== currentProject;
@@ -146,7 +147,9 @@ export default function BusinessFlowsPage() {
   const previousScope = useRef(scope);
   useEffect(() => {
     if (differentProject) {
-      setSearchParams({}, { replace: true });
+      setSearchParams(useHermes ? { runtime: "hermes" } : {}, {
+        replace: true,
+      });
     } else if (
       !linkedProject &&
       Number.isSafeInteger(selected) &&
@@ -163,17 +166,18 @@ export default function BusinessFlowsPage() {
     selected,
     searchParams,
     setSearchParams,
+    useHermes,
   ]);
   useEffect(() => {
     if (previousScope.current === scope) return;
     previousScope.current = scope;
     setInitialSelection({ scope });
-    setSearchParams({});
+    setSearchParams(useHermes ? { runtime: "hermes" } : {});
     setGoal("");
     setNodeId(undefined);
     setEditor(null);
     setCatalogOpen(false);
-  }, [scope, setSearchParams]);
+  }, [scope, setSearchParams, useHermes]);
   useEffect(() => {
     const owned = ++listSequence.current;
     const controller = new AbortController();
@@ -342,7 +346,11 @@ export default function BusinessFlowsPage() {
     spec?.nodes.filter((item) => item.review.human || item.kind === "human")
       .length ?? 0;
   const choose = (id: number) => {
-    setSearchParams({ flow: String(id), projectTagId: currentProject });
+    setSearchParams({
+      flow: String(id),
+      projectTagId: currentProject,
+      ...(useHermes ? { runtime: "hermes" } : {}),
+    });
     setCatalogOpen(false);
   };
   const canStart = Boolean(
@@ -359,6 +367,15 @@ export default function BusinessFlowsPage() {
       title: detail.flow.name,
       goal: goal.trim() || detail.flow.description || detail.flow.name,
     };
+    if (useHermes) {
+      navigate(
+        `/agent/workbench?runtime=hermes&projectTagId=${currentProject}`,
+        {
+          state: { hermesWorkflow: { ...intent, projectId: currentProject } },
+        },
+      );
+      return;
+    }
     if (monitoringFlowProfile(version.definition, detail.flow.code)) {
       setMonitoringLaunch(intent);
       return;
@@ -626,6 +643,7 @@ export default function BusinessFlowsPage() {
                           flow: String(detail.flow.id),
                           projectTagId: currentProject,
                           version: String(id),
+                          ...(useHermes ? { runtime: "hermes" } : {}),
                         })
                       }
                     />

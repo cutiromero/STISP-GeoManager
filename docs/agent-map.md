@@ -15,6 +15,12 @@ export PY=/opt/homebrew/Caskroom/miniconda/base/envs/stisp-geomanager/bin/python
 - 测试：`backend/tests/integration/test_business_flow_catalog.py`、`backend/tests/integration/test_business_flow_runtime.py`、`backend/tests/unit/test_input_adapters.py`；浏览器 `frontend/src/businessflows/BusinessFlows.efficiency.browser.test.tsx`、`BusinessFlowInputPreparation.efficiency.browser.test.tsx`。
 - 最小：`make verify-fast`；定点后端：`cd backend && "$PY" -m pytest tests/integration/test_business_flow_catalog.py -q`；浏览器：`cd frontend && node scripts/run-browser-check.mjs src/businessflows/BusinessFlows.efficiency.browser.test.tsx`。
 
+## 新版科研智能体
+
+- 运行与会话由 Hermes 网关提供。平台入口为 `backend/apps/agent/hermes_views.py`，工具注册位于 `deploy/hermes/plugin`，科研技能位于 `deploy/hermes/skills`。
+- 科研路径与计算中心接入位于 `backend/apps/agent/hermes_research.py`，页面和共用资料选择器分别位于 `frontend/src/agent/HermesPage.tsx` 和 `frontend/src/agent/WorkflowDataPicker.tsx`。
+- 使用与部署见 `docs/hermes-web.md`。回归入口为 `backend/tests/integration/test_hermes_web.py` 和 `frontend/src/agent/HermesPage.browser.test.tsx`。
+
 ## 智能体与逻辑推理
 - 后端入口：`backend/apps/agent/views.py`、`worker.py`、`workflow.py`、`workflow_worker.py`、`geology_review.py`；事件读取 `run_activity.py`、`run_stream.py`，来源核对 `context.py`；独立审核 `business_flow_review.py`。
 - 前端入口：`frontend/src/agent/AgentPage.tsx`、`LogicTaskWorkspace.tsx`；客户端 `frontend/src/api/client.ts`。

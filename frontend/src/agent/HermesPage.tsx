@@ -53,6 +53,10 @@ import AgentWorkspaceLayout, {
 } from "./AgentWorkspaceLayout";
 import SafeMarkdown from "./SafeMarkdown";
 import useAgentLayout from "./useAgentLayout";
+import WorkflowDataPicker, {
+  type WorkflowDataSelection,
+} from "./WorkflowDataPicker";
+import "../businessflows/business-flow-launch.css";
 
 const api = "/api/agent/hermes";
 const terminalStatuses = new Set([
@@ -76,6 +80,95 @@ function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object"
     ? (value as Record<string, unknown>)
     : {};
+}
+
+type ResearchWorkflow = {
+  versionId: number;
+  title: string;
+  goal: string;
+};
+type Todo = { id: string; content: string; status: string; parent?: string };
+type TodoPlan = { revision: number; todos: Todo[] };
+
+function selectedWorkflow(
+  state: unknown,
+  project: string,
+): ResearchWorkflow | undefined {
+  const value = record(record(state).hermesWorkflow);
+  if (
+    value.projectId === project &&
+    typeof value.versionId === "number" &&
+    Number.isSafeInteger(value.versionId) &&
+    value.versionId > 0 &&
+    typeof value.title === "string" &&
+    typeof value.goal === "string"
+  )
+    return { versionId: value.versionId, title: value.title, goal: value.goal };
+}
+
+function toolContent(value: unknown) {
+  try {
+    return record(typeof value === "string" ? JSON.parse(value) : value);
+  } catch {
+    return {};
+  }
+}
+
+function todoPlan(value: unknown): TodoPlan | undefined {
+  const content = toolContent(value);
+  if (!Array.isArray(content.todos) || typeof content.revision !== "number")
+    return;
+  const todos = content.todos.filter(
+    (item): item is Todo =>
+      typeof item?.id === "string" &&
+      typeof item.content === "string" &&
+      typeof item.status === "string",
+  );
+  return { revision: content.revision, todos };
+}
+
+function latestPlan(messages: Message[]) {
+  for (const message of [...messages].reverse()) {
+    if (message.role !== "tool" || message.tool_name !== "todo_list") continue;
+    const plan = todoPlan(message.content);
+    if (plan) return plan;
+  }
+}
+
+function TaskList({ plan }: { plan: TodoPlan }) {
+  const ui = useComputeText();
+  const labels: Record<string, string> = {
+    pending: ui("待处理", "Pending"),
+    in_progress: ui("进行中", "In progress"),
+    completed: ui("已完成", "Completed"),
+    cancelled: ui("已取消", "Cancelled"),
+  };
+  return (
+    <section
+      className="agent-run-notice"
+      aria-label={ui("任务清单", "Task list")}
+    >
+      <Typography.Text strong>{ui("任务清单", "Task list")}</Typography.Text>
+      <ul>
+        {plan.todos.map(({ id, parent, content, status }) => (
+          <li key={id} style={parent ? { marginInlineStart: 16 } : undefined}>
+            <Tag
+              color={
+                status === "completed"
+                  ? "success"
+                  : status === "in_progress"
+                    ? "processing"
+                    : undefined
+              }
+            >
+              {labels[status] ?? status}
+            </Tag>
+            {content}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
 }
 
 function errorText(error: unknown) {
@@ -144,7 +237,12 @@ export default function HermesPage() {
     return <AgentPage runtimeSwitch={<RuntimeSwitch modern={false} />} />;
   return (
     <AgentRoute
-      key={JSON.stringify([user.id, project?.current, mode])}
+      key={JSON.stringify([
+        user.id,
+        project?.current,
+        mode,
+        state.hermesWorkflow ? location.key : "",
+      ])}
       mode={mode}
     />
   );
@@ -234,9 +332,17 @@ function Workspace({
 }) {
   const ui = useComputeText();
   const { user } = useAppContext();
+  const location = useLocation();
+  const project = useProjectContext();
+  const workflow =
+    mode === "agent"
+      ? selectedWorkflow(location.state, String(project?.current ?? ""))
+      : undefined;
   const layout = useAgentLayout(`agent-layout:${user?.id ?? "anon"}:agent`);
   const [sessions, setSessions] = useState<Session[]>([]);
-  const [selection, setSelection] = useState<{ key: string; id?: string }>();
+  const [selection, setSelection] = useState<
+    { key: string; id?: string } | undefined
+  >(() => (workflow ? { key: "workflow-draft" } : undefined));
   const [showHistory, setShowHistory] = useState(false);
   const [query, setQuery] = useState("");
   const historyCloseButton = useRef<HTMLButtonElement>(null);
@@ -465,6 +571,7 @@ function Workspace({
         <Thread
           key={selection.key}
           mode={mode}
+          workflow={selection.key === "workflow-draft" ? workflow : undefined}
           session={selected}
           onCreate={(internetEnabled) => create(selection.key, internetEnabled)}
           onSessionChange={(updated) =>
@@ -510,7 +617,7 @@ function Welcome({ mode }: { mode: Mode }) {
       )}
       <div className="agent-example-questions">
         {mode === "agent" && (
-          <Button onClick={() => navigate("/business-flows")}>
+          <Button onClick={() => navigate("/business-flows?runtime=hermes")}>
             {ui("从业务流开始任务", "Start a task with a business flow")}
           </Button>
         )}
@@ -556,6 +663,7 @@ function Discovery({ publicWebAvailable }: { publicWebAvailable: boolean }) {
     web: ["公开网页检索", "Public web research"],
     todo: ["会话任务清单", "Conversation task list"],
     stisp_business_flows: ["科研业务流", "Research workflows"],
+    stisp_research_compute: ["科研计算", "Research compute"],
     stisp_project_data: ["项目资料与知识", "Project data and knowledge"],
   };
   return (
@@ -644,26 +752,30 @@ function Discovery({ publicWebAvailable }: { publicWebAvailable: boolean }) {
   );
 }
 
-function workflowId(message: Message) {
-  if (message.role !== "tool" || message.tool_name !== "start_business_flow")
-    return undefined;
-  try {
-    const content = record(
-      typeof message.content === "string"
-        ? JSON.parse(message.content)
-        : message.content,
-    );
-    return typeof content.workflowId === "string" &&
-      /^[0-9a-f-]{36}$/.test(content.workflowId)
-      ? content.workflowId
-      : undefined;
-  } catch {
-    return undefined;
+function resultLink(message: Message, project: string) {
+  if (message.role !== "tool") return;
+  const content = toolContent(message.content);
+  const uuid = (value: unknown): value is string =>
+    typeof value === "string" && /^[0-9a-f-]{36}$/.test(value);
+  if (message.tool_name === "start_business_flow" && uuid(content.workflowId)) {
+    const query = new URLSearchParams({
+      run: content.workflowId,
+      projectTagId: project,
+    });
+    return { to: `/business-flows?${query}`, type: "workflow" };
+  }
+  if (message.tool_name === "submit_research_compute" && uuid(content.taskId)) {
+    const query = new URLSearchParams({
+      task: content.taskId,
+      projectTagId: project,
+    });
+    return { to: `/compute?${query}`, type: "compute" };
   }
 }
 
 function Thread({
   mode,
+  workflow,
   session,
   onCreate,
   onSessionChange,
@@ -672,6 +784,7 @@ function Thread({
   layout,
 }: {
   mode: Mode;
+  workflow?: ResearchWorkflow;
   session?: Session;
   onCreate: (internetEnabled: boolean) => Promise<Session>;
   onSessionChange: (session: Session) => void;
@@ -684,9 +797,13 @@ function Thread({
   const location = useLocation();
   const prefill = record(location.state).query;
   const [prompt, setPrompt] = useState(
-    typeof prefill === "string" ? prefill : "",
+    workflow?.goal ?? (typeof prefill === "string" ? prefill : ""),
   );
   const [messages, setMessages] = useState<Message[]>([]);
+  const [plan, setPlan] = useState<TodoPlan>();
+  const [workflowDraft, setWorkflowDraft] = useState(workflow);
+  const [materials, setMaterials] = useState<WorkflowDataSelection[]>([]);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [runId, setRunId] = useState(session?.last_run_id ?? null);
   const [pendingInput, setPendingInput] = useState("");
   const [answer, setAnswer] = useState("");
@@ -763,12 +880,20 @@ function Thread({
     error,
   ]);
 
+  function receivePlan(next?: TodoPlan) {
+    if (next)
+      setPlan((previous) =>
+        !previous || next.revision >= previous.revision ? next : previous,
+      );
+  }
+
   async function history(sessionId: string, signal: AbortSignal) {
     const { data } = await requestJson<HermesMessageList>(
       `${api}/api/sessions/${sessionId}/messages`,
       { signal },
     );
     setMessages(data);
+    receivePlan(latestPlan(data));
     return data;
   }
 
@@ -853,11 +978,27 @@ function Thread({
                     typeof event.tool_call_id === "string"
                       ? event.tool_call_id
                       : name;
+                  if (
+                    name === "todo_list" &&
+                    event.event === "tool.completed" &&
+                    !event.error
+                  ) {
+                    const snapshot = todoPlan(event.preview);
+                    if (snapshot) receivePlan(snapshot);
+                    else {
+                      void requestJson<HermesMessageList>(
+                        `${api}/api/sessions/${id}/messages`,
+                        { signal },
+                      )
+                        .then(({ data }) => receivePlan(latestPlan(data)))
+                        .catch(() => {});
+                    }
+                  }
                   const status =
                     event.event === "tool.started"
                       ? "运行中"
                       : event.error
-                        ? "失败"
+                        ? "需调整"
                         : "已完成";
                   setSteps((previous) => [
                     ...previous.filter((step) => step.id !== id),
@@ -904,8 +1045,34 @@ function Thread({
   }, [runId, retry, sessionId]);
 
   async function send() {
-    const input = prompt.trim();
-    if (!input || busy || checkingHistory || changingInternet) return;
+    const goal = prompt.trim();
+    if (!goal || busy || checkingHistory || changingInternet) return;
+    const input = workflowDraft
+      ? [
+          ui(
+            `科研业务流：${workflowDraft.title}（版本编号 ${workflowDraft.versionId}）`,
+            `Research workflow: ${workflowDraft.title} (version ID ${workflowDraft.versionId})`,
+          ),
+          goal,
+          materials.length
+            ? ui(
+                `本次选择的资料编号：${materials.map(({ id }) => id).join("、")}`,
+                `Selected resource IDs: ${materials.map(({ id }) => id).join(", ")}`,
+              )
+            : "",
+        ]
+          .filter(Boolean)
+          .join("\n\n")
+      : goal;
+    if (input.length > 12000) {
+      setError(
+        ui(
+          "请缩短任务描述后发送",
+          "Shorten the task description before sending",
+        ),
+      );
+      return;
+    }
     if (submission.current?.input !== input)
       submission.current = {
         input,
@@ -926,6 +1093,8 @@ function Thread({
       scrollToLatest();
       submission.current = undefined;
       setPrompt("");
+      setWorkflowDraft(undefined);
+      setMaterials([]);
       setPendingInput(input);
       setAnswer("");
       setReasoning("");
@@ -986,20 +1155,18 @@ function Thread({
         {checkingHistory && (
           <Spin aria-label={ui("加载会话", "Loading conversation")} />
         )}
-        {!checkingHistory && !messages.length && !active && (
+        {!checkingHistory && !messages.length && !active && !workflowDraft && (
           <Welcome mode={mode} />
         )}
         {messages.map((message) => {
-          const workflow = workflowId(message);
-          if (workflow) {
-            const query = new URLSearchParams({
-              run: workflow,
-              projectTagId: String(project?.current ?? ""),
-            });
+          const result = resultLink(message, String(project?.current ?? ""));
+          if (result) {
             return (
               <div className="agent-run-notice" key={message.id}>
-                <Link to={`/business-flows?${query}`}>
-                  {ui("查看业务流运行", "View workflow run")}
+                <Link to={result.to}>
+                  {result.type === "compute"
+                    ? ui("查看计算任务", "View compute task")
+                    : ui("查看业务流运行", "View workflow run")}
                 </Link>
               </div>
             );
@@ -1026,6 +1193,7 @@ function Thread({
             </section>
           );
         })}
+        {Boolean(plan?.todos.length) && plan && <TaskList plan={plan} />}
         {active && (
           <>
             {pendingInput && (
@@ -1045,7 +1213,7 @@ function Thread({
                 <Flex gap="small" wrap className="agent-run-notice">
                   {steps.map((step) => (
                     <Tag
-                      color={step.status === "失败" ? "error" : undefined}
+                      color={step.status === "需调整" ? "error" : undefined}
                       key={step.id}
                     >
                       {step.name} · {step.status}
@@ -1159,6 +1327,38 @@ function Thread({
         </div>
       )}
       <AgentComposerFrame layout={layout}>
+        {workflowDraft && (
+          <Flex gap="small" wrap align="center">
+            <Tag>{workflowDraft.title}</Tag>
+            <Button size="small" onClick={() => setPickerOpen(true)}>
+              {ui("选择系统数据", "Select project data")}
+            </Button>
+            {materials.map(({ id, name }) => (
+              <Tag
+                key={id}
+                closable
+                onClose={() =>
+                  setMaterials((current) =>
+                    current.filter((item) => item.id !== id),
+                  )
+                }
+              >
+                {name}
+              </Tag>
+            ))}
+            <WorkflowDataPicker
+              open={pickerOpen}
+              usage="research"
+              polished
+              selection={materials}
+              onCancel={() => setPickerOpen(false)}
+              onConfirm={(items) => {
+                setMaterials(items);
+                setPickerOpen(false);
+              }}
+            />
+          </Flex>
+        )}
         <div className="agent-input-row">
           <Input.TextArea
             id="agent-message-input"
@@ -1183,7 +1383,7 @@ function Thread({
             {mode === "agent" && (
               <Button
                 type="text"
-                onClick={() => navigate("/business-flows")}
+                onClick={() => navigate("/business-flows?runtime=hermes")}
                 icon={<NodeIndexOutlined />}
               >
                 {ui("业务流", "Business flows")}

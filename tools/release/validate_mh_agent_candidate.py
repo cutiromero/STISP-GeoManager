@@ -8,7 +8,12 @@ import sys
 
 # Configuration
 API = "/api/agent/hermes"
-MODEL_TOOLS = {"search_resources", "list_business_flows", "describe_resource"}
+MODEL_TOOLS = {
+    "search_resources",
+    "list_business_flows",
+    "get_research_workflow",
+    "describe_resource",
+}
 
 
 def main():
@@ -53,7 +58,7 @@ def main():
     session_id = session.json()["session"]["id"]
     payload = {
         "session_id": session_id,
-        "input": f"必须实际调用 search_resources，query 为 {token}，limit 为 5。读取返回的匹配项，然后将找到的资料名原样告知我。仅执行查询。",
+        "input": f"请用 search_resources 查找 {token}，读取返回的结果，并回复对应的资料名称。",
     }
     idem = secrets.token_hex(16)
     run = client.post(

@@ -1,0 +1,125 @@
+{
+  "get_research_workflow": {
+    "version": 1,
+    "description": "读取已发布科研业务流的任务目标、建议步骤、可用资料角色、候选算子和交付方向。用返回的路径建立 Hermes 任务清单。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "versionId": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": ["versionId"],
+      "additionalProperties": false
+    }
+  },
+  "submit_research_compute": {
+    "version": 1,
+    "description": "向当前项目计算中心提交一个已发布算子。按算子清单提供输入键、资源编号和参数，使用返回的 taskId 跟进结果。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "versionId": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "inputs": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "parameters": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "fieldMappings": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "required": ["versionId", "name", "inputs"],
+      "additionalProperties": false
+    }
+  },
+  "get_research_compute": {
+    "version": 1,
+    "description": "查询本会话提交的计算任务状态、执行进度和成果编号。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "taskId": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "required": ["taskId"],
+      "additionalProperties": false
+    }
+  },
+  "read_research_output": {
+    "version": 1,
+    "description": "按成果编号读取本会话的计算结果。表格支持分页读取，栅格提供数值分布，地图与文件可从结果链接打开。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "outputId": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        }
+      },
+      "required": ["outputId"],
+      "additionalProperties": false
+    }
+  },
+  "register_research_output": {
+    "version": 1,
+    "description": "将本会话的计算成果登记为当前项目数据，供后续算子和地图使用。查询计算任务可查看导入进度和资源编号。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "outputId": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 160
+        }
+      },
+      "required": ["outputId"],
+      "additionalProperties": false
+    }
+  },
+  "list_business_flows": {
+    "description": "查找当前项目已发布的科研业务流。按名称搜索后，用版本编号读取科研路径。"
+  },
+  "summarize_resource_catalog": {
+    "description": "统计当前可用的登记数据和计算成果数量、类型与大小。按关键词和来源筛选。"
+  },
+  "read_knowledge_document": {
+    "description": "按知识检索返回的 documentId 分页读取文献原文。用 nextOffset 继续阅读全文。"
+  },
+  "check_knowledge_constraints": {
+    "description": "用项目知识规则核对结构化事实。返回符合、冲突及需要补充资料的问题。"
+  },
+  "get_map_data_profile": {
+    "description": "查看地图资源的类别、数量、建议颜色和项目配色规则。矢量可选字段，栅格可选波段。"
+  },
+  "get_platform_link": {
+    "description": "创建当前项目的地图、数据资源、计算中心、知识库或业务流入口。"
+  }
+}

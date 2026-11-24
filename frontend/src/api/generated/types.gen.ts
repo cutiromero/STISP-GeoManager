@@ -26838,7 +26838,7 @@ export type ListAgentWorkflowCatalogResourcesData = {
     body?: never;
     headers: {
         /**
-         * 当前具体逻辑推理项目ID
+         * 当前项目 ID
          */
         'X-Project-Id': number;
     };
@@ -26852,6 +26852,10 @@ export type ListAgentWorkflowCatalogResourcesData = {
          * 按资料来源筛选；省略时同时返回登记数据与计算成果
          */
         source?: AgentResourceSource;
+        /**
+         * 资料用途
+         */
+        usage?: 'logic' | 'research';
         /**
          * 页码，从1开始
          */
@@ -26914,7 +26918,7 @@ export type AddAgentWorkflowCatalogReferencesData = {
     };
     headers: {
         /**
-         * 当前具体逻辑推理项目ID
+         * 当前项目 ID
          */
         'X-Project-Id': number;
     };

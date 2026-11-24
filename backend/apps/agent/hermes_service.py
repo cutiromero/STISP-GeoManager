@@ -73,7 +73,7 @@ def prepare(project, configuration):
     plugin_name = "stisp-business-flows"
     plugin = profile / "plugins" / plugin_name
     plugin.mkdir(mode=0o700, parents=True, exist_ok=True)
-    for filename in ("plugin.yaml", "__init__.py"):
+    for filename in ("plugin.yaml", "__init__.py", "contracts.json"):
         atomic_private(
             plugin / filename,
             (source / "plugin" / filename).read_text(encoding="utf-8"),
@@ -99,7 +99,7 @@ def prepare(project, configuration):
                 "max_concurrent_runs": 2,
             }
         },
-        "agent": {"max_turns": 24, "disabled_toolsets": ["skill_manage"]},
+        "agent": {"disabled_toolsets": ["skill_manage"]},
         "platform_toolsets": {
             "api_server": [
                 "skills",
@@ -108,6 +108,7 @@ def prepare(project, configuration):
                 "web",
                 "stisp_business_flows",
                 "stisp_project_data",
+                "stisp_research_compute",
             ]
         },
         "web": {"backend": "keenable", "extract_char_limit": 8000},

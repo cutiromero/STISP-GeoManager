@@ -8,9 +8,10 @@ from apps.agent import hermes_gateway as gateway
 from apps.agent.models import AgentPolicy, AgentWorkflow, HermesSession
 from apps.business_flows.builtins import source_summary_definition
 from apps.business_flows.catalog import register_flow
-from apps.projects.context import project_scope
+from apps.projects.context import ProjectScope, project_scope
 from apps.projects.models import ProjectMembership
 from tests.integration.test_agent import setup_agent  # noqa: F401
+from tests.integration.test_compute import setup_compute  # noqa: F401
 
 
 pytestmark = pytest.mark.django_db
@@ -144,15 +145,16 @@ def test_tool_bridge_checks_service_key_and_rejects_chat_scope(
         HTTP_AUTHORIZATION="Bearer tool-test",
     )
     assert response.status_code == 403
-    assert response.json()["error"] == "当前会话未开放业务流工具"
+    assert response.json()["error"] == "请使用已获授权的科研智能体工具"
 
 
-def test_tool_bridge_starts_real_versioned_workflow_once(
+def test_version_guides_hermes_without_starting_legacy_workflow(
     setup_agent,  # noqa: F811
     monkeypatch,
     settings,
 ):
     env = setup_agent
+    settings.AGENT_MODELS = []
     settings.HERMES_WEB_ENABLED = True
     monkeypatch.setenv("STISP_HERMES_GATEWAY_KEY", "gateway-test")
     monkeypatch.setenv("STISP_HERMES_TOOL_KEY", "tool-test")
@@ -169,31 +171,117 @@ def test_tool_bridge_starts_real_versioned_workflow_once(
         session = HermesSession.objects.create(
             mode="agent", owner=env["user"], title="Hermes 业务流"
         )
-    payload = {
-        "session_id": gateway.platform_session_id(session.pk),
-        "turn_id": "turn-test",
-        "name": "start_business_flow",
-        "arguments": {
-            "versionId": version.pk,
-            "inputs": {"source": env["resource"].pk},
-            "goal": "评估合成资料",
-        },
-    }
-    client = env["client"]
-    for attempt in range(2):
-        response = client.post(
+
+    def tool(name, arguments):
+        return env["client"].post(
             "/internal/hermes/tool/",
-            payload,
+            {
+                "session_id": gateway.platform_session_id(session.pk),
+                "turn_id": "turn-test",
+                "name": name,
+                "arguments": arguments,
+            },
             content_type="application/json",
             HTTP_AUTHORIZATION="Bearer tool-test",
         )
-        assert response.status_code == 200, response.content
-        with project_scope(env["scope"]):
-            workflow = AgentWorkflow.objects.get(
-                pk=response.json()["workflowId"], owner=env["user"]
-            )
-            assert workflow.resource_ids == [env["resource"].pk]
-            assert AgentWorkflow.objects.filter(owner=env["user"]).count() == 1
+
+    response = tool("get_research_workflow", {"versionId": version.pk})
+    assert response.status_code == 200, response.content
+    plan = response.json()
+    assert plan["dataRoles"][0]["key"] == "source"
+    assert plan["suggestedSteps"][0]["title"] == "梳理资料与研究线索"
+    assert plan["suggestedSteps"][1]["after"] == ["summarize"]
+    assert "describe_resource" in plan["suggestedSteps"][0]["suggestedTools"]
+    assert "contract" not in plan["suggestedSteps"][0]
+    assert (
+        tool("get_research_workflow", {"versionId": version.pk + 1}).status_code == 404
+    )
+    assert (
+        tool("list_business_flows", {"query": "资料评估"}).json()["items"][0][
+            "versionId"
+        ]
+        == version.pk
+    )
+    assert tool("search_resources", {"query": "人工"}).status_code == 200
+    assert not AgentWorkflow._base_manager.filter(owner=env["user"]).exists()
+    catalog = env["client"].get(
+        "/api/agent/workflow-uploads/references/?usage=research&source=registered",
+        **env["header"],
+    )
+    assert catalog.status_code == 200, catalog.content
+    assert [item["id"] for item in catalog.json()["items"]] == [env["resource"].pk]
+
+
+def test_hermes_compute_retries_and_reads_real_output(
+    setup_compute,  # noqa: F811
+    monkeypatch,
+):
+    from django.contrib.auth.models import Permission
+    from apps.agent.hermes_tools import execute, reauthorize_transcript
+    from apps.agent.policy import policy
+    from apps.compute.models import ComputeImport, ComputeTask
+    from apps.compute.packages import ComputeError
+    from apps.compute.worker import process_import, run_task, task_scope
+
+    env = setup_compute
+    owner = env["owner"]
+    owner.user_permissions.add(
+        *Permission.objects.filter(
+            codename__in=["use_local_model", "use_data_agent", "query_data"]
+        )
+    )
+    AgentPolicy.objects.create(pk=1, value={"operatorEnabled": True})
+    scope = ProjectScope((env["project"].pk,), env["project"].pk, owner.pk)
+    with project_scope(scope):
+        session = HermesSession.objects.create(mode="agent", owner=owner)
+        another = HermesSession.objects.create(mode="agent", owner=owner)
+
+    args = {key: value for key, value in env["body"].items() if key != "idempotencyKey"}
+    with pytest.raises(ComputeError):
+        execute(session, "submit_research_compute", {**args, "inputs": {}}, "turn1")
+    first = execute(session, "submit_research_compute", args, "turn1")
+    assert (
+        execute(session, "submit_research_compute", args, "turn1")["taskId"]
+        == first["taskId"]
+    )
+    assert (
+        execute(session, "get_research_compute", {"taskId": first["taskId"]}, "turn1")[
+            "status"
+        ]
+        == "queued"
+    )
+    with pytest.raises(ComputeError):
+        execute(another, "get_research_compute", {"taskId": first["taskId"]}, "turn2")
+
+    def run_operator(attempt, package, inputs, results, manifest, heartbeat):
+        (results / "summary.csv").write_text("group,mean,count\nA,3,2\nB,8,1\n")
+        heartbeat(True)
+
+    monkeypatch.setattr("apps.compute.worker.execute", run_operator)
+    with project_scope(scope):
+        task = ComputeTask.objects.get(pk=first["taskId"])
+    with task_scope(task):
+        run_task(task)
+    result = execute(
+        session, "get_research_compute", {"taskId": first["taskId"]}, "turn2"
+    )
+    assert result["status"] == "succeeded", result
+    output_id = result["outputs"][0]["id"]
+    output = execute(session, "read_research_output", {"outputId": output_id}, "turn2")
+    assert output["columns"] == ["group", "mean", "count"]
+    assert output["total"] == 2
+    registered = execute(
+        session, "register_research_output", {"outputId": output_id}, "turn2"
+    )
+    with task_scope(task):
+        process_import(ComputeImport.objects.get(pk=registered["importId"]))
+    followup = execute(
+        session, "get_research_compute", {"taskId": first["taskId"]}, "turn3"
+    )
+    assert followup["outputs"][0]["importStatus"] == "ready", followup["outputs"][0]
+    assert followup["outputs"][0]["resourceId"]
+    with project_scope(scope):
+        reauthorize_transcript(session, owner, policy())
 
 
 def test_web_tools_require_session_opt_in_and_live_project_access(

@@ -25174,7 +25174,7 @@
           "name": "X-Project-Id",
           "in": "header",
           "required": true,
-          "description": "当前具体逻辑推理项目ID",
+          "description": "当前项目 ID",
           "schema": {
             "type": "integer",
             "minimum": 1
@@ -25186,8 +25186,8 @@
           "Agent"
         ],
         "operationId": "listAgentWorkflowCatalogResources",
-        "summary": "搜索可供逻辑推理引用的系统数据",
-        "description": "在当前项目与资源ACL内搜索已启用且就绪的矢量、栅格、表格及可复用成果，与普通智能体共用数据发现边界。目录选项来自所选来源的可发现集合，总数反映来源、关键词和目录筛选后的匹配数。需要智能体、工作流、算子和数据登记权限。",
+        "summary": "搜索科研任务可用的系统数据",
+        "description": "在当前项目中按资料来源、关键词和目录筛选可用数据。research 用途采用智能体的数据访问权限；logic 用途采用逻辑推理的资料登记权限。",
         "security": [
           {
             "sessionAuth": []
@@ -25209,6 +25209,19 @@
             "description": "按资料来源筛选；省略时同时返回登记数据与计算成果",
             "schema": {
               "$ref": "#/components/schemas/AgentResourceSource"
+            }
+          },
+          {
+            "in": "query",
+            "name": "usage",
+            "description": "资料用途",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "logic",
+                "research"
+              ],
+              "default": "logic"
             }
           },
           {

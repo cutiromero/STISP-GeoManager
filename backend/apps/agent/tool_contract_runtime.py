@@ -164,14 +164,16 @@ def _issues(value, schema, path="$", *, depth=0):
     return errors[:MAX_ERRORS]
 
 
-def validate_arguments(name, args):
+def validate_arguments(name, args, *, schema=None):
     _json_shape(args)
     encoded = json.dumps(
         args, ensure_ascii=False, sort_keys=True, allow_nan=False
     ).encode()
     if len(encoded) > MAX_ARGUMENT_BYTES:
         raise ToolContractError([{"field": "$", "detail": "参数超过128KiB"}])
-    errors = _issues(args, contracts()[name]["inputSchema"])
+    errors = _issues(
+        args, contracts()[name]["inputSchema"] if schema is None else schema
+    )
     if errors:
         raise ToolContractError(errors)
     return hashlib.sha256(encoded).hexdigest()

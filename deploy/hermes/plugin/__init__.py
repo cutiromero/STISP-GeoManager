@@ -10,8 +10,6 @@ from agent.redact import _PREFIX_RE
 from gateway.session_context import get_session_env
 from tools.approval_context import _approval_tool_call_id, _approval_turn_id
 
-TOOLSET = "stisp_business_flows"
-TOOLS = ("list_business_flows", "prepare_business_flow_inputs", "start_business_flow")
 WEB_TOOLS = {"web_search", "web_extract"}
 
 
@@ -35,7 +33,7 @@ def authorize_native_tool(tool_name, args=None, session_id=None, turn_id=None, *
                 "message": "公开检索词须为 1 至 500 字，每次最多 10 条结果",
             }
         if _PREFIX_RE.search(query):
-            return {"action": "block", "message": "检索词中不能包含凭据"}
+            return {"action": "block", "message": "请使用公开主题词检索"}
     else:
         urls = args.get("urls")
         char_limit = args.get("char_limit", 8000)
@@ -106,6 +104,9 @@ def register(ctx):
     ctx.register_hook("pre_tool_call", authorize_native_tool)
     path = Path(os.environ["STISP_HERMES_TOOL_CONTRACTS"])
     contracts = json.loads(path.read_text(encoding="utf-8"))["tools"]
+    native = Path(__file__).with_name("contracts.json")
+    for name, contract in json.loads(native.read_text(encoding="utf-8")).items():
+        contracts[name] = {**contracts.get(name, {}), **contract}
     inventory = Path(os.environ["STISP_HERMES_TOOLSETS"])
     for toolset, names in json.loads(inventory.read_text(encoding="utf-8")).items():
         for name in names:

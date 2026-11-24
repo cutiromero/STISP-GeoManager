@@ -1,6 +1,5 @@
 """Hermes tool bridge for published GeoManager business workflows."""
 
-import hashlib
 import json
 import logging
 from functools import lru_cache
@@ -12,24 +11,19 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
-from apps.business_flows.models import BusinessFlowVersion
-from apps.business_flows.runtime import start_flow
-from apps.business_flows.scopes import available_flows
-from apps.business_flows.tools import (
-    bind_geology_catalog_inputs,
-    execute_business_flow_tool,
-)
+from apps.business_flows.tools import execute_business_flow_tool
 from apps.compute.packages import ComputeError
 from apps.projects.context import ProjectScope, project_scope
-from .capability_catalog import contracts, enabled
+from .capability_catalog import contracts
+from . import hermes_research as research
 from .hermes_gateway import require_tool_key, session_identity
 from .models import AgentRun, HermesSession, HermesToolReceipt
-from .policy import fresh_user, require_access, visible_models
+from .policy import fresh_user, require_access
 from .tool_contract_runtime import validate_arguments
 from .views import ApiProblem, body
 
 logger = logging.getLogger(__name__)
-TOOLS = {"list_business_flows", "prepare_business_flow_inputs", "start_business_flow"}
+TOOLS = {"list_business_flows", *research.PERMISSIONS}
 WEB_ACCESS_CHECK = "check_public_web"
 
 
@@ -41,11 +35,11 @@ def project_tools():
     )
 
 
-def execution_context(session, user, *, model=""):
+def execution_context(session, user):
     return AgentRun(
         owner=user,
         project_tag_id=session.project_tag_id,
-        model=model,
+        model=None,
         evidence=[
             item
             for entries in session.tool_receipts.order_by("pk").values_list(
@@ -75,17 +69,29 @@ def reauthorize_transcript(session, user, policy):
         return
     context = execution_context(session, user)
     for name in {item["tool"] for item in context.evidence}:
-        if not enabled(name, user, policy, run=context):
+        if not research.tool_allowed(name, user, policy, run=context):
             raise PermissionDenied("本会话的工具访问权限已变更，请新建会话后继续")
     check_evidence(
         context, user, policy, authorize_resources=authorize_project_evidence
     )
+    for task_id in {
+        item["result"]["taskId"]
+        for item in context.evidence
+        if item["tool"] in research.PERMISSIONS and "taskId" in item["result"]
+    }:
+        research.session_task(session, user, policy, task_id)
 
 
 def record(session, name, fingerprint, turn_id, call_id, pairs):
     evidence = []
     for resource, result in pairs:
         references = {}
+        if (
+            name in research.PERMISSIONS
+            and name != "submit_research_compute"
+            and "taskId" in result
+        ):
+            references["taskId"] = result["taskId"]
         for key, fields in (
             ("items", ("id", "entryId", "revision")),
             ("findings", ("id", "entryId", "revision")),
@@ -111,7 +117,9 @@ def record(session, name, fingerprint, turn_id, call_id, pairs):
     HermesToolReceipt.objects.create(
         session=session,
         name=name,
-        contract_version=contracts()[name]["version"],
+        contract_version=(research.native_contracts().get(name) or contracts()[name])[
+            "version"
+        ],
         turn_id=turn_id,
         tool_call_id=call_id,
         argument_hash=fingerprint,
@@ -134,81 +142,43 @@ def execute(session, name, arguments, turn_id, call_id=""):
             ):
                 raise PermissionDenied("请先在科研智能体输入栏开启联网检索")
             return {"allowed": True}
-        if session.mode != "agent" or not enabled(name, user, current_policy):
-            raise PermissionDenied("当前会话未开放业务流工具")
-        fingerprint = validate_arguments(name, arguments)
-        models = visible_models(user, "agent", current_policy)
-        preferred = current_policy["defaultAgentModel"]
-        alias = next(
-            (model["alias"] for model in models if model["alias"] == preferred), ""
+        if session.mode != "agent" or not research.tool_allowed(
+            name, user, current_policy
+        ):
+            raise PermissionDenied("请使用已获授权的科研智能体工具")
+        native = research.native_contracts().get(name)
+        fingerprint = validate_arguments(
+            name, arguments, schema=native["inputSchema"] if native else None
         )
-        if not alias and models:
-            alias = models[0]["alias"]
-        if not alias:
-            raise PermissionDenied("当前账号没有业务流执行模型")
         reauthorize_transcript(session, user, current_policy)
-        if name in project_tools():
-            from .capability_catalog import search
-            from .tools import _execute_authorized
-
-            context = execution_context(session, user, model=alias)
-            if name == "search_tools":
-                result = search(
-                    user,
-                    current_policy,
-                    context,
-                    arguments,
-                    allowed=TOOLS | project_tools(),
-                )
-                pairs = [(None, {})]
-            else:
-                result, pairs = _execute_authorized(
-                    context, name, arguments, user, current_policy, None
-                )
-            record(session, name, fingerprint, turn_id, call_id, pairs)
-            return result
-        if name != "start_business_flow":
+        if name == "get_research_workflow":
+            return research.workflow_plan(arguments["versionId"])
+        if name == "list_business_flows":
             context = AgentRun(
-                owner=user, project_tag_id=session.project_tag_id, model=alias
+                owner=user, project_tag_id=session.project_tag_id, model=None
             )
             result, _ = execute_business_flow_tool(context, user, name, arguments)
             return result
-        version = (
-            BusinessFlowVersion.objects.select_related("flow")
-            .filter(
-                pk=arguments["versionId"],
-                status="published",
-                flow__is_active=True,
-                flow__in=available_flows(session.project_tag_id),
+        if native:
+            result = research.compute_tool(
+                session,
+                user,
+                current_policy,
+                name,
+                arguments,
+                turn_id=turn_id,
+                fingerprint=fingerprint,
             )
-            .first()
+            record(session, name, fingerprint, turn_id, call_id, [(None, result)])
+            return result
+        from .tools import _execute_authorized
+
+        context = execution_context(session, user)
+        result, pairs = _execute_authorized(
+            context, name, arguments, user, current_policy, None
         )
-        if version is None:
-            raise ComputeError("业务流版本不可执行", 404)
-        identity = hashlib.sha256(
-            f"{session.pk}:{turn_id}:{version.pk}".encode()
-        ).hexdigest()
-        key = f"hermes-{identity}"
-        parameters = dict(arguments.get("parameters", {}))
-        bind_geology_catalog_inputs(
-            user, version, arguments["inputs"], parameters, key, batch_id=identity[:32]
-        )
-        workflow = start_flow(
-            user,
-            version,
-            {
-                **arguments,
-                "parameters": parameters,
-                "model": alias,
-                "idempotencyKey": key,
-            },
-        )
-        return {
-            "workflowId": str(workflow.pk),
-            "versionId": version.pk,
-            "name": version.flow.name,
-            "status": workflow.status,
-        }
+        record(session, name, fingerprint, turn_id, call_id, pairs)
+        return result
 
 
 @csrf_exempt
@@ -244,7 +214,10 @@ def tool(request):
     except PermissionDenied as exc:
         return JsonResponse({"error": str(exc)}, status=403)
     except ComputeError as exc:
-        return JsonResponse({"error": str(exc)}, status=exc.status)
+        return JsonResponse(
+            {"error": str(exc), **({"inputGaps": exc.gaps} if exc.gaps else {})},
+            status=exc.status,
+        )
     except (ApiProblem, ValidationError, ValueError) as exc:
         if isinstance(exc, ValidationError):
             detail = "；".join(exc.messages)
@@ -254,5 +227,5 @@ def tool(request):
             detail = "Hermes 工具请求格式无效"
         return JsonResponse({"error": detail}, status=400)
     except Exception:
-        logger.exception("Hermes business workflow tool failed")
-        return JsonResponse({"error": "平台业务流工具处理失败"}, status=500)
+        logger.exception("Hermes platform tool failed")
+        return JsonResponse({"error": "平台工具暂不可用"}, status=500)

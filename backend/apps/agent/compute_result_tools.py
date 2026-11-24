@@ -74,7 +74,7 @@ def read_task_outputs(run, user, policy, task, *, workflow):
     return results
 
 
-def _read_output(output, task, offset, limit):
+def _read_output(output, task, offset, limit, *, concise=False):
     path = check_output_file(output, task)
     result = {
         "taskId": str(task.id),
@@ -118,7 +118,9 @@ def _read_output(output, task, offset, limit):
             raise ComputeError("计算结果栅格统计读取失败，请查看结果预览") from exc
         result.update(
             scope="approximate_raster_statistics",
-            statisticsNote="GDAL近似统计，仅支持描述本次输出的数值分布；无法单独证明生态变化原因。",
+            statisticsNote="GDAL 近似数值分布"
+            if concise
+            else "GDAL近似统计，仅支持描述本次输出的数值分布；无法单独证明生态变化原因。",
             size=info.get("size", []),
             bands=[
                 {
@@ -141,7 +143,9 @@ def _read_output(output, task, offset, limit):
     else:
         result.update(
             scope="metadata",
-            note="已校验实际结果文件；此工具仅返回该格式的真实元信息，具体内容请使用结果预览。",
+            note="在成果预览中查看文件内容"
+            if concise
+            else "已校验实际结果文件；此工具仅返回该格式的真实元信息，具体内容请使用结果预览。",
         )
     if len(json.dumps(result, ensure_ascii=False).encode()) > 24000:
         raise ValidationError("结果元信息过大，请使用结果预览查看")

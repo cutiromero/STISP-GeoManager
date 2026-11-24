@@ -1,5 +1,18 @@
 # API Change Requests
 
+## API-20261124-001 - 科研业务流资料选择
+
+- Status: BackendReady
+- Owner: codex/xintao。
+- Endpoints: GET /api/agent/workflow-uploads/references/。
+- Change type: GET 查询参数扩展。
+- OpenAPI change: 增加可选 `usage`，支持 `research` 和 `logic`。缺省值为 `logic`。
+- Mock examples: 资料目录回归使用项目和目录数据。
+- Frontend reason: 科研业务流和逻辑推理共用系统数据选择器。
+- Backend implementation notes: 两种用途共用资料目录搜索与分页，各自使用对应的数据访问权限。
+- Verification: 项目授权、登记数据和计算成果筛选、目录搜索及资料选择。
+- Result: 新版科研智能体使用资料目录。
+
 ## API-20261122-002 - Hermes 会话的公开网页检索
 
 - Status: BackendReady
@@ -964,6 +977,7 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| API-20261124-001 | BackendReady | 科研业务流资料目录用途 |
 | API-20261122-002 | BackendReady | Hermes 会话的公开网页检索 |
 | API-20261122-001 | BackendReady | Hermes 网页会话、工具发现与 SSE |
 | API-20261121-002 | BackendReady | 业务流科研目的校验与节点图编辑 |
