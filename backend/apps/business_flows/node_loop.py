@@ -177,13 +177,16 @@ def wait_recovery(workflow, node, item, failure, *, question=""):
         "unrecoverable": "该算子无法自动恢复当前问题。",
         "human_review": "需要您确认资料或处理方式。",
     }
-    prefix = (
-        "模型动作格式未通过校验，已保留本节点已完成的计算。"
-        if code == ACTION_FORMAT
-        else "计算服务发生故障，已停止自动重试。"
-        if str(code).startswith("PLATFORM_")
-        else explanations.get(failure.get("remedy"), "")
-    )
+    if code == ACTION_FORMAT:
+        prefix = (
+            "模型动作格式未通过校验，已保留本节点已完成的计算。"
+            if loop.get("successfulTaskId")
+            else "模型动作格式未通过校验，可从当前节点继续。"
+        )
+    elif str(code).startswith("PLATFORM_"):
+        prefix = "计算服务发生故障，已停止自动重试。"
+    else:
+        prefix = explanations.get(failure.get("remedy"), "")
     item["recovery"] = {
         "reason": (prefix + failure.get("message", "当前资料尚不能完成节点"))[:1000],
         "failure": failure,

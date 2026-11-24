@@ -208,3 +208,36 @@ def test_ambiguous_or_other_top_level_mappings_are_rejected(action, args, mappin
             set(),
             [action],
         )
+
+
+@pytest.mark.parametrize("native", [False, True])
+def test_catalog_query_uses_the_same_keyword_in_native_and_json_actions(native):
+    arguments = {"query": "冰川 分类 提取 面积", "limit": 4}
+    action = {"action": "operator_catalog", "arguments": arguments}
+    payload = (
+        {"name": "node_action", "arguments": json.dumps(action)} if native else action
+    )
+    assert validate_contract_action(
+        json.dumps(payload), set(), ["operator_catalog"]
+    ) == {
+        "action": "operator_catalog",
+        "arguments": {"keyword": "冰川 分类 提取 面积", "limit": 4},
+    }
+
+
+@pytest.mark.parametrize(
+    "action,arguments",
+    [
+        ("operator_catalog", {"query": "冰川", "keyword": "积雪"}),
+        ("operator_catalog", {"query": ["冰川"]}),
+        ("operator_catalog", {"query": "冰川", "approved": True}),
+        ("preflight_operator", {"query": "冰川"}),
+    ],
+)
+def test_catalog_query_never_resolves_conflicts_or_allows_other_tool_fields(
+    action, arguments
+):
+    with pytest.raises(ActionFormatError):
+        validate_contract_action(
+            json.dumps({"action": action, "arguments": arguments}), set(), [action]
+        )
