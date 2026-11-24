@@ -77,6 +77,7 @@ class ComputeTask(ProjectScopedModel):
     failure = models.JSONField(default=dict, blank=True, db_default={})
     field_mappings = models.JSONField(default=dict, blank=True, db_default={})
     input_collections = models.JSONField(default=dict, blank=True, db_default={})
+    operator_copy = models.JSONField(default=dict, blank=True, db_default={})
     trial = models.BooleanField(default=False)
     unread = models.BooleanField(default=False)
     idempotency_key = models.CharField(max_length=80)

@@ -406,18 +406,7 @@ class Context:
         return self._output / filename
 
 
-def main():
-    if not probe()["available"]:
-        raise IsolationUnavailable(probe()["reason"])
-    import resource
-
-    parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument("request", type=Path)
-    args = parser.parse_args()
-    request = json.loads(args.request.read_text())
-    code = request["code"]
-    if not isinstance(code, str) or not 1 <= len(code) <= MAX_CODE_CHARACTERS:
-        raise ValueError("适配脚本长度无效")
+def prepare_geospatial_process():
     for key in (
         "OPENBLAS_NUM_THREADS",
         "OMP_NUM_THREADS",
@@ -453,12 +442,11 @@ def main():
         checked(libc.prctl(1, 9, 0, 0, 0), "parent death boundary")
         if os.getppid() != parent:
             os._exit(1)
-    context = Context(request)
-    working = Path(request["workingDirectory"]).resolve()
-    assert working.is_dir() and all(path.is_file() for path in context._inputs.values())
-    read_paths = runtime_paths() | {
-        str(path.resolve()) for path in context._inputs.values()
-    }
+
+
+def confine(read_paths, working):
+    import resource
+
     os.chdir(working)
     for item, maximum in [
         (resource.RLIMIT_CPU, CPU_SECONDS),
@@ -482,6 +470,26 @@ def main():
             raise IsolationUnavailable("脚本隔离前存在额外线程")
     finally:
         os.close(task_fd)
+
+
+def main():
+    if not probe()["available"]:
+        raise IsolationUnavailable(probe()["reason"])
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("request", type=Path)
+    args = parser.parse_args()
+    request = json.loads(args.request.read_text())
+    code = request["code"]
+    if not isinstance(code, str) or not 1 <= len(code) <= MAX_CODE_CHARACTERS:
+        raise ValueError("适配脚本长度无效")
+    prepare_geospatial_process()
+    context = Context(request)
+    working = Path(request["workingDirectory"]).resolve()
+    assert working.is_dir() and all(path.is_file() for path in context._inputs.values())
+    read_paths = runtime_paths() | {
+        str(path.resolve()) for path in context._inputs.values()
+    }
+    confine(read_paths, working)
     namespace = {"__name__": "data_preparation_script", "context": context}
     exec(compile(code, "<data-preparation-script>", "exec"), namespace)
     if not callable(namespace.get("run")):

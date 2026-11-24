@@ -7,6 +7,7 @@ from functools import lru_cache
 from django.conf import settings
 
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.db import OperationalError
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
@@ -127,7 +128,7 @@ def record(session, name, fingerprint, turn_id, call_id, pairs):
     )
 
 
-def execute(session, name, arguments, turn_id, call_id=""):
+def execute(session, name, arguments, turn_id, call_id="", *, approval_digest=None):
     scope = ProjectScope(
         (session.project_tag_id,), session.project_tag_id, session.owner_id
     )
@@ -150,7 +151,9 @@ def execute(session, name, arguments, turn_id, call_id=""):
         )
         reauthorize_transcript(session, user, current_policy)
         if name == "get_research_workflow":
-            return research.workflow_plan(arguments["versionId"])
+            return research.workflow_plan(
+                arguments.get("versionId"), arguments.get("name")
+            )
         if name == "list_business_flows":
             context = AgentRun(
                 owner=user, project_tag_id=session.project_tag_id, model=None
@@ -166,6 +169,7 @@ def execute(session, name, arguments, turn_id, call_id=""):
                 arguments,
                 turn_id=turn_id,
                 fingerprint=fingerprint,
+                approval_digest=approval_digest,
             )
             record(session, name, fingerprint, turn_id, call_id, [(None, result)])
             return result
@@ -173,7 +177,14 @@ def execute(session, name, arguments, turn_id, call_id=""):
 
         context = execution_context(session, user)
         result, pairs = _execute_authorized(
-            context, name, arguments, user, current_policy, None
+            context,
+            name,
+            arguments,
+            user,
+            current_policy,
+            None,
+            workflow_catalog=True,
+            apply_resource_budget=False,
         )
         record(session, name, fingerprint, turn_id, call_id, pairs)
         return result
@@ -185,7 +196,15 @@ def tool(request):
     try:
         require_tool_key(request)
         value = body(
-            request, {"session_id", "turn_id", "tool_call_id", "name", "arguments"}
+            request,
+            {
+                "session_id",
+                "turn_id",
+                "tool_call_id",
+                "name",
+                "arguments",
+                "approval_digest",
+            },
         )
         identity = session_identity(value.get("session_id"))
         name, arguments, turn_id = (
@@ -208,7 +227,16 @@ def tool(request):
         session = HermesSession._base_manager.filter(pk=identity).first()
         if session is None:
             raise PermissionDenied("Hermes 会话不可用")
-        return JsonResponse(execute(session, name, arguments, turn_id, call_id))
+        return JsonResponse(
+            execute(
+                session,
+                name,
+                arguments,
+                turn_id,
+                call_id,
+                approval_digest=value.get("approval_digest"),
+            )
+        )
     except PermissionDenied as exc:
         return JsonResponse({"error": str(exc)}, status=403)
     except ComputeError as exc:
@@ -224,6 +252,13 @@ def tool(request):
         else:
             detail = "Hermes 工具请求格式无效"
         return JsonResponse({"error": detail}, status=400)
+    except OperationalError as exc:
+        if any(reason in str(exc).casefold() for reason in ("locked", "busy")):
+            return JsonResponse(
+                {"error": "平台工具服务繁忙", "retryable": True}, status=503
+            )
+        logger.exception("Hermes platform tool storage failed")
+        return JsonResponse({"error": "平台工具暂不可用"}, status=500)
     except Exception:
         logger.exception("Hermes platform tool failed")
         return JsonResponse({"error": "平台工具暂不可用"}, status=500)

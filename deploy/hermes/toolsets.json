@@ -1,5 +1,10 @@
 {
-  "stisp_business_flows": ["list_business_flows", "get_research_workflow"],
+  "stisp_business_flows": [
+    "list_business_flows",
+    "get_research_workflow",
+    "list_research_geology_rules",
+    "prepare_research_geology_changes"
+  ],
   "stisp_project_data": [
     "search_resources",
     "summarize_resource_catalog",
@@ -18,6 +23,7 @@
     "submit_research_compute",
     "get_research_compute",
     "read_research_output",
-    "register_research_output"
+    "register_research_output",
+    "inspect_research_operator"
   ]
 }

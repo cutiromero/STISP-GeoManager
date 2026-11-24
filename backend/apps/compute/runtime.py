@@ -172,6 +172,13 @@ def script_isolation_status():
         return {"available": False, "reason": "受限脚本隔离未就绪", "policyVersion": 1}
 
 
+def require_copy_isolation():
+    if config().mode == "native":
+        state = script_isolation_status()
+        if not state["available"]:
+            raise ComputeError(state.get("reason") or "算子副本隔离环境暂不可用", 503)
+
+
 def inspect_runtime(manifest=None, project_id=None):
     if (manifest or {}).get("runtime") in {
         "python-geospatial-gpu-v1",
@@ -391,6 +398,9 @@ def _execute_native_process(
     for path in (status_path, temporary_status):
         path.unlink(missing_ok=True)
     pid_file = package.parent / ".runner.pid"
+    copied = bool(getattr(getattr(attempt, "task", None), "operator_copy", {}))
+    if copied:
+        require_copy_isolation()
     command = [
         cfg.interpreter,
         "-I",
@@ -401,6 +411,7 @@ def _execute_native_process(
         str(inputs.resolve()),
         "--output-dir",
         str(destination.resolve()),
+        *(["--isolate-copy"] if copied else []),
     ]
     flags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
     env = _native_env(cfg, package, inputs, destination)

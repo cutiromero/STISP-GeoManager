@@ -1235,7 +1235,17 @@ def execute(run, name, args, *, workflow_catalog=False):
         raise
 
 
-def _execute_authorized(run, name, args, user, p, call, workflow_catalog=False):
+def _execute_authorized(
+    run,
+    name,
+    args,
+    user,
+    p,
+    call,
+    workflow_catalog=False,
+    *,
+    apply_resource_budget=True,
+):
     from .selections import (
         KNOWLEDGE_TOOLS,
         algorithm_ids,
@@ -1494,7 +1504,8 @@ def _execute_authorized(run, name, args, user, p, call, workflow_catalog=False):
         and ev.get("resourceId") is not None
     }
     if (
-        p["maxResources"] > 0
+        apply_resource_budget
+        and p["maxResources"] > 0
         and resource.id not in touched
         and len(touched) >= p["maxResources"]
     ):

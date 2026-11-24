@@ -1,16 +1,20 @@
 {
   "get_research_workflow": {
     "version": 1,
-    "description": "读取已发布科研业务流的任务目标、建议步骤、可用资料角色、候选算子和交付方向。用返回的路径建立 Hermes 任务清单。",
+    "description": "按名称、代码或版本编号读取已发布科研业务流的行动建议、资料用途、算子和交付方向。",
     "inputSchema": {
       "type": "object",
       "properties": {
         "versionId": {
           "type": "integer",
           "minimum": 1
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 120,
+          "description": "已发布业务流的名称或代码"
         }
       },
-      "required": ["versionId"],
       "additionalProperties": false
     }
   },
@@ -40,6 +44,42 @@
         "fieldMappings": {
           "type": "object",
           "additionalProperties": true
+        },
+        "retryOf": {
+          "type": "string",
+          "format": "uuid",
+          "description": "本会话中需要继续适配的任务编号"
+        },
+        "operatorEdits": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "properties": {
+              "file": {
+                "type": "string",
+                "maxLength": 240
+              },
+              "before": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 6000
+              },
+              "after": {
+                "type": "string",
+                "maxLength": 12000
+              }
+            },
+            "required": ["file", "before", "after"],
+            "additionalProperties": false
+          },
+          "description": "把发布包 Python 文件中唯一匹配的 before 文本替换为 after，生成此次执行副本"
+        },
+        "reuseOperatorCopyFrom": {
+          "type": "string",
+          "format": "uuid",
+          "description": "复用本会话另一任务的 Python 修改，按所选发布包重新匹配该修改"
         }
       },
       "required": ["versionId", "name", "inputs"],
@@ -55,6 +95,12 @@
         "taskId": {
           "type": "string",
           "format": "uuid"
+        },
+        "waitSeconds": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10,
+          "description": "等待计算到达终态的最长秒数"
         }
       },
       "required": ["taskId"],
@@ -79,6 +125,11 @@
           "type": "integer",
           "minimum": 1,
           "maximum": 50
+        },
+        "taskId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "所选成果对应的计算任务编号"
         }
       },
       "required": ["outputId"],
@@ -98,6 +149,11 @@
         "name": {
           "type": "string",
           "maxLength": 160
+        },
+        "taskId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "所选成果对应的计算任务编号"
         }
       },
       "required": ["outputId"],
@@ -121,5 +177,91 @@
   },
   "get_platform_link": {
     "description": "创建当前项目的地图、数据资源、计算中心、知识库或业务流入口。"
+  },
+  "inspect_research_operator": {
+    "version": 1,
+    "description": "按算子代码或版本读取发布清单，也可按本会话 taskId 查看实际执行的副本。指定文件和行偏移可继续查阅源码。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "versionId": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "file": {
+          "type": "string",
+          "maxLength": 240
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "源码起始行偏移，从零开始"
+        },
+        "identifier": {
+          "type": "string",
+          "maxLength": 120,
+          "description": "平台登记的算子代码"
+        },
+        "taskId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "本会话的计算任务，优先读取该次实际执行的代码"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "list_research_geology_rules": {
+    "version": 1,
+    "description": "列出当前项目已登记的地质规则表，供逻辑推理算子的 rules 输入选择。结合研究区、版本和知识来源选用。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  },
+  "prepare_research_geology_changes": {
+    "version": 1,
+    "description": "根据实际问题编号选择地质工作副本的处置，向用户发出一次确认。获得确认后返回供已发布处置算子使用的 approved_changes 资料编号。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "checkTaskId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "actions": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 30,
+          "items": {
+            "type": "object",
+            "properties": {
+              "issueId": {
+                "type": "string",
+                "maxLength": 100
+              },
+              "action": {
+                "type": "string",
+                "maxLength": 32
+              },
+              "weight": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "reason": {
+                "type": "string",
+                "maxLength": 160
+              }
+            },
+            "required": ["issueId", "action"],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": ["checkTaskId", "actions"],
+      "additionalProperties": false
+    }
   }
 }

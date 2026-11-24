@@ -9,6 +9,7 @@ from pathlib import Path
 import re
 import sys
 import time
+import traceback
 
 
 def failure_details(error):
@@ -92,6 +93,7 @@ def main():
     parser.add_argument(
         "--output-dir", default=os.environ.get("GEOMANAGER_OUTPUT_DIR", "/output")
     )
+    parser.add_argument("--isolate-copy", action="store_true")
     options, _ = parser.parse_known_args()
     algorithm_dir = Path(options.algorithm_dir)
     input_dir = Path(options.input_dir)
@@ -107,13 +109,27 @@ def main():
             contextlib.redirect_stdout(null),
             contextlib.redirect_stderr(null),
         ):
+            if options.isolate_copy:
+                from script_sandbox import (
+                    confine,
+                    prepare_geospatial_process,
+                    runtime_paths,
+                )
+
+                prepare_geospatial_process()
+                from operator_sdk import bound_context
+
+                confine(
+                    runtime_paths() | {str(algorithm_dir), str(input_dir)}, output_dir
+                )
+            else:
+                from operator_sdk import bound_context
+
             spec = importlib.util.spec_from_file_location(
                 "operator_main", algorithm_dir / "main.py"
             )
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
-            from operator_sdk import bound_context
-
             with bound_context(
                 Context(request, input_dir, output_dir), request.get("manifest", {})
             ) as context:
@@ -121,6 +137,20 @@ def main():
         status = "succeeded"
     except BaseException as error:
         failure = failure_details(error)
+        current = error
+        for _ in range(8):
+            for frame in reversed(traceback.extract_tb(current.__traceback__)):
+                path = Path(frame.filename)
+                if path.is_relative_to(algorithm_dir):
+                    failure["sourceLocation"] = {
+                        "file": path.relative_to(algorithm_dir).as_posix(),
+                        "line": frame.lineno,
+                        "type": failure_details(current)["error_type"],
+                    }
+                    break
+            current = current.__cause__ or current.__context__
+            if current is None:
+                break
         report = output_dir / "__operator_error.json"
         if report.exists():
             try:

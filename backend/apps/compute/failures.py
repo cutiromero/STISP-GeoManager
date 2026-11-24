@@ -103,6 +103,18 @@ def status_failure(status, manifest, message):
             if status.get("error_category") == "timeout"
             else "PLATFORM_CRASH"
         )
+    location = status.get("sourceLocation")
+    if (
+        isinstance(location, dict)
+        and isinstance(location.get("file"), str)
+        and re.fullmatch(r"[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*\.py", location["file"])
+        and len(location["file"]) <= 240
+        and type(location.get("line")) is int
+        and 1 <= location["line"] <= 200000
+        and isinstance(location.get("type"), str)
+        and re.fullmatch(r"[A-Za-z_][A-Za-z_0-9]{0,63}", location["type"])
+    ):
+        failure["details"] = {**failure["details"], "sourceLocation": location}
     return ComputeError(
         failure["message"] if raw is not None else message, failure=failure
     )

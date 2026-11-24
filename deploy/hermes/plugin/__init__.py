@@ -5,6 +5,7 @@ from http.client import HTTPConnection, HTTPException
 import json
 import os
 from pathlib import Path
+from time import sleep
 
 from agent.redact import _PREFIX_RE
 from gateway.session_context import get_session_env
@@ -56,7 +57,7 @@ def authorize_native_tool(tool_name, args=None, session_id=None, turn_id=None, *
     return None
 
 
-def platform_call(name, arguments, session_id, *, turn_id):
+def platform_call(name, arguments, session_id, *, turn_id, approval_digest=None):
     session_id = get_session_env("HERMES_SESSION_CHAT_ID") or session_id
     connection = HTTPConnection(
         "127.0.0.1", int(os.environ["STISP_HERMES_BACKEND_PORT"]), timeout=20
@@ -72,6 +73,7 @@ def platform_call(name, arguments, session_id, *, turn_id):
                     "session_id": session_id,
                     "turn_id": turn_id or _approval_turn_id.get(),
                     "tool_call_id": _approval_tool_call_id.get(),
+                    **({"approval_digest": approval_digest} if approval_digest else {}),
                 },
                 ensure_ascii=False,
             ).encode(),
@@ -90,14 +92,30 @@ def platform_call(name, arguments, session_id, *, turn_id):
         pass
     finally:
         connection.close()
-    return {"error": "平台工具服务暂不可用"}
+    return {"error": "平台工具服务暂不可用", "retryable": True}
 
 
 def call(name, arguments, *, session_id=None, turn_id=None, **_):
-    return json.dumps(
-        platform_call(name, arguments, session_id, turn_id=turn_id),
-        ensure_ascii=False,
-    )
+    result = platform_call(name, arguments, session_id, turn_id=turn_id)
+    if name == "prepare_research_geology_changes" and result.get("approvalDigest"):
+        from tools.approval import request_tool_approval
+
+        digest = result["approvalDigest"]
+        approval = request_tool_approval(
+            name, result["approvalSummary"], rule_key=digest
+        )
+        if approval.get("approved"):
+            for delay in (0, 0.2, 0.5):
+                if delay:
+                    sleep(delay)
+                result = platform_call(
+                    name, arguments, session_id, turn_id=turn_id, approval_digest=digest
+                )
+                if not result.get("retryable"):
+                    break
+        else:
+            result = {"status": "declined", "message": "继续使用当前地质资料"}
+    return json.dumps(result, ensure_ascii=False)
 
 
 def register(ctx):

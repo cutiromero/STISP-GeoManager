@@ -127,11 +127,16 @@ def run_task(task):
         manifest = inspect_package(archive, package)
         if manifest != task.version.manifest:
             raise ComputeError("算法包与固定清单不一致")
+        if task.operator_copy:
+            from .operator_copies import materialize
+
+            materialize(task.operator_copy, task.version, package)
         context = {
             "inputs": {},
             "parameters": task.parameters,
             "fieldMappings": task.field_mappings,
             "inputCollections": task.input_collections,
+            **({"operatorCopy": True} if task.operator_copy else {}),
         }
         if (
             manifest.get("runtime") == "python-data-script-v1"

@@ -19,7 +19,14 @@ from .resource_discovery import discovery_scope
 
 @discovery_scope()
 def authorized_task(
-    user, task_id, policy_value, *, run=None, workflow=None, history=False
+    user,
+    task_id,
+    policy_value,
+    *,
+    run=None,
+    workflow=None,
+    history=False,
+    resolve_input=None,
 ):
     from .resource_discovery import resolve_acl_resource, resolve_discoverable_resource
     from .deleted_resources import TERMINAL, readable_receipt
@@ -87,7 +94,9 @@ def authorized_task(
             ):
                 continue
             raise PermissionDenied("计算输入已删除，请重新选择数据后发起计算")
-        if history:
+        if resolve_input is not None:
+            resolve_input(task, item)
+        elif history:
             resolve_acl_resource(user, policy_value, item.resource_id, active=False)
         elif workflow is not None:
             from .workflow_resources import resolve_workflow_resource

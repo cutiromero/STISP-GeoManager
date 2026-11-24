@@ -485,8 +485,22 @@ def validate_submission(user, body):
     }
 
 
-def submit(user, body, retry_of=None, *, preflight_digest=None):
+def submit(user, body, retry_of=None, *, preflight_digest=None, operator_copy=None):
     data = validate_submission(user, body)
+    if operator_copy:
+        require_actor(user, project_id(), "download_algorithm")
+        from .runtime import require_copy_isolation
+
+        require_copy_isolation()
+        copy_identity = json.dumps(
+            [
+                data["digest"],
+                operator_copy["files"],
+                str(retry_of.pk) if retry_of else None,
+            ],
+            sort_keys=True,
+        )
+        data["digest"] = hashlib.sha256(copy_identity.encode()).hexdigest()
     if preflight_digest is not None and data["digest"] != preflight_digest:
         from .packages import PreflightRequired
 
@@ -552,6 +566,7 @@ def submit(user, body, retry_of=None, *, preflight_digest=None):
             retry_of=retry_of,
             field_mappings=data["field_mappings"],
             input_collections=data["input_collections"],
+            operator_copy=operator_copy or {},
         )
         observation_periods = {}
         if version.algorithm.identifier in {"spartina-rf-infer", "wildfire-observe"}:
@@ -608,6 +623,8 @@ def check_live_task(task):
         raise ComputeError("算法或版本已停用，计算已停止")
     if task.trial:
         require_actor(user, task.project_tag_id, "manage_algorithms")
+    if task.operator_copy:
+        require_actor(user, task.project_tag_id, "download_algorithm")
     for record in task.input_records.select_related("resource"):
         if (
             record.resource is None
@@ -655,6 +672,7 @@ def task_action(task, user, action):
                 "idempotencyKey": uuid.uuid4().hex,
             },
             retry_of=task,
+            operator_copy=task.operator_copy,
         )
     else:
         raise ComputeError("不支持该任务操作")
