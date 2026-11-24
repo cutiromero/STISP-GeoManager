@@ -38,6 +38,22 @@ def service_config(project):
     return value
 
 
+def reasoning_efforts(project):
+    config = service_config(project) or {}
+    model = config.get("model", "").casefold().rsplit("/", 1)[-1]
+    if model == "qwen3.8-27b":
+        return ("none", "low", "medium", "xhigh")
+    return ()
+
+
+def gateway_command(runtime, launcher):
+    executable = Path(runtime)
+    interpreter = executable.with_name("python")
+    if interpreter.is_file():
+        return [str(interpreter), str(launcher), "gateway", "run"]
+    return [runtime, "gateway", "run"]
+
+
 def service_root(project):
     return project.app_path("config", PROFILE_DIRECTORY)
 
@@ -153,7 +169,9 @@ def prepare(project, configuration):
 
 def supervise(stop, configuration):
     project = settings.PROJECT_CONFIG
-    command = [configuration["runtime"], "gateway", "run"]
+    command = gateway_command(
+        configuration["runtime"], settings.PROGRAM_ROOT / "deploy/hermes/web_gateway.py"
+    )
     while not stop.is_set():
         try:
             profile, environment = prepare(project, configuration)

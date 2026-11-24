@@ -133,14 +133,12 @@ def execute(session, name, arguments, turn_id, call_id=""):
     )
     with project_scope(scope):
         user = fresh_user(session.owner_id)
-        current_policy = require_access(user, "agent")
+        current_policy = require_access(user, session.mode)
         if name == WEB_ACCESS_CHECK:
-            if (
-                session.mode != "agent"
-                or not session.internet_enabled
-                or not current_policy.get("internetEnabled", False)
+            if not session.internet_enabled or not current_policy.get(
+                "internetEnabled", False
             ):
-                raise PermissionDenied("请先在科研智能体输入栏开启联网检索")
+                raise PermissionDenied("请在会话输入栏开启联网检索")
             return {"allowed": True}
         if session.mode != "agent" or not research.tool_allowed(
             name, user, current_policy

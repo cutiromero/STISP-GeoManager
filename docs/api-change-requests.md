@@ -1,5 +1,18 @@
 # API Change Requests
 
+## API-20261125-001 - 新版智能体对话进展
+
+- Status: BackendReady
+- Owner: codex/xintao。
+- Endpoints: GET /api/agent/hermes/v1/capabilities；GET /api/agent/hermes/api/sessions/{sessionId}/messages；POST /api/agent/hermes/v1/runs；GET /api/agent/hermes/v1/runs/{runId}/events。
+- Change type: 推理选项、会话消息与流事件。
+- OpenAPI change: 运行接收 `reasoning_effort`，能力返回可用档位；历史提供时间、推理与工具字段，支持近期活动读取。
+- Mock examples: Hermes 浏览器用例覆盖连续动作、推理与证据链接。
+- Frontend reason: 在同一轮中展示实时进展、工具和来源。
+- Backend implementation notes: Hermes 传输适配器将推理和阶段消息发布至运行流。联网权限由会话和平台策略共同提供。
+- Verification: 运行参数、会话授权、活动顺序及历史回放。
+- Result: 新版会话工作区。
+
 ## API-20261124-001 - 科研业务流资料选择
 
 - Status: BackendReady
@@ -977,6 +990,7 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| API-20261125-001 | BackendReady | 新版智能体对话进展与推理档位 |
 | API-20261124-001 | BackendReady | 科研业务流资料目录用途 |
 | API-20261122-002 | BackendReady | Hermes 会话的公开网页检索 |
 | API-20261122-001 | BackendReady | Hermes 网页会话、工具发现与 SSE |

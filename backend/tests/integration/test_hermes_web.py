@@ -27,6 +27,10 @@ def test_admission_uses_native_run_and_session_ownership(
     env = setup_agent
     settings.HERMES_WEB_ENABLED = True
     monkeypatch.setenv("STISP_HERMES_GATEWAY_KEY", "gateway-test")
+    monkeypatch.setattr(
+        "apps.agent.hermes_views.reasoning_efforts",
+        lambda _: ("none", "low", "medium", "xhigh"),
+    )
     calls = []
     session_id = ""
 
@@ -51,10 +55,26 @@ def test_admission_uses_native_run_and_session_ownership(
     )
     assert response.status_code == 201
     assert response.json()["session"]["id"] == session_id
+    assert client.get(BASE + "/v1/capabilities", **project).json()[
+        "reasoning_efforts"
+    ] == ["none", "low", "medium", "xhigh"]
+    calls.pop()
+    invalid = client.post(
+        BASE + "/v1/runs",
+        {"input": "请检查资料", "session_id": session_id, "reasoning_effort": "high"},
+        content_type="application/json",
+        HTTP_IDEMPOTENCY_KEY="test-unsupported",
+        **project,
+    )
+    assert invalid.status_code == 400
     for replayed in (False, True):
         response = client.post(
             BASE + "/v1/runs",
-            {"input": "请检查资料", "session_id": session_id},
+            {
+                "input": "请检查资料",
+                "session_id": session_id,
+                "reasoning_effort": "low",
+            },
             content_type="application/json",
             HTTP_IDEMPOTENCY_KEY="test-request",
             **project,
@@ -64,8 +84,16 @@ def test_admission_uses_native_run_and_session_ownership(
     first, second = calls[1][2], calls[2][2]
     assert first == second
     assert first["payload"]["session_id"] == session_id
+    assert first["payload"]["model_options"] == {"reasoning_effort": "low"}
     assert first["headers"]["Idempotency-Key"] != "test-request"
     assert client.get(BASE + f"/v1/runs/{RUN}", **project).status_code == 200
+    assert (
+        client.get(
+            BASE + f"/api/sessions/{session_id}/messages?latest=true", **project
+        ).status_code
+        == 200
+    )
+    assert calls[-1][1].endswith("order=latest&limit=100")
     client.force_login(env["admin"])
     assert client.get(BASE + f"/v1/runs/{RUN}", **project).status_code == 404
     assert (
@@ -284,10 +312,12 @@ def test_hermes_compute_retries_and_reads_real_output(
         reauthorize_transcript(session, owner, policy())
 
 
+@pytest.mark.parametrize("mode", ["agent", "chat"])
 def test_web_tools_require_session_opt_in_and_live_project_access(
     setup_agent,  # noqa: F811
     monkeypatch,
     settings,
+    mode,
 ):
     env = setup_agent
     settings.HERMES_WEB_ENABLED = True
@@ -299,7 +329,7 @@ def test_web_tools_require_session_opt_in_and_live_project_access(
 
     start = client.post(
         BASE + "/api/sessions",
-        {"mode": "agent", "internet_enabled": True},
+        {"mode": mode, "internet_enabled": True},
         content_type="application/json",
         **browser,
     )
@@ -307,7 +337,7 @@ def test_web_tools_require_session_opt_in_and_live_project_access(
     enable = AgentPolicy.objects.create(pk=1, value={"internetEnabled": True})
     start = client.post(
         BASE + "/api/sessions",
-        {"mode": "agent"},
+        {"mode": mode},
         content_type="application/json",
         **browser,
     )

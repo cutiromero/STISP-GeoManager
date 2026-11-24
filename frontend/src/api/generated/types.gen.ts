@@ -6,11 +6,14 @@ export type ClientOptions = {
 
 export type HermesCapabilities = {
     /**
-     * 当前账号具备科研智能体权限且平台策略允许会话开启联网。
+     * 当前平台策略允许在会话开启联网。
      */
     public_web_enabled?: boolean;
+    reasoning_efforts?: Array<HermesReasoningEffort>;
     [key: string]: unknown;
 };
+
+export type HermesReasoningEffort = 'none' | 'low' | 'medium' | 'xhigh';
 
 export type HermesSkill = {
     name: string;
@@ -74,6 +77,13 @@ export type HermesMessage = {
     content: unknown;
     tool_name?: string;
     display_kind?: string;
+    timestamp?: number;
+    finish_reason?: string | null;
+    reasoning?: string | null;
+    reasoning_content?: string | null;
+    tool_calls?: Array<{
+        [key: string]: unknown;
+    }> | null;
 };
 
 export type HermesMessageList = {
@@ -83,6 +93,7 @@ export type HermesMessageList = {
 export type HermesRunCreate = {
     session_id: string;
     input: string;
+    reasoning_effort?: HermesReasoningEffort;
 };
 
 export type HermesRunAdmission = {
@@ -97,6 +108,7 @@ export type HermesRunStatus = {
     session_id: string;
     output?: string;
     error?: string;
+    created_at?: number;
     pending_controls?: Array<{
         [key: string]: unknown;
     }>;
@@ -25154,7 +25166,12 @@ export type ListHermesMessagesData = {
          */
         sessionId: string;
     };
-    query?: never;
+    query?: {
+        /**
+         * 获取当前会话的近期活动。
+         */
+        latest?: boolean;
+    };
     url: '/api/agent/hermes/api/sessions/{sessionId}/messages';
 };
 

@@ -1,6 +1,7 @@
 import { Fragment, memo, type ReactNode } from "react";
 import SafeMath from "./SafeMath";
 
+type CitationRenderer = (ids: number[], label: string) => ReactNode;
 type WikiLinkRenderer = (target: string, label: string) => ReactNode;
 const httpLinks =
   /(?<!!)\[(?<label>[^\]\n]+)\]\((?<target>https?:\/\/[^()\s<>]+)\)|(?<bare>https?:\/\/[^\s<>()[\]]+)/
@@ -24,15 +25,20 @@ function inline(
   wikiLink?: WikiLinkRenderer,
   math = false,
   links = false,
+  renderCitation?: CitationRenderer,
 ): ReactNode[] {
   const output: ReactNode[] = [];
   let cursor = 0;
   const pattern = math
     ? /\\[\\`*_[\]()|$]|\[\[([^\]\n|]+)(?:\|([^\]\n]+))?\]\]|\*\*((?:\\.|[^*\\])+)\*\*|`([^`]+)`|(?<!\\)\$(?!\$)((?:\\.|[^$\\\n])+)\$(?!\$)/g
     : /\\[\\`*_[\]()|$]|\[\[([^\]\n|]+)(?:\|([^\]\n]+))?\]\]|\*\*((?:\\.|[^*\\])+)\*\*|`([^`]+)`/g;
-  const tokens = links
-    ? new RegExp(`${pattern.source}|${httpLinks}`, "g")
-    : pattern;
+  const alternatives = [pattern.source];
+  if (links) alternatives.push(httpLinks);
+  if (renderCitation)
+    alternatives.push(
+      /\[\s*证据\s*(?<references>\d+(?:\s*[,，、;；]\s*\d+)*)\s*\]/.source,
+    );
+  const tokens = new RegExp(alternatives.join("|"), "g");
   for (const match of text.matchAll(tokens)) {
     output.push(textContent(text.slice(cursor, match.index)));
     const link = match.groups?.target || match.groups?.bare;
@@ -43,6 +49,13 @@ function inline(
           value={link}
           label={match.groups?.label}
         />
+      ) : match.groups?.references && renderCitation ? (
+        <Fragment key={`r${match.index}`}>
+          {renderCitation(
+            match.groups.references.split(/[,，、;；]/).map(Number),
+            match[0],
+          )}
+        </Fragment>
       ) : match[0].startsWith("\\") ? (
         match[0].slice(1)
       ) : match[1] ? (
@@ -51,7 +64,7 @@ function inline(
         </Fragment>
       ) : match[3] ? (
         <strong key={`s${match.index}`}>
-          {inline(match[3], wikiLink, math, links)}
+          {inline(match[3], wikiLink, math, links, renderCitation)}
         </strong>
       ) : match[4] ? (
         <code key={`c${match.index}`}>{match[4]}</code>
@@ -95,11 +108,13 @@ function SafeMarkdown({
   wikiLink,
   math = false,
   links = false,
+  renderCitation,
 }: {
   text: string;
   wikiLink?: WikiLinkRenderer;
   math?: boolean;
   links?: boolean;
+  renderCitation?: CitationRenderer;
 }) {
   const lines = text.split("\n");
   const result: ReactNode[] = [];
@@ -173,9 +188,13 @@ function SafeMarkdown({
           const cellKey = `cell-${cellOffset}`;
           cellOffset += cell.length + 1;
           return tag === "th" ? (
-            <th key={cellKey}>{inline(cell, wikiLink, math, links)}</th>
+            <th key={cellKey}>
+              {inline(cell, wikiLink, math, links, renderCitation)}
+            </th>
           ) : (
-            <td key={cellKey}>{inline(cell, wikiLink, math, links)}</td>
+            <td key={cellKey}>
+              {inline(cell, wikiLink, math, links, renderCitation)}
+            </td>
           );
         });
       };
@@ -209,6 +228,7 @@ function SafeMarkdown({
                 wikiLink,
                 math,
                 links,
+                renderCitation,
               )}
             </li>
           ))}
@@ -221,7 +241,9 @@ function SafeMarkdown({
         </h3>,
       );
     } else if (line.trim()) {
-      result.push(<p key={key}>{inline(line, wikiLink, math, links)}</p>);
+      result.push(
+        <p key={key}>{inline(line, wikiLink, math, links, renderCitation)}</p>,
+      );
     }
   }
   return <div className="agent-markdown">{result}</div>;

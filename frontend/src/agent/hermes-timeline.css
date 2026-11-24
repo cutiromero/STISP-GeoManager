@@ -1,0 +1,128 @@
+.hermes-progress {
+  margin: 0.45rem 0 0.9rem;
+  color: var(--agent-muted, #626a73);
+}
+
+.hermes-progress-toggle,
+.hermes-tools > summary,
+.hermes-reasoning > summary {
+  display: flex;
+  align-items: baseline;
+  gap: 0.55rem;
+  padding: 0.25rem 0;
+  color: inherit;
+  text-align: start;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.94em;
+  list-style: none;
+}
+
+.hermes-progress-toggle {
+  background: none;
+  border: 0;
+}
+
+.hermes-tools > summary::-webkit-details-marker,
+.hermes-reasoning > summary::-webkit-details-marker {
+  display: none;
+}
+
+.hermes-disclosure {
+  font-size: 0.72em;
+}
+
+.hermes-progress-toggle[aria-expanded="true"] .hermes-disclosure,
+.hermes-tools[open] .hermes-disclosure,
+.hermes-reasoning[open] .hermes-disclosure {
+  transform: rotate(180deg);
+}
+
+.hermes-progress-steps {
+  display: grid;
+  gap: 0.42rem;
+  margin-block-start: 0.4rem;
+}
+
+.hermes-commentary {
+  color: var(--agent-text, #303c46);
+}
+
+.hermes-commentary .agent-markdown > :first-child {
+  margin-block-start: 0;
+}
+
+.hermes-commentary .agent-markdown > :last-child {
+  margin-block-end: 0.3rem;
+}
+
+.hermes-tools ul,
+.hermes-reasoning-content {
+  margin: 0.35rem 0 0.6rem 0.45rem;
+  padding-inline-start: 0.85rem;
+  border-inline-start: 1px solid var(--agent-border, #dedfdf);
+}
+
+.hermes-tools ul {
+  list-style: none;
+}
+
+.hermes-tools li {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.65rem;
+  margin-block: 0.25rem;
+  font-size: 0.9em;
+}
+
+.hermes-tools li code {
+  overflow-wrap: anywhere;
+}
+
+.hermes-tool-error {
+  color: #a44e22;
+}
+
+.hermes-reasoning-content {
+  overflow-wrap: anywhere;
+  font-size: 0.95em;
+}
+
+.hermes-citation {
+  display: inline-block;
+  padding-inline: 0.25em;
+  border-radius: 0.28em;
+  background: #eaf0f4;
+  color: #2e5a71;
+  font-size: 0.85em;
+  line-height: 1.45;
+  text-decoration: none;
+}
+
+.hermes-citation:hover,
+.hermes-citation:focus-visible {
+  text-decoration: underline;
+}
+
+.hermes-citations {
+  display: grid;
+  gap: 0.7rem;
+  max-width: min(360px, 74vw);
+  max-height: 45vh;
+  overflow: auto;
+}
+
+.hermes-citations small,
+.hermes-citations p {
+  display: block;
+  margin: 0.2rem 0 0;
+  overflow-wrap: anywhere;
+}
+
+.hermes-result-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  margin-block-start: 0.65rem;
+}

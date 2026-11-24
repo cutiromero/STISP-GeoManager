@@ -144,7 +144,11 @@ def main():
         "STISP_HERMES_TOOLSETS": str(ROOT / "deploy/hermes/toolsets.json"),
     }
     os.chdir(tempfile.gettempdir())
-    os.execve(executable, [str(executable), "gateway", "run"], environment)
+    interpreter = executable.with_name("python")
+    launcher = ROOT / "deploy/hermes/web_gateway.py"
+    os.execve(
+        interpreter, [str(interpreter), str(launcher), "gateway", "run"], environment
+    )
 
 
 if __name__ == "__main__":

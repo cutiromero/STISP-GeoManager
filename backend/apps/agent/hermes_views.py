@@ -6,6 +6,7 @@ import re
 from time import monotonic
 from urllib.parse import urlencode
 
+from django.conf import settings
 from django.core.exceptions import PermissionDenied
 from django.http import HttpResponse, JsonResponse, StreamingHttpResponse
 from django.utils import timezone
@@ -13,6 +14,7 @@ from django.utils import timezone
 from apps.projects.context import project_scope
 from . import hermes_gateway as gateway
 from .hermes_research import tool_allowed
+from .hermes_service import reasoning_efforts
 from .hermes_tools import TOOLS, project_tools, reauthorize_transcript
 from .models import HermesSession
 from .policy import allowed, policy, require_access
@@ -107,9 +109,8 @@ def capabilities(request):
     modes, permissions = _require_any(request.user)
     result = gateway.request("GET", "/v1/capabilities")
     result["session_modes"] = modes
-    result["public_web_enabled"] = "agent" in modes and permissions.get(
-        "internetEnabled", False
-    )
+    result["public_web_enabled"] = permissions.get("internetEnabled", False)
+    result["reasoning_efforts"] = reasoning_efforts(settings.PROJECT_CONFIG)
     result["auth"] = {"type": "session", "required": True}
     result["endpoints"] = {
         name: {**route, "path": WEB_PREFIX + route["path"]}
@@ -133,7 +134,7 @@ def discovery(request, kind):
     result = gateway.request("GET", f"/v1/{kind}")
     if kind == "toolsets":
         platform_tools = TOOLS | project_tools()
-        web_allowed = "agent" in modes and permissions.get("internetEnabled", False)
+        web_allowed = permissions.get("internetEnabled", False)
         for toolset in result.get("data", []):
             if toolset["name"] == "web" and not web_allowed:
                 toolset["enabled"] = False
@@ -195,9 +196,7 @@ def sessions(request):
 def _web_preference(user, mode, value):
     if type(value) is not bool:
         raise ApiProblem("联网设置须为布尔值")
-    if value and (
-        mode != "agent" or not require_access(user, mode).get("internetEnabled", False)
-    ):
+    if value and not require_access(user, mode).get("internetEnabled", False):
         raise PermissionDenied("当前会话不可开启联网检索")
     return value
 
@@ -236,7 +235,10 @@ def session_detail(request, session_id):
 def messages(request, session_id):
     session = _session(request.user, session_id)
     reauthorize_transcript(session, request.user, policy())
-    query = urlencode({"inline_images": "false", "include_compacted": "true"})
+    params = {"inline_images": "false", "include_compacted": "true"}
+    if request.GET.get("latest") == "true":
+        params.update({"order": "latest", "limit": "100"})
+    query = urlencode(params)
     return JsonResponse(
         gateway.request("GET", f"/api/sessions/{session_id}/messages?{query}")
     )
@@ -244,7 +246,7 @@ def messages(request, session_id):
 
 @browser(["POST"])
 def runs(request):
-    value = body(request, {"input", "session_id"})
+    value = body(request, {"input", "session_id", "reasoning_effort"})
     session_id = value.get("session_id")
     session = _session(request.user, session_id)
     reauthorize_transcript(session, request.user, policy())
@@ -254,6 +256,9 @@ def runs(request):
     key = request.headers.get("Idempotency-Key", "")
     if not re.fullmatch(r"[!-~]{1,255}", key):
         raise ApiProblem("请输入有效的 Idempotency-Key")
+    effort = value.get("reasoning_effort")
+    if effort is not None and effort not in reasoning_efforts(settings.PROJECT_CONFIG):
+        raise ApiProblem("请选择当前模型支持的思考强度")
     upstream_key = hashlib.sha256(f"{session_id}:{key}".encode()).hexdigest()
     result = gateway.request(
         "POST",
@@ -261,6 +266,7 @@ def runs(request):
         payload={
             "input": prompt,
             "session_id": session_id,
+            **({"model_options": {"reasoning_effort": effort}} if effort else {}),
             **({"instructions": RESEARCH_CONTEXT} if session.mode == "agent" else {}),
         },
         headers={"Idempotency-Key": upstream_key},

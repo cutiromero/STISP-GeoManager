@@ -2,6 +2,8 @@ import {
   ApiOutlined,
   ArrowDownOutlined,
   CloseOutlined,
+  CompassOutlined,
+  DownOutlined,
   DeleteOutlined,
   GlobalOutlined,
   HistoryOutlined,
@@ -15,18 +17,26 @@ import {
   Alert,
   Button,
   Card,
-  Collapse,
   Flex,
   Input,
   Popconfirm,
   Popover,
   Segmented,
+  Dropdown,
+  Tooltip,
   Space,
   Spin,
   Tag,
   Typography,
 } from "antd";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  Fragment,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ApiError, requestEventStream, requestJson } from "../api/client";
 import type {
@@ -34,6 +44,7 @@ import type {
   HermesMessage as Message,
   HermesMessageList,
   HermesRunAdmission,
+  HermesRunCreate,
   HermesRunStatus,
   HermesSession as Session,
   HermesSessionEnvelope,
@@ -51,7 +62,21 @@ import AgentWorkspaceLayout, {
   AgentComposerFrame,
   conversationTime,
 } from "./AgentWorkspaceLayout";
-import SafeMarkdown from "./SafeMarkdown";
+import {
+  emptyConversation,
+  groupConversation,
+  object as record,
+  savedConversation,
+  toolPayload,
+  updateConversation,
+} from "./hermesConversation";
+import {
+  HermesAnswer,
+  HermesProgress,
+  HermesResultLinks,
+  readCitations,
+  type Citations,
+} from "./HermesTimeline";
 import useAgentLayout from "./useAgentLayout";
 import WorkflowDataPicker, {
   type WorkflowDataSelection,
@@ -67,7 +92,7 @@ const terminalStatuses = new Set([
 ]);
 
 type Mode = "agent" | "chat";
-type Progress = { id: string; name: string; status: string };
+type HermesEffort = NonNullable<HermesRunCreate["reasoning_effort"]>;
 type Control = {
   kind: "clarify" | "approval";
   request_id: string;
@@ -75,12 +100,6 @@ type Control = {
   question: string;
   choices: string[];
 };
-
-function record(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object"
-    ? (value as Record<string, unknown>)
-    : {};
-}
 
 type ResearchWorkflow = {
   versionId: number;
@@ -106,16 +125,8 @@ function selectedWorkflow(
     return { versionId: value.versionId, title: value.title, goal: value.goal };
 }
 
-function toolContent(value: unknown) {
-  try {
-    return record(typeof value === "string" ? JSON.parse(value) : value);
-  } catch {
-    return {};
-  }
-}
-
 function todoPlan(value: unknown): TodoPlan | undefined {
-  const content = toolContent(value);
+  const content = toolPayload(value);
   if (!Array.isArray(content.todos) || typeof content.revision !== "number")
     return;
   const todos = content.todos.filter(
@@ -280,6 +291,7 @@ function AgentRoute({ mode }: { mode: Mode }) {
   const [error, setError] = useState("");
   const [activeMode, setActiveMode] = useState(mode);
   const [publicWebAvailable, setPublicWebAvailable] = useState(false);
+  const [reasoningEfforts, setReasoningEfforts] = useState<HermesEffort[]>([]);
   useEffect(() => {
     const controller = new AbortController();
     requestJson<HermesCapabilities>(`${api}/v1/capabilities`, {
@@ -287,6 +299,7 @@ function AgentRoute({ mode }: { mode: Mode }) {
     })
       .then((caps) => {
         setPublicWebAvailable(caps.public_web_enabled === true);
+        setReasoningEfforts(caps.reasoning_efforts ?? []);
         if (
           mode === "agent" &&
           Array.isArray(caps.session_modes) &&
@@ -318,7 +331,8 @@ function AgentRoute({ mode }: { mode: Mode }) {
   return (
     <Workspace
       mode={activeMode}
-      publicWebAvailable={activeMode === "agent" && publicWebAvailable}
+      publicWebAvailable={publicWebAvailable}
+      reasoningEfforts={reasoningEfforts}
     />
   );
 }
@@ -326,9 +340,11 @@ function AgentRoute({ mode }: { mode: Mode }) {
 function Workspace({
   mode,
   publicWebAvailable,
+  reasoningEfforts,
 }: {
   mode: Mode;
   publicWebAvailable: boolean;
+  reasoningEfforts: HermesEffort[];
 }) {
   const ui = useComputeText();
   const { user } = useAppContext();
@@ -344,6 +360,10 @@ function Workspace({
     { key: string; id?: string } | undefined
   >(() => (workflow ? { key: "workflow-draft" } : undefined));
   const [showHistory, setShowHistory] = useState(false);
+  const [chosenEffort, setChosenEffort] = useState<HermesEffort>();
+  const effort =
+    chosenEffort ??
+    (reasoningEfforts.includes("medium") ? "medium" : reasoningEfforts[0]);
   const [query, setQuery] = useState("");
   const historyCloseButton = useRef<HTMLButtonElement>(null);
   const draftNumber = useRef(0);
@@ -584,6 +604,9 @@ function Workspace({
             )
           }
           publicWebAvailable={publicWebAvailable}
+          reasoningEfforts={reasoningEfforts}
+          effort={effort}
+          onEffort={setChosenEffort}
           onRun={track}
           layout={layout}
         />
@@ -752,27 +775,6 @@ function Discovery({ publicWebAvailable }: { publicWebAvailable: boolean }) {
   );
 }
 
-function resultLink(message: Message, project: string) {
-  if (message.role !== "tool") return;
-  const content = toolContent(message.content);
-  const uuid = (value: unknown): value is string =>
-    typeof value === "string" && /^[0-9a-f-]{36}$/.test(value);
-  if (message.tool_name === "start_business_flow" && uuid(content.workflowId)) {
-    const query = new URLSearchParams({
-      run: content.workflowId,
-      projectTagId: project,
-    });
-    return { to: `/business-flows?${query}`, type: "workflow" };
-  }
-  if (message.tool_name === "submit_research_compute" && uuid(content.taskId)) {
-    const query = new URLSearchParams({
-      task: content.taskId,
-      projectTagId: project,
-    });
-    return { to: `/compute?${query}`, type: "compute" };
-  }
-}
-
 function Thread({
   mode,
   workflow,
@@ -781,6 +783,9 @@ function Thread({
   onSessionChange,
   onRun,
   publicWebAvailable,
+  reasoningEfforts,
+  effort,
+  onEffort,
   layout,
 }: {
   mode: Mode;
@@ -790,6 +795,9 @@ function Thread({
   onSessionChange: (session: Session) => void;
   onRun: (sessionId: string, runId: string, input: string) => void;
   publicWebAvailable: boolean;
+  reasoningEfforts: HermesEffort[];
+  effort?: HermesEffort;
+  onEffort: (effort: HermesEffort) => void;
   layout: ReturnType<typeof useAgentLayout>;
 }) {
   const ui = useComputeText();
@@ -806,10 +814,9 @@ function Thread({
   const [pickerOpen, setPickerOpen] = useState(false);
   const [runId, setRunId] = useState(session?.last_run_id ?? null);
   const [pendingInput, setPendingInput] = useState("");
-  const [answer, setAnswer] = useState("");
-  const [reasoning, setReasoning] = useState("");
-  const [commentary, setCommentary] = useState("");
-  const [steps, setSteps] = useState<Progress[]>([]);
+  const [live, setLive] = useState(emptyConversation);
+  const [startedAt, setStartedAt] = useState<number>();
+  const [liveSources, setLiveSources] = useState<Message[]>([]);
   const [control, setControl] = useState<Control>();
   const [clarification, setClarification] = useState("");
   const [error, setError] = useState("");
@@ -826,9 +833,9 @@ function Thread({
   const viewport = useRef<HTMLDivElement>(null);
   const followLatest = useRef(true);
   const lastScrollTop = useRef(0);
-  const submission = useRef<{ input: string; key: string } | undefined>(
-    undefined,
-  );
+  const submission = useRef<
+    { input: string; effort?: HermesEffort; key: string } | undefined
+  >(undefined);
   const project = useProjectContext();
 
   async function toggleInternet() {
@@ -868,17 +875,7 @@ function Thread({
       box.scrollTop = box.scrollHeight;
       lastScrollTop.current = box.scrollTop;
     }
-  }, [
-    messages,
-    pendingInput,
-    answer,
-    reasoning,
-    commentary,
-    steps,
-    control,
-    busy,
-    error,
-  ]);
+  }, [messages, pendingInput, live, control, busy, error]);
 
   function receivePlan(next?: TodoPlan) {
     if (next)
@@ -898,7 +895,7 @@ function Thread({
   }
 
   useEffect(() => {
-    if (!initialSessionId.current) return;
+    if (!initialSessionId.current || runId) return;
     const controller = new AbortController();
     void history(initialSessionId.current, controller.signal)
       .catch((failure: unknown) => {
@@ -916,6 +913,39 @@ function Thread({
     const controller = new AbortController();
     const { signal } = controller;
     const url = `${api}/v1/runs/${runId}`;
+    let refreshTimer: number | undefined;
+    let refreshing = false;
+    let refreshNeeded = false;
+    let activeTranscriptLoaded = false;
+    function refreshToolResults(id: string) {
+      refreshNeeded = true;
+      if (refreshTimer !== undefined || refreshing) return;
+      refreshTimer = window.setTimeout(() => {
+        refreshTimer = undefined;
+        refreshNeeded = false;
+        refreshing = true;
+        void requestJson<HermesMessageList>(
+          `${api}/api/sessions/${id}/messages?latest=true`,
+          { signal },
+        )
+          .then(({ data }) => {
+            if (signal.aborted) return;
+            const turn = groupConversation(data).slice(-1)[0];
+            if (
+              turn &&
+              (!pendingInput || turn.user?.content === pendingInput)
+            ) {
+              setLiveSources(turn.messages);
+            }
+            receivePlan(latestPlan(data));
+          })
+          .catch(() => {})
+          .finally(() => {
+            refreshing = false;
+            if (refreshNeeded && !signal.aborted) refreshToolResults(id);
+          });
+      }, 350);
+    }
     async function connect(id: string) {
       setBusy(true);
       let last: unknown;
@@ -925,20 +955,59 @@ function Thread({
           if (terminalStatuses.has(state.status)) {
             if (state.error) setError(state.error);
             const saved = await history(id, signal);
+            const savedTurn = groupConversation(saved).slice(-1)[0];
             const persisted =
               state.output &&
-              saved.some(
-                (message) =>
-                  message.role === "assistant" &&
-                  message.content === state.output,
-              );
-            if (persisted) setAnswer("");
-            else if (state.output) setAnswer(state.output);
+              savedTurn &&
+              savedConversation(savedTurn.messages).answer === state.output;
+            if (persisted || !state.output) setLive(emptyConversation);
+            else
+              setLive((previous) => ({
+                ...previous,
+                answer: state.output ?? previous.answer,
+              }));
             setPendingInput("");
+            setLiveSources([]);
+            setCheckingHistory(false);
             setControl(undefined);
             setBusy(false);
             setRunId(null);
             return;
+          }
+          if (state.created_at !== undefined) setStartedAt(state.created_at);
+          if (
+            !activeTranscriptLoaded &&
+            initialSessionId.current === id &&
+            !pendingInput
+          ) {
+            activeTranscriptLoaded = true;
+            const { data } = await requestJson<HermesMessageList>(
+              `${api}/api/sessions/${id}/messages`,
+              { signal },
+            );
+            const activeTurn = groupConversation(data).slice(-1)[0];
+            const userTime = activeTurn?.user?.timestamp;
+            if (
+              activeTurn &&
+              state.created_at !== undefined &&
+              userTime !== undefined &&
+              userTime >= state.created_at
+            ) {
+              const index = data.findIndex(
+                (message) => message.id === activeTurn.id,
+              );
+              setMessages(data.slice(0, index));
+              setPendingInput(
+                typeof activeTurn.user?.content === "string"
+                  ? activeTurn.user.content
+                  : "",
+              );
+              setLiveSources(activeTurn.messages);
+            } else {
+              setMessages(data);
+            }
+            receivePlan(latestPlan(data));
+            setCheckingHistory(false);
           }
           setControl(state.pending_controls?.map(pendingControl).find(Boolean));
           try {
@@ -951,66 +1020,23 @@ function Thread({
                   if (seq <= cursor.current) return;
                   cursor.current = seq;
                 }
-                if (
-                  event.event === "message.delta" &&
-                  typeof event.delta === "string"
-                ) {
-                  const delta = event.delta;
-                  setAnswer((text) => text + delta);
-                }
-                if (
-                  event.event === "message.interim" &&
-                  typeof event.text === "string"
-                ) {
-                  const text = event.text;
-                  setCommentary((previous) =>
-                    [previous, text].filter(Boolean).join("\n\n"),
-                  );
-                  if (event.already_streamed) setAnswer("");
-                }
-                if (
-                  event.event === "tool.started" ||
-                  event.event === "tool.completed"
-                ) {
-                  const name =
-                    typeof event.tool === "string" ? event.tool : "工具";
-                  const id =
-                    typeof event.tool_call_id === "string"
-                      ? event.tool_call_id
-                      : name;
-                  if (
-                    name === "todo_list" &&
-                    event.event === "tool.completed" &&
-                    !event.error
-                  ) {
+                setLive((previous) => updateConversation(previous, event));
+                if (event.event === "tool.completed" && !event.error) {
+                  if (event.tool === "todo_list") {
                     const snapshot = todoPlan(event.preview);
                     if (snapshot) receivePlan(snapshot);
-                    else {
-                      void requestJson<HermesMessageList>(
-                        `${api}/api/sessions/${id}/messages`,
-                        { signal },
-                      )
-                        .then(({ data }) => receivePlan(latestPlan(data)))
-                        .catch(() => {});
-                    }
                   }
-                  const status =
-                    event.event === "tool.started"
-                      ? "运行中"
-                      : event.error
-                        ? "需调整"
-                        : "已完成";
-                  setSteps((previous) => [
-                    ...previous.filter((step) => step.id !== id),
-                    { id, name, status },
-                  ]);
-                }
-                if (
-                  event.event === "reasoning.available" &&
-                  typeof event.text === "string"
-                ) {
-                  const text = event.text;
-                  setReasoning((previous) => previous + text);
+                  if (
+                    typeof event.tool === "string" &&
+                    [
+                      "todo_list",
+                      "search_knowledge",
+                      "read_knowledge_document",
+                      "check_knowledge_constraints",
+                      "submit_research_compute",
+                    ].includes(event.tool)
+                  )
+                    refreshToolResults(id);
                 }
                 const updated = pendingControl(event);
                 if (updated) setControl(updated);
@@ -1019,7 +1045,6 @@ function Thread({
                   event.event === "approval.settled"
                 )
                   setControl(undefined);
-                if (event.event === "replay.truncated") setAnswer("");
               },
               signal,
             );
@@ -1030,18 +1055,29 @@ function Thread({
         }
         throw last ?? new Error("实时连接中断，运行仍可恢复");
       } catch (failure) {
-        if (!signal.aborted) {
-          if (failure instanceof ApiError && failure.status === 404) {
-            setBusy(false);
-            setRunId(null);
-          } else {
-            setError(errorText(failure));
+        if (signal.aborted) return;
+        if (failure instanceof ApiError && failure.status === 404) {
+          try {
+            await history(id, signal);
+          } catch (historyFailure) {
+            if (!signal.aborted) setError(errorText(historyFailure));
           }
+          if (signal.aborted) return;
+          setPendingInput("");
+          setLive(emptyConversation);
+          setBusy(false);
+          setRunId(null);
+        } else {
+          setError(errorText(failure));
         }
+        setCheckingHistory(false);
       }
     }
     void connect(sessionId);
-    return () => controller.abort();
+    return () => {
+      window.clearTimeout(refreshTimer);
+      controller.abort();
+    };
   }, [runId, retry, sessionId]);
 
   async function send() {
@@ -1073,9 +1109,13 @@ function Thread({
       );
       return;
     }
-    if (submission.current?.input !== input)
+    if (
+      submission.current?.input !== input ||
+      submission.current.effort !== effort
+    )
       submission.current = {
         input,
+        effort,
         key: Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) =>
           byte.toString(16).padStart(2, "0"),
         ).join(""),
@@ -1086,7 +1126,11 @@ function Thread({
       const target = session ?? (await onCreate(internetEnabled));
       const run = await requestJson<HermesRunAdmission>(`${api}/v1/runs`, {
         method: "POST",
-        body: { input, session_id: target.id },
+        body: {
+          input,
+          session_id: target.id,
+          ...(effort ? { reasoning_effort: effort } : {}),
+        },
         idempotencyKey: submission.current.key,
       });
       cursor.current = -1;
@@ -1096,10 +1140,9 @@ function Thread({
       setWorkflowDraft(undefined);
       setMaterials([]);
       setPendingInput(input);
-      setAnswer("");
-      setReasoning("");
-      setCommentary("");
-      setSteps([]);
+      setLive(emptyConversation);
+      setLiveSources([]);
+      setStartedAt(Date.now() / 1000);
       onRun(target.id, run.run_id, input);
       setRunId(run.run_id);
     } catch (failure) {
@@ -1136,7 +1179,26 @@ function Thread({
     }
   }
 
-  const active = Boolean(pendingInput || busy || answer || control);
+  const active = Boolean(pendingInput || busy || live.answer || control);
+  const effortNames = {
+    none: ui("关闭", "Off"),
+    low: ui("轻量", "Light"),
+    medium: ui("标准", "Standard"),
+    xhigh: ui("深度", "Deep"),
+  };
+  const { turns, citations } = useMemo(() => {
+    let citations: Citations = new Map();
+    const turns = groupConversation(messages).map((turn) => {
+      citations = readCitations(turn.messages, citations);
+      return { ...turn, content: savedConversation(turn.messages), citations };
+    });
+    return { turns, citations };
+  }, [messages]);
+  const activeCitations = useMemo(
+    () => readCitations(liveSources, citations),
+    [liveSources, citations],
+  );
+  const projectId = String(project?.current ?? "");
   return (
     <>
       <div
@@ -1158,41 +1220,34 @@ function Thread({
         {!checkingHistory && !messages.length && !active && !workflowDraft && (
           <Welcome mode={mode} />
         )}
-        {messages.map((message) => {
-          const result = resultLink(message, String(project?.current ?? ""));
-          if (result) {
-            return (
-              <div className="agent-run-notice" key={message.id}>
-                <Link to={result.to}>
-                  {result.type === "compute"
-                    ? ui("查看计算任务", "View compute task")
-                    : ui("查看业务流运行", "View workflow run")}
-                </Link>
-              </div>
-            );
-          }
-          if (
-            message.display_kind === "hidden" ||
-            typeof message.content !== "string" ||
-            !message.content
-          )
-            return null;
-          if (message.role === "user")
-            return (
-              <div className="agent-user-message" key={message.id}>
-                {message.content}
-              </div>
-            );
-          if (message.role !== "assistant") return null;
-          return (
-            <section className="agent-turn" key={message.id}>
-              <div className="agent-assistant-message">
+        {turns.map((turn) => (
+          <Fragment key={turn.id}>
+            {typeof turn.user?.content === "string" && (
+              <div className="agent-user-message">{turn.user.content}</div>
+            )}
+            {(turn.content.activities.length > 0 || turn.content.answer) && (
+              <section className="agent-turn agent-assistant-message">
                 <AssistantHeading />
-                <SafeMarkdown text={message.content} links />
-              </div>
-            </section>
-          );
-        })}
+                <HermesProgress
+                  busy={false}
+                  activities={turn.content.activities}
+                  startedAt={turn.user?.timestamp}
+                  endedAt={turn.messages[turn.messages.length - 1]?.timestamp}
+                />
+                {turn.content.answer && (
+                  <HermesAnswer
+                    text={turn.content.answer}
+                    citations={turn.citations}
+                  />
+                )}
+                <HermesResultLinks
+                  messages={turn.messages}
+                  project={projectId}
+                />
+              </section>
+            )}
+          </Fragment>
+        ))}
         {Boolean(plan?.todos.length) && plan && <TaskList plan={plan} />}
         {active && (
           <>
@@ -1209,46 +1264,20 @@ function Thread({
                     : undefined
                 }
               />
-              {steps.length > 0 && (
-                <Flex gap="small" wrap className="agent-run-notice">
-                  {steps.map((step) => (
-                    <Tag
-                      color={step.status === "需调整" ? "error" : undefined}
-                      key={step.id}
-                    >
-                      {step.name} · {step.status}
-                    </Tag>
-                  ))}
-                </Flex>
-              )}
-              {commentary && (
-                <div className="agent-muted">
-                  <SafeMarkdown text={commentary} />
-                </div>
-              )}
-              {reasoning && (
-                <Collapse
-                  bordered={false}
-                  size="small"
-                  className="agent-thinking-panel"
-                  items={[
-                    {
-                      key: "reasoning",
-                      label: ui("推理过程", "Reasoning"),
-                      children: (
-                        <div className="agent-thinking-content">
-                          <SafeMarkdown text={reasoning} />
-                        </div>
-                      ),
-                    },
-                  ]}
-                />
-              )}
-              {answer && (
+              <HermesProgress
+                activities={live.activities}
+                busy={busy}
+                startedAt={startedAt}
+              />
+              {live.answer && (
                 <div aria-live="polite">
-                  <SafeMarkdown text={answer} links />
+                  <HermesAnswer
+                    text={live.answer}
+                    citations={activeCitations}
+                  />
                 </div>
               )}
+              <HermesResultLinks messages={liveSources} project={projectId} />
               {control && (
                 <Card
                   className="agent-run-notice"
@@ -1390,22 +1419,57 @@ function Thread({
               </Button>
             )}
             <Discovery publicWebAvailable={publicWebAvailable} />
-            {publicWebAvailable && (
-              <Button
-                type="text"
-                icon={<GlobalOutlined />}
-                aria-label={ui("联网检索", "Web research")}
-                aria-pressed={internetEnabled}
-                title={ui(
-                  "开启后将公开检索词或网址发送给搜索服务",
-                  "Sends public queries or URLs to the search service",
-                )}
-                className={internetEnabled ? "agent-tool-active" : undefined}
-                loading={changingInternet}
-                onClick={() => void toggleInternet()}
+            <Tooltip
+              title={
+                publicWebAvailable
+                  ? ui(
+                      "在本会话使用公开网页检索",
+                      "Use public web search in this chat",
+                    )
+                  : ui(
+                      "由管理员在智能体设置中开启联网检索",
+                      "An administrator can enable web search in Agent settings",
+                    )
+              }
+            >
+              <span>
+                <Button
+                  type="text"
+                  icon={<GlobalOutlined />}
+                  aria-label={ui("联网检索", "Web research")}
+                  aria-pressed={internetEnabled}
+                  className={internetEnabled ? "agent-tool-active" : undefined}
+                  loading={changingInternet}
+                  disabled={!publicWebAvailable}
+                  onClick={() => void toggleInternet()}
+                >
+                  {ui("联网检索", "Web research")}
+                </Button>
+              </span>
+            </Tooltip>
+            {effort && reasoningEfforts.length > 0 && (
+              <Dropdown
+                trigger={["click"]}
+                menu={{
+                  selectable: true,
+                  selectedKeys: [effort],
+                  items: reasoningEfforts.map((key) => ({
+                    key,
+                    label: effortNames[key],
+                    onClick: () => onEffort(key),
+                  })),
+                }}
               >
-                {ui("联网检索", "Web research")}
-              </Button>
+                <Button
+                  type="text"
+                  icon={<CompassOutlined />}
+                  aria-label={ui("调整思考强度", "Adjust reasoning effort")}
+                  disabled={busy}
+                >
+                  {ui("思考强度", "Effort")} {effortNames[effort]}{" "}
+                  <DownOutlined />
+                </Button>
+              </Dropdown>
             )}
           </div>
           {busy && runId ? (

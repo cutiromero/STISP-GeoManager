@@ -7820,6 +7820,11 @@ paths:
       summary: 读取 Hermes 对话历史
       security:
       - sessionAuth: []
+      parameters:
+      - name: latest
+        in: query
+        schema: {type: boolean, default: false}
+        description: 获取当前会话的近期活动。
       responses:
         '200':
           description: 读取 Hermes 对话历史
@@ -10995,7 +11000,14 @@ components:
       properties:
         public_web_enabled:
           type: boolean
-          description: 当前账号具备科研智能体权限且平台策略允许会话开启联网。
+          description: 当前平台策略允许在会话开启联网。
+        reasoning_efforts:
+          type: array
+          items:
+            $ref: '#/components/schemas/HermesReasoningEffort'
+    HermesReasoningEffort:
+      type: string
+      enum: [none, low, medium, xhigh]
     HermesSkill:
       type: object
       required:
@@ -11132,6 +11144,19 @@ components:
           type: string
         display_kind:
           type: string
+        timestamp:
+          type: number
+        finish_reason:
+          type: [string, 'null']
+        reasoning:
+          type: [string, 'null']
+        reasoning_content:
+          type: [string, 'null']
+        tool_calls:
+          type: [array, 'null']
+          items:
+            type: object
+            additionalProperties: true
     HermesMessageList:
       type: object
       required:
@@ -11153,6 +11178,8 @@ components:
           type: string
           minLength: 1
           maxLength: 12000
+        reasoning_effort:
+          $ref: '#/components/schemas/HermesReasoningEffort'
     HermesRunAdmission:
       type: object
       required:
@@ -11183,6 +11210,8 @@ components:
           type: string
         error:
           type: string
+        created_at:
+          type: number
         pending_controls:
           type: array
           items:
