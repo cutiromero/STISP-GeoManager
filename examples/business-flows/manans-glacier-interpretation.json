@@ -52,7 +52,7 @@
       "title": "统计上一登记期变化",
       "kind": "operator",
       "description": "比较同样区两期分类的共同有效面积、变化像元占比和冰川净面积差。",
-      "instruction": "使用平台找到的上一登记期。有上期标准图时按对应原图确认缺测。缺少可比历史时交付本期面积。",
+      "instruction": "直接对已绑定算子调用 preflight_operator，arguments 传空对象。预检会绑定同样区的上一登记期。按返回的 runAction 执行，依据 coverage 和 transitions 的实际结果分析共同有效区。没有可比历史或没有共同有效区时，交付本期面积并说明原因。",
       "dependsOn": [
         "interpret"
       ],

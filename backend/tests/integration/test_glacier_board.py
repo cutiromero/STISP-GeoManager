@@ -9,10 +9,7 @@ from PIL import Image
 from rasterio.transform import from_bounds
 
 from apps.agent.models import AgentWorkflow
-from apps.business_flows.glacier_history import (
-    comparison_action,
-    fixed_manans_comparison,
-)
+from apps.business_flows.glacier_history import MANANS_REGISTRATION_VERSION
 from apps.business_flows.models import BusinessFlowDefinition
 from apps.business_flows.state import state
 from apps.catalog.models import DataResource
@@ -33,7 +30,6 @@ from apps.ecology.glacier import (
     publish_manans,
     publish_workflow,
     resolve_registered,
-    resolve_manans_registered,
 )
 from apps.ecology.models import RemoteSensingProduct
 from apps.ecology.monitoring import register_product
@@ -495,14 +491,44 @@ def test_manans_binary_map_retains_acquisition_date_and_original_display(
                 product.save(update_fields=["metadata"])
                 if day == "2026-11-23":
                     previous_id = product.pk
-            match, proof = resolve_manans_registered(
-                workflow, admin, SimpleNamespace(resource_id=raw.pk)
+            match, proof = resolve_registered(
+                workflow, admin, SimpleNamespace(resource_id=raw.pk), manans=True
             )
             assert match.pk == history.pk and proof["baselineProductId"] == previous_id
             assert (
                 proof["baselineImageId"] == raw.pk
                 and proof["baselineBasis"] == "classification"
             )
+            shifted_bounds = [86.5, 42, 87.5, 43]
+            shifted = DataResource.objects.create(
+                name="S2_scene_T45TUJ_crop",
+                code="manans-shifted",
+                data_type="raster",
+                storage_path="shifted.tif",
+                maintainer=admin,
+            )
+            RasterDataset.objects.create(
+                data_resource=shifted,
+                status="ready",
+                code="manans-shifted",
+                source_relative_path="shifted.tif",
+                bounds_4326=shifted_bounds,
+            )
+            shifted_source = SimpleNamespace(resource_id=shifted.pk)
+            shifted_match, shifted_proof = resolve_registered(
+                workflow, admin, shifted_source, manans=True
+            )
+            assert shifted_match == match and shifted_proof["baselineImageId"] == raw.pk
+            legacy_match, _ = resolve_registered(
+                workflow, admin, shifted_source, manans=True, same_grid=True
+            )
+            assert legacy_match is None
+            shifted.name = "S2_scene_T45TUK_crop"
+            shifted.save(update_fields=["name"])
+            neighboring_match, _ = resolve_registered(
+                workflow, admin, shifted_source, manans=True
+            )
+            assert neighboring_match is None
             comparison = AlgorithmResource.objects.create(
                 identifier="glacier-temporal-compare", name="变化", created_by=admin
             )
@@ -511,7 +537,7 @@ def test_manans_binary_map_retains_acquisition_date_and_original_display(
                 name="变化",
                 status="succeeded",
                 version=AlgorithmVersion.objects.create(
-                    algorithm=comparison, version="1.4.0"
+                    algorithm=comparison, version=MANANS_REGISTRATION_VERSION
                 ),
                 idempotency_key="manans-compare",
                 parameters={
@@ -561,46 +587,14 @@ def test_manans_binary_map_retains_acquisition_date_and_original_display(
                     size_bytes=99,
                     checksum="f" * 64,
                 )
-            contract = {
-                "requiredOutputs": [
-                    {"name": key, "semanticType": "table"}
-                    for key in ("areas", "transitions", "coverage")
-                ]
-            }
-            fixed_node = {
-                "id": "compare",
-                "kind": "operator",
-                "algorithmVersionId": compared.version_id,
-            }
-            assert fixed_manans_comparison(fixed_node)
-            assert not fixed_manans_comparison(
-                {**fixed_node, "algorithmVersionId": version.pk}
-            )
-            assert comparison_action({"toolLoop": {}}, contract) == {
-                "action": "preflight_operator",
-                "arguments": {},
-            }
-            assert comparison_action(
-                {"toolLoop": {"preflightRequestHash": "ready"}}, contract
-            ) == {"action": "run_operator", "arguments": {"usePreflight": True}}
-            selected = comparison_action(
-                {"toolLoop": {"successfulTaskId": str(compared.pk)}}, contract
-            )
-            assert selected["action"] == "finish_node"
-            assert {o["name"] for o in selected["arguments"]["outputs"]} == {
-                "areas",
-                "coverage",
-                "transitions",
-            }
-            assert "2026-11-23" in selected["arguments"]["summary"]
             state(workflow)["nodes"]["compare"] = {
                 "status": "succeeded",
                 "computeTaskId": str(compared.pk),
             }
             workflow.save(update_fields=["plan"])
         else:
-            match, proof = resolve_manans_registered(
-                workflow, admin, SimpleNamespace(resource_id=raw.pk)
+            match, proof = resolve_registered(
+                workflow, admin, SimpleNamespace(resource_id=raw.pk), manans=True
             )
             assert match is None and proof["reason"] == "no_prior"
         registered = publish_manans(workflow.pk, admin.pk)

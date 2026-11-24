@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "identifier": "glacier-temporal-compare",
   "name": "冰川登记期面积与变化",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "author": "STISP",
   "description": "按原生网格统计本期分类，在两期共同有效区比较登记成果。",
   "runtime": "python-geospatial-v1",
@@ -465,7 +465,7 @@
   "resources": {
     "duration": "seconds",
     "memory": "small",
-    "scaling": "分块逐像元线性统计，固定3×3矩阵，不读取全图到内存。"
+    "scaling": "分块逐像元线性统计，至多3×3类别转移矩阵，不读取全图到内存。"
   },
   "selfTests": [
     {
@@ -564,15 +564,20 @@
       }
     },
     {
-      "name": "玛纳斯交接二分类以原图排除缺测并保留有效0",
+      "name": "玛纳斯部分重叠按两期有效交集统计",
       "fixture": "selftest/manans-standard.json",
       "expect": {
         "files": {
           "observation_coverage.csv": {
-            "rows": 1
+            "rows": 1,
+            "contains": "compared,2026-11-24,2026-11-23,EPSG:32645,12,11,8,7"
+          },
+          "glacier_areas.csv": {
+            "contains": "ice,冰川合计,2,0.0002,1,2,-1,-0.0001"
           },
           "glacier_transitions.csv": {
-            "rows": 4
+            "rows": 4,
+            "contains": "2026-11-23,2026-11-24,0,0,5,0.0005"
           }
         }
       }

@@ -1,5 +1,6 @@
 """Registration series and workflow publication for the glacier board."""
 
+import re
 from zoneinfo import ZoneInfo
 
 from django.core.exceptions import PermissionDenied
@@ -24,6 +25,10 @@ TASK_KEY = "glacier-classification"
 PRODUCT_TYPE = "monitoring_glacier"
 PRODUCT_LIMIT = 240
 BACKGROUND_COLOR = "#364a5c"
+SENTINEL_TILE = re.compile(
+    r"(?<![A-Z0-9])T(?:0[1-9]|[1-5][0-9]|60)[C-HJ-NP-X][A-HJ-NP-Z]{2}(?![A-Z0-9])",
+    re.ASCII,
+)
 
 
 def prepare_classification_display(dataset):
@@ -100,7 +105,74 @@ def registered_products(user, series=(TASK_KEY,)):
     ]
 
 
-def resolve_registered(workflow, user, source):
+def _manans_sources(origin, candidates, *, same_grid):
+    """Validate binary history and return its optional standard-image mask inputs."""
+    originals = {item["sourceResourceIds"][0] for _, item, _ in candidates}
+    dataset_ids = originals | {row.data_resource_id for row, _, _ in candidates}
+    datasets = {
+        row.data_resource_id: row
+        for row in RasterDataset.objects.filter(
+            status="ready", data_resource_id__in=dataset_ids
+        ).select_related("data_resource")
+    }
+    groups = {
+        pk: (family, key)
+        for pk, family, key in ResourceObservationMetadata.objects.filter(
+            resource_id__in=originals | {origin.data_resource_id}
+        )
+        .exclude(collection_key="")
+        .values_list("resource_id", "family", "collection_key")
+    }
+
+    def tile(dataset):
+        # Legacy Manans scenes carry the Sentinel-2 tile in the catalog name.
+        names = set(SENTINEL_TILE.findall(dataset.data_resource.name.upper()))
+        return names.pop() if len(names) == 1 else None
+
+    origin_tile = tile(origin)
+    origin_group = groups.get(origin.data_resource_id)
+    images = {}
+    for row, item, bounds in candidates:
+        original_id = item["sourceResourceIds"][0]
+        original = datasets.get(original_id)
+        if original is None or item["quality"] != "passed":
+            continue
+        if same_grid and (
+            bounds != origin.bounds_4326
+            or any(
+                origin.source_gdalinfo.get(key) is None
+                or origin.source_gdalinfo[key] != original.source_gdalinfo.get(key)
+                for key in ("size", "geoTransform")
+            )
+        ):
+            continue
+        if original_id != origin.data_resource_id:
+            other_tile = tile(original)
+            if origin_tile and other_tile:
+                if origin_tile != other_tile:
+                    continue
+            elif not origin_group or groups.get(original_id) != origin_group:
+                continue
+
+        if row.metadata["glacierTask"] == MANANS_STANDARD_TASK:
+            checksums = row.metadata.get("standardSource", {})
+            result = datasets.get(row.data_resource_id)
+            if (
+                item.get("referenceRole") != "standard"
+                or not checksums.get("sourceSha256")
+                or not checksums.get("resultSha256")
+                or original.source_checksum_sha256 != checksums["sourceSha256"]
+                or result is None
+                or result.source_checksum_sha256 != checksums["resultSha256"]
+            ):
+                continue
+            images[row.pk] = original_id
+        elif (item.get("model") or {}).get("variant") == MANANS_VARIANT:
+            images[row.pk] = None
+    return images
+
+
+def resolve_registered(workflow, user, source, *, manans=False, same_grid=False):
     """Find the latest earlier registration of the same job and site."""
     day = period_day(workflow)
     # Snapshot bounds are in native CRS. Match geography using the catalog WGS84
@@ -109,14 +181,27 @@ def resolve_registered(workflow, user, source):
         RasterDataset.objects.filter(
             data_resource_id=source.resource_id, status="ready"
         )
-        .only("bounds_4326")
+        .select_related("data_resource")
         .order_by("-pk")
         .first()
     )
     bounds = dataset.bounds_4326 if dataset is not None else []
-    candidates = registered_products(user)
+    candidates = [
+        (row, item, extent)
+        for row, item, extent in registered_products(
+            user, MANANS_SERIES if manans else (TASK_KEY,)
+        )
+        if overlap(bounds, extent)
+    ]
+    mask_inputs = (
+        _manans_sources(dataset, candidates, same_grid=same_grid)
+        if manans and candidates
+        else {}
+    )
     intersecting = [
-        (row, item) for row, item, extent in candidates if overlap(bounds, extent)
+        (row, item)
+        for row, item, _ in candidates
+        if not manans or row.pk in mask_inputs
     ]
     exact = [
         (row, item)
@@ -159,7 +244,8 @@ def resolve_registered(workflow, user, source):
     choices = [
         (row, item)
         for row, item in intersecting
-        if row.metadata["glacierRegion"] == region and item["registrationDate"] < day
+        if (manans or row.metadata["glacierRegion"] == region)
+        and item["registrationDate"] < day
     ]
     if not choices:
         return None, receipt
@@ -167,96 +253,14 @@ def resolve_registered(workflow, user, source):
     return row.data_resource, {
         **receipt,
         "reason": "matched",
-        "baselineResourceId": row.data_resource_id,
-        "baselineProductId": row.pk,
-        "baselineDate": item["registrationDate"],
-        "baselineBasis": "registered_codes"
-        if item["kind"] == "historical"
-        else "classification",
-    }
-
-
-def resolve_manans_registered(workflow, user, source):
-    """Find the preceding authorized binary classification on the same native grid."""
-    day = period_day(workflow)
-    origin = RasterDataset.objects.filter(
-        data_resource_id=source.resource_id, status="ready"
-    ).first()
-    receipt = {
-        "currentSourceId": source.resource_id,
-        "currentDate": day,
-        "region": f"source-{source.resource_id}",
-        "reason": "no_prior",
-    }
-    if origin is None or not origin.bounds_4326:
-        return None, receipt
-
-    matches = [
-        (row, item)
-        for row, item, bounds in registered_products(user, MANANS_SERIES)
-        if bounds == origin.bounds_4326 and item["quality"] == "passed"
-    ]
-    dataset_ids = {
-        identity
-        for row, item in matches
-        for identity in (row.data_resource_id, item["sourceResourceIds"][0])
-    }
-    datasets = {
-        row.data_resource_id: row
-        for row in RasterDataset.objects.filter(
-            status="ready", data_resource_id__in=dataset_ids
-        ).only("data_resource_id", "source_gdalinfo", "source_checksum_sha256")
-    }
-    grid = {key: origin.source_gdalinfo.get(key) for key in ("size", "geoTransform")}
-    compatible = []
-    for row, item in matches:
-        original = datasets.get(item["sourceResourceIds"][0])
-        if original is None or any(
-            value is None or original.source_gdalinfo.get(key) != value
-            for key, value in grid.items()
-        ):
-            continue
-        baseline_image = None
-        if row.metadata["glacierTask"] == MANANS_STANDARD_TASK:
-            provenance = row.metadata.get("standardSource", {})
-            result = datasets.get(row.data_resource_id)
-            if (
-                item.get("referenceRole") != "standard"
-                or not provenance.get("sourceSha256")
-                or original.source_checksum_sha256 != provenance["sourceSha256"]
-                or result is None
-                or result.source_checksum_sha256 != provenance.get("resultSha256")
-            ):
-                continue
-            baseline_image = original.data_resource_id
-        elif (item.get("model") or {}).get("variant") != MANANS_VARIANT:
-            continue
-        compatible.append((row, item, baseline_image))
-
-    if compatible:
-        receipt["region"] = max(
-            compatible,
-            key=lambda entry: (
-                entry[1]["sourceResourceIds"][0] == source.resource_id,
-                entry[1]["registrationDate"],
-                entry[0].pk,
-            ),
-        )[0].metadata["glacierRegion"]
-    earlier = [entry for entry in compatible if entry[1]["registrationDate"] < day]
-    if not earlier:
-        return None, receipt
-    row, item, baseline_image = max(
-        earlier, key=lambda entry: (entry[1]["registrationDate"], entry[0].pk)
-    )
-    return row.data_resource, {
-        **receipt,
-        "reason": "matched",
         "region": row.metadata["glacierRegion"],
         "baselineResourceId": row.data_resource_id,
         "baselineProductId": row.pk,
         "baselineDate": item["registrationDate"],
-        "baselineBasis": "classification",
-        **({"baselineImageId": baseline_image} if baseline_image else {}),
+        "baselineBasis": "registered_codes"
+        if item["kind"] == "historical" and not manans
+        else "classification",
+        **({"baselineImageId": mask_inputs[row.pk]} if mask_inputs.get(row.pk) else {}),
     }
 
 
@@ -310,7 +314,7 @@ def _workflow_classification(
     return record
 
 
-def _registered_comparison(workflow, user, value, record, *, version, series):
+def _registered_comparison(workflow, user, value, record, *, versions, series):
     """Bind published metrics only to the completed comparison and its authorized registration."""
     user_id = user.pk
     comparison = value["nodes"].get("compare", {})
@@ -324,7 +328,7 @@ def _registered_comparison(workflow, user, value, record, *, version, series):
         task__project_tag_id=workflow.project_tag_id,
         task__owner_id=user_id,
         task__version__algorithm__identifier="glacier-temporal-compare",
-        task__version__version=version,
+        task__version__version__in=versions,
     )
     require_automatic_quality(summary)
     comparison_inputs = dict(
@@ -408,7 +412,7 @@ def publish_workflow(workflow_id, user_id):
         user,
         value,
         record,
-        version=REGISTRATION_VERSION,
+        versions=(REGISTRATION_VERSION,),
         series=(TASK_KEY,),
     )
     raw = output.task.input_records.select_related("resource").get(key="image")
@@ -531,14 +535,14 @@ def publish_manans(workflow_id, user_id):
         raise ComputeError("冰川面积统计与有效像元范围不一致")
     region, change = f"source-{raw.resource_id}", None
     if "compare" in value["nodes"]:
-        from apps.business_flows.glacier_history import MANANS_REGISTRATION_VERSION
+        from apps.business_flows.glacier_history import MANANS_VERSIONS
 
         region, _, change = _registered_comparison(
             workflow,
             user,
             value,
             record,
-            version=MANANS_REGISTRATION_VERSION,
+            versions=MANANS_VERSIONS,
             series=MANANS_SERIES,
         )
     date = raw.resource.data_date.isoformat() if raw.resource.data_date else None

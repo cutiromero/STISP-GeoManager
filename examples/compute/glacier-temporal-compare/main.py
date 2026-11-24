@@ -60,9 +60,27 @@ def assert_mask_contract(context, target, port, pixel_metres, *, nodata=NODATA):
         )
 
 
-def read_codes(context, target, port, window, class_count):
+def aligned_baseline(stack, target, current, *, nodata):
+    return stack.enter_context(
+        WarpedVRT(
+            target,
+            crs=current.crs,
+            transform=current.transform,
+            width=current.width,
+            height=current.height,
+            nodata=nodata,
+            src_nodata=target.nodata,
+            resampling=Resampling.nearest,
+            warp_mem_limit=64,
+        )
+    )
+
+
+def read_codes(context, target, port, window, class_count, *, coverage=None):
     values = target.read(1, window=window)
     valid = (values != NODATA) & (target.read_masks(1, window=window) != 0)
+    if coverage is not None:
+        valid &= coverage.dataset_mask(window=window) != 0
     if np.any(values[valid] >= class_count):
         stop(
             context,
@@ -150,11 +168,11 @@ def run(context):
             )
             current_grid = (current.crs, current.transform, current.shape)
             baseline_grid = (baseline.crs, baseline.transform, baseline.shape)
-            if binary and (code_only or current_grid != baseline_grid):
+            if binary and code_only:
                 stop(
                     context,
                     "GLACIER_COMPARABILITY",
-                    "玛纳斯前后期须采用同一原生10米网格。",
+                    "玛纳斯交接二分类须使用原图有效掩膜。",
                     ["baseline"],
                 )
             if baseline_image is not None and (
@@ -170,24 +188,12 @@ def run(context):
                     "前期原图与标准分类的网格或缺测标记不一致。",
                     ["baseline_image"],
                 )
-            if code_only or (current.crs, current.transform, current.shape) != (
-                baseline.crs,
-                baseline.transform,
-                baseline.shape,
-            ):
-                baseline = stack.enter_context(
-                    WarpedVRT(
-                        baseline,
-                        crs=current.crs,
-                        transform=current.transform,
-                        width=current.width,
-                        height=current.height,
-                        nodata=NODATA,
-                        src_nodata=baseline.nodata,
-                        resampling=Resampling.nearest,
-                        warp_mem_limit=64,
+            if code_only or current_grid != baseline_grid:
+                baseline = aligned_baseline(stack, baseline, current, nodata=NODATA)
+                if baseline_image is not None:
+                    baseline_image = aligned_baseline(
+                        stack, baseline_image, current, nodata=0
                     )
-                )
         transitions = np.zeros((class_count, class_count), dtype=np.int64)
         current_counts = np.zeros(class_count, dtype=np.int64)
         earlier_valid = 0
@@ -196,10 +202,13 @@ def run(context):
             current_counts += np.bincount(values[valid], minlength=class_count)
             if baseline is not None:
                 prev, prev_valid = read_codes(
-                    context, baseline, "baseline", window, class_count
+                    context,
+                    baseline,
+                    "baseline",
+                    window,
+                    class_count,
+                    coverage=baseline_image,
                 )
-                if baseline_image is not None:
-                    prev_valid &= baseline_image.dataset_mask(window=window) != 0
                 earlier_valid += int(np.count_nonzero(prev_valid))
                 common = valid & prev_valid
                 pair_codes = prev[common] * class_count + values[common]

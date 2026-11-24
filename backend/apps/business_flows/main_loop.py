@@ -324,15 +324,7 @@ def compile_node(node):
 def advance_active(workflow, user, policy, node, item, evidence, *, guard, callbacks):
     from .node_loop import advance_tool_execution
 
-    from .glacier_history import comparison_action, fixed_manans_comparison
-
     executable = compile_node(node)
-    requester = take_action
-    if concise(workflow) and fixed_manans_comparison(executable):
-
-        def requester(_workflow, _node, _evidence, contract, _context, **callbacks):
-            return comparison_action(item, contract)
-
     return advance_tool_execution(
         workflow,
         user,
@@ -342,7 +334,7 @@ def advance_active(workflow, user, policy, node, item, evidence, *, guard, callb
         evidence,
         guard=guard,
         callbacks=callbacks,
-        requester=requester,
+        requester=take_action,
     )
 
 

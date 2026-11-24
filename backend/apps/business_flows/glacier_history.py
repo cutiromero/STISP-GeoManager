@@ -5,10 +5,8 @@ from django.db.models import F, Q, OuterRef, Subquery
 from apps.agent.resource_discovery import acl_resources
 from apps.catalog.models import ResourceObservationMetadata
 from apps.compute.models import (
-    AlgorithmVersion,
     ComputeImport,
     ComputeInput,
-    ComputeOutput,
 )
 from apps.compute.packages import ComputeError
 from apps.compute.quality import require_automatic_quality
@@ -20,7 +18,9 @@ from .state import state
 COMPARISON = "glacier-temporal-compare"
 AUTOMATIC_VERSION = "1.2.0"
 REGISTRATION_VERSION = "1.3.0"
-MANANS_REGISTRATION_VERSION = "1.4.0"
+MANANS_LEGACY_VERSION = "1.4.0"
+MANANS_REGISTRATION_VERSION = "1.5.0"
+MANANS_VERSIONS = (MANANS_LEGACY_VERSION, MANANS_REGISTRATION_VERSION)
 INFERENCE = "glacier-b15-infer"
 GRID_FIELDS = (
     ("coordinateSystem", 0),
@@ -34,80 +34,8 @@ def enabled(node, version):
         node.get("algorithmVersionId") == version.pk
         and version.algorithm.identifier == COMPARISON
         and version.version
-        in {AUTOMATIC_VERSION, REGISTRATION_VERSION, MANANS_REGISTRATION_VERSION}
+        in {AUTOMATIC_VERSION, REGISTRATION_VERSION, *MANANS_VERSIONS}
     )
-
-
-def fixed_manans_comparison(node):
-    return (
-        node.get("id") == "compare"
-        and node.get("kind") == "operator"
-        and AlgorithmVersion.objects.filter(
-            pk=node.get("algorithmVersionId"),
-            algorithm__identifier=COMPARISON,
-            version=MANANS_REGISTRATION_VERSION,
-        ).exists()
-    )
-
-
-def comparison_action(item, contract):
-    """Describe the next mechanical action for a frozen, bound comparison."""
-    loop = item["toolLoop"]
-    if failure := loop.get("failure"):
-        raise ComputeError(
-            failure.get("message", "登记期比较未完成，请核对资料"),
-            failure=failure,
-        )
-    if successful := loop.get("successfulTaskId"):
-        outputs = {
-            row.key: row
-            for row in ComputeOutput.objects.filter(
-                task_id=successful, expired=False
-            ).select_related("task__version")
-        }
-        required = contract["requiredOutputs"]
-        if any(
-            spec["name"] not in outputs
-            or outputs[spec["name"]].kind != spec["semanticType"]
-            for spec in required
-        ):
-            raise ComputeError("登记期比较缺少可交付的实际表格")
-        coverage = outputs.get("coverage")
-        if coverage is None:
-            raise ComputeError("登记期比较缺少有效范围统计")
-        require_automatic_quality(coverage)
-        checked = coverage.metadata["qualityCheck"]
-        metrics = checked["metrics"]
-        summary = checked["summary"]
-        if metrics["comparisonStatus"] == "compared":
-            summary = (
-                f"{metrics['baselineDate']} 至 {metrics['currentDate']}，"
-                f"共同有效面积 {metrics['commonAreaKm2']} 平方公里，"
-                f"分类变化占比 {metrics['changedPercent']}%，"
-                f"冰川分类净面积差 {metrics['netIceAreaKm2']} 平方公里。"
-            )
-        delivery = [
-            {**spec, "evidenceId": f"output-{outputs[spec['name']].pk}"}
-            for spec in required
-        ]
-        return {
-            "action": "finish_node",
-            "arguments": {
-                "summary": summary,
-                "outputs": delivery,
-                "evidenceIds": [entry["evidenceId"] for entry in delivery],
-                "limitations": ["登记期变化反映分类结果差异。"]
-                if metrics["comparisonStatus"] == "compared"
-                else [checked["summary"]],
-            },
-        }
-    last_failure = loop.get("lastObservation", {}).get("result", {}).get("failure", {})
-    if (
-        loop.get("preflightRequestHash")
-        and last_failure.get("code") != "PREFLIGHT_REQUIRED"
-    ):
-        return {"action": "run_operator", "arguments": {"usePreflight": True}}
-    return {"action": "preflight_operator", "arguments": {}}
 
 
 def _classification_filters(algorithm):
@@ -152,9 +80,7 @@ def _source_day(metadata, snapshot, resource):
     return None
 
 
-def resolve(
-    workflow, user, policy, node, current_id, *, registration=False, manans=False
-):
+def resolve(workflow, user, policy, node, current_id, *, version=AUTOMATIC_VERSION):
     """Use only the immediate authorized history of the same registered series."""
     link = node.get("inputBindings", {}).get("current", {})
     if (
@@ -168,6 +94,7 @@ def resolve(
     scoped = acl_resources(user, policy).filter(data_type="raster")
     from apps.ecology import glacier
 
+    manans = version in MANANS_VERSIONS
     imports = ComputeImport.objects.filter(
         **_classification_filters(glacier.MANANS_OPERATOR if manans else INFERENCE),
         output__task__project_tag_id=workflow.project_tag_id,
@@ -194,10 +121,14 @@ def resolve(
     )
     if source is None:
         raise ComputeError("本期原始影像未绑定或访问权限已撤回", 403)
-    if manans:
-        return glacier.resolve_manans_registered(workflow, user, source)
-    if registration:
-        return glacier.resolve_registered(workflow, user, source)
+    if manans or version == REGISTRATION_VERSION:
+        return glacier.resolve_registered(
+            workflow,
+            user,
+            source,
+            manans=manans,
+            same_grid=version == MANANS_LEGACY_VERSION,
+        )
     metadata = ResourceObservationMetadata.objects.filter(
         resource=source.resource
     ).first()
@@ -301,10 +232,7 @@ def parameters(receipt):
 def is_bound_baseline(workflow, task, record):
     if record.key not in {"baseline", "baseline_image"} or task.trial:
         return False
-    if (
-        record.key == "baseline_image"
-        and task.version.version != MANANS_REGISTRATION_VERSION
-    ):
+    if record.key == "baseline_image" and task.version.version not in MANANS_VERSIONS:
         return False
     nodes = (
         workflow.parameters.get("_businessFlow", {})

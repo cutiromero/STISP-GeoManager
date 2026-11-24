@@ -542,8 +542,7 @@ def submission(workflow, user, policy, node, loop, arguments, *, source_state=No
             policy,
             node,
             inputs["current"],
-            registration=version.version == glacier_history.REGISTRATION_VERSION,
-            manans=version.version == glacier_history.MANANS_REGISTRATION_VERSION,
+            version=version.version,
         )
         parameters = glacier_history.parameters(receipt)
         if prior is not None:
