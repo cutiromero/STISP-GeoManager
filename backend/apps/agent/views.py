@@ -1195,14 +1195,23 @@ def workflow_upload_batch(request):
 @endpoint(["GET", "POST"])
 def workflow_catalog_references(request):
     from .resource_search import search_brief, search_resources
-    from .workflow_uploads import add_catalog_references, catalog_resources, upload_json
+    from .workflow_uploads import add_catalog_references, upload_json
 
     project = request.headers.get("X-Project-Id")
     if request.method == "GET":
         query = request.GET.get("q", "")[:200]
-        available = catalog_resources(
-            request.user, project, source=_resource_source(request)
-        )
+        from .resource_discovery import discover_resources
+
+        policy = require_access(request.user, "agent")
+        if not policy.get("workflowEnabled", True):
+            raise ApiProblem("业务流执行权限已关闭", 403)
+        types = {"vector", "raster", "table"}
+        kind = request.GET.get("dataType")
+        if kind is not None and kind not in types:
+            raise ApiProblem("资料类型无效")
+        available = discover_resources(
+            request.user, policy, source=_resource_source(request)
+        ).filter(data_type__in={kind} if kind else types)
         try:
             page = int(request.GET.get("page", "1"))
             size = int(request.GET.get("pageSize", "20"))

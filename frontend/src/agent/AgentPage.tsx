@@ -1409,6 +1409,7 @@ function AgentWorkspace({ runtimeSwitch }: { runtimeSwitch?: ReactNode }) {
           conversationId={
             current?.archived || taskLocked ? undefined : current?.id
           }
+          canImport={user?.permissions.canUploadData}
           onStarted={startedBusinessFlow}
           onCancel={() => setBusinessLaunch(undefined)}
         />

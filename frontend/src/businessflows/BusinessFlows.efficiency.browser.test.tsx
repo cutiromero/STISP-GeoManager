@@ -182,6 +182,45 @@ it("launches the selected published version with a task goal and no premature ex
   expect(start).not.toHaveBeenCalled();
 });
 
+it("opens the Manans monitoring-shaped flow in the Agent workbench", async () => {
+  const flow = { ...researchFlow, name: "玛纳斯冰川解译", code: "manans-glacier-interpretation" };
+  const version = {
+    ...researchVersion,
+    definition: {
+      ...researchSpec,
+      inputRequirements: [{
+        key: "image",
+        label: "玛纳斯原始影像",
+        description: "选择一景原始影像",
+        dataTypes: ["raster" as const],
+        required: true,
+        requiredFields: [],
+      }],
+      nodes: researchSpec.nodes.map((node) => node.id !== researchSpec.nodes[0]?.id ? node : {
+        ...node,
+        contract: {
+          goal: "解译",
+          acceptance: ["真实影像"],
+          requiredOutputs: [
+            { name: "classification", semanticType: "raster" },
+            { name: "statistics", semanticType: "table" },
+          ],
+          tools: ["finish_node"],
+        },
+      }),
+    },
+  };
+  vi.mocked(businessFlowsApi.list).mockResolvedValue({ items: [summary(flow, version)], canManage: false });
+  vi.mocked(businessFlowsApi.detail).mockResolvedValue({ ...researchDetail, flow, version, versions: [version] });
+  show();
+  await screen.findByRole("heading", { name: flow.name });
+  fireEvent.click(screen.getByRole("button", { name: "开始任务" }));
+  const location = JSON.parse(screen.getByLabelText("当前导航").textContent!);
+  expect(location.path).toBe("/agent/workbench");
+  expect(location.state.businessFlowLaunch.versionId).toBe(version.id);
+  expect(screen.queryByRole("dialog", { name: "准备监测任务" })).not.toBeInTheDocument();
+});
+
 it("shows a simple flow without inventing AI or human checkpoints", async () => {
   show();
   await screen.findByRole("heading", { name: geologyFlow.name });

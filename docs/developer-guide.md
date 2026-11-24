@@ -3156,7 +3156,7 @@ API JSON 元数据默认 `Cache-Control: private,no-store`，文件和瓦片的�
 
 ### 主 Agent 监测业务流与正式成果登记
 
-监测业务流采用 `BusinessFlowSpec.executionMode=main_agent`。从业务流页面确认输入、观测参数和执行模型。主 Agent 沿用冻结的流程技能；检查实际资料，使用已登记适配能力或受控 `prepare_input` 衔接输入，再对拟执行的同一科学算子方案预检。独立模型只审核必要的适配脚本或配置的审核边界。完成需要实际成功输出、质量门禁与标准入库。业务流发布可在同一操作更新名称、用途和新版本，沿用 `updatedAt` 并发凭据。
+监测业务流采用 `BusinessFlowSpec.executionMode=main_agent`。从业务流目录进入智能体工作区，在任务准备卡中确认输入、观测参数和执行模型。主 Agent 沿用冻结的流程技能；检查实际资料，使用已登记适配能力或受控 `prepare_input` 衔接输入，再对拟执行的同一科学算子方案预检。独立模型只审核必要的适配脚本或配置的审核边界。完成需要实际成功输出、质量门禁与标准入库。业务流发布可在同一操作更新名称、用途和新版本，沿用 `updatedAt` 并发凭据。
 
 数据中心通过 `GET /api/compute/result-groups/` 按实际业务任务或独立计算组织结果。资料目录请求 `excludeComputeResults=1`。在同一项目内，产出者通过 `POST /api/ecology/monitoring/registration/` 确认登记监测主地图；后端重验来源和质量、登记持久展示样式，不扩大访问范围。大屏使用 `GET /api/ecology/monitoring/official/` 获取已登记成果和瓦片描述，不调用计算或源图准备。完整操作见 [监测任务与算子维护](workflow-monitoring-3.2.md)。
 

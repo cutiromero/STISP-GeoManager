@@ -1083,29 +1083,10 @@ def _finish(workflow, user, policy):
             != workflow.policy_snapshot.get("businessFlowControlEpoch", 0)
         ):
             raise WorkflowControlChanged("新的用户控制决定阻止了终态发布")
-        workflow.result_ids = sorted(
-            {
-                int(row["id"].removeprefix("output-"))
-                for node in value["nodes"].values()
-                for row in node.get("outputs", {}).get("evidence", [])
-                if str(row.get("id", "")).startswith("output-")
-                and str(row["id"])[7:].isdigit()
-            }
-        )
-        workflow.result_ids = [
-            identity
-            for identity in workflow.result_ids
-            if identity not in set(value.get("consumedOutputs", []))
-        ]
-        from apps.compute.models import ComputeImport
+        from .result_outputs import completed_output_ids, imported_resource_ids
 
-        workflow.result_resource_ids = list(
-            ComputeImport.objects.filter(
-                output_id__in=workflow.result_ids, status="ready"
-            )
-            .exclude(resource_id=None)
-            .values_list("resource_id", flat=True)
-        )
+        workflow.result_ids = completed_output_ids(workflow, value)
+        workflow.result_resource_ids = imported_resource_ids(workflow.result_ids)
         workflow.status, workflow.detail = (
             "succeeded",
             "业务流已完成，节点审核和人工决定均已保存",

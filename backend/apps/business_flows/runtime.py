@@ -154,6 +154,21 @@ def serialize_run(user, workflow, *, control_only=False):
         value = projected_state(workflow)
     else:
         value = state(workflow)
+    result_outputs, result_resources = [], []
+    if not control_only:
+        result_outputs = workflow.result_ids
+        result_resources = workflow.result_resource_ids
+        if workflow.workflow_type == "business_flow" and workflow.status == "succeeded":
+            from .result_outputs import consumed_deliverables, imported_resource_ids
+
+            retained = consumed_deliverables(
+                workflow, value, already_saved=result_outputs
+            )
+            if retained:
+                result_outputs = sorted(set(result_outputs) | retained)
+                result_resources = sorted(
+                    set(result_resources) | set(imported_resource_ids(retained))
+                )
     projected = []
     for node in bind["definitionSnapshot"]["nodes"]:
         item = deepcopy(value["nodes"][node["id"]])
@@ -243,8 +258,8 @@ def serialize_run(user, workflow, *, control_only=False):
         "nodes": projected,
         "events": [] if control_only else value.get("events", []),
         "revision": value.get("revision", 0),
-        "resultResourceIds": [] if control_only else workflow.result_resource_ids,
-        "resultOutputIds": [] if control_only else workflow.result_ids,
+        "resultResourceIds": result_resources,
+        "resultOutputIds": result_outputs,
         "createdAt": workflow.created_at.isoformat(),
         "updatedAt": workflow.updated_at.isoformat(),
         **(

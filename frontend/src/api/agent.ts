@@ -197,13 +197,14 @@ export const agentApi = {
     q = "",
     {
       source,
+      dataType,
       ...options
-    }: { signal?: AbortSignal; source?: AgentResourceSource } = {},
+    }: { signal?: AbortSignal; source?: AgentResourceSource; dataType?: "raster" } = {},
     page = 1,
     directoryId?: number,
   ) =>
     requestJson<AgentWorkflowCatalogPage>(
-      `/api/agent/workflow-uploads/references/?q=${encodeURIComponent(q)}&page=${page}&pageSize=20${directoryId === undefined ? "" : `&directoryId=${directoryId}`}${source ? `&source=${source}` : ""}`,
+      `/api/agent/workflow-uploads/references/?q=${encodeURIComponent(q)}&page=${page}&pageSize=20${directoryId === undefined ? "" : `&directoryId=${directoryId}`}${source ? `&source=${source}` : ""}${dataType ? `&dataType=${dataType}` : ""}`,
       options,
     ),
   restoreLogicConfiguration: (batchId: string, signal?: AbortSignal) =>

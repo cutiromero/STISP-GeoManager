@@ -9280,12 +9280,12 @@ paths:
               $ref: '#/components/schemas/AgentWorkflowConfirmation'
   /api/agent/workflow-uploads/references/:
     parameters:
-    - {name: X-Project-Id, in: header, required: true, description: 当前具体逻辑推理项目ID, schema: {type: integer, minimum: 1}}
+    - {name: X-Project-Id, in: header, required: true, description: 当前具体项目ID, schema: {type: integer, minimum: 1}}
     get:
       tags: [Agent]
       operationId: listAgentWorkflowCatalogResources
-      summary: 搜索可供逻辑推理引用的系统数据
-      description: 在当前项目与资源ACL内搜索已启用且就绪的矢量、栅格、表格及可复用成果，与普通智能体共用数据发现边界。目录选项来自所选来源的可发现集合，总数反映来源、关键词和目录筛选后的匹配数。需要智能体、工作流、算子和数据登记权限。
+      summary: 搜索可供业务流使用的系统数据
+      description: 在当前项目与资源ACL内搜索已启用且就绪的矢量、栅格、表格及可复用成果，与普通智能体共用数据发现边界。目录选项来自所选来源的可发现集合，总数反映来源、关键词和目录筛选后的匹配数。需要智能体和业务流权限。
       security: [{sessionAuth: []}]
       parameters:
       - in: query
@@ -9295,6 +9295,7 @@ paths:
       - {in: query, name: source, description: 按资料来源筛选；省略时同时返回登记数据与计算成果, schema: {$ref: '#/components/schemas/AgentResourceSource'}}
       - {in: query, name: page, description: 页码，从1开始, schema: {type: integer, minimum: 1, default: 1}}
       - {in: query, name: pageSize, description: 每页条数，上限50, schema: {type: integer, minimum: 1, maximum: 50, default: 20}}
+      - {in: query, name: dataType, description: 按业务流所需的资料类型筛选, schema: {type: string, enum: [vector, raster, table]}}
       - {in: query, name: directoryId, description: 数据目录（存量数据组别）ID，0表示未分组, schema: {type: integer, minimum: 0}}
       responses:
         '200':

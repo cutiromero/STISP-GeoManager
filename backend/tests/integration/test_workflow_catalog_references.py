@@ -85,6 +85,21 @@ def test_catalog_recent_pagination_total_and_directory(generic):
         assert generic["client"].get(url, params, **headers).status_code == 400
 
 
+def test_catalog_search_supports_task_data_outside_the_geology_project(generic):
+    resource = catalog_entry(generic)
+    generic["project"].code = "glacier-test"
+    generic["project"].save(update_fields=["code"])
+    url = "/api/agent/workflow-uploads/references/"
+    headers = {"HTTP_X_PROJECT_ID": str(generic["project"].id)}
+    result = generic["client"].get(url, {"dataType": "vector"}, **headers)
+    assert result.status_code == 200, result.content
+    assert resource.pk in {row["id"] for row in result.json()["items"]}
+    filtered = generic["client"].get(url, {"dataType": "raster"}, **headers)
+    assert filtered.status_code == 200
+    assert resource.pk not in {row["id"] for row in filtered.json()["items"]}
+    assert reference(generic, [resource.pk]).status_code == 400
+
+
 def test_references_are_non_owning_idempotent_and_reusable(generic):
     resource = catalog_entry(generic)
     original = DataResource.objects.filter(pk=resource.pk).values().get()

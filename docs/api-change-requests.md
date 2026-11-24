@@ -1,5 +1,18 @@
 # API Change Requests
 
+## API-20261124-002 - 业务流共用系统数据选择
+
+- Status: BackendReady
+- Owner: codex/xintao。
+- Endpoints: GET /api/agent/workflow-uploads/references/。
+- Change type: 增加可选资料类型筛选并支持当前项目的业务流资料选择。
+- OpenAPI change: GET 增加 `dataType`，沿用原分页、目录和来源参数。
+- Mock examples: 沿用目录分页响应，浏览器测试覆盖玛纳斯及冰川解译。
+- Frontend reason: 在智能体里的任务资料区按目录和关键词选择原始影像。
+- Backend implementation notes: GET 共用智能体的当前项目数据发现和访问控制。POST 的逻辑推理批次引用规则继续适用。
+- Verification: 分项目目录搜索、资料类型筛选、原逻辑推理引用及冰川启动浏览器测试。
+- Result: 逻辑推理和两条冰川解译使用同一个目录选择器。
+
 ## API-20261124-001 - 原始影像全景流式计算和波段顺序
 
 - Status: BackendReady
@@ -1003,6 +1016,7 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| API-20261124-002 | BackendReady | 系统数据查询 | 可选资料类型 | 冰川影像筛选 | 复用目录分页 | 当前项目数据发现 | 目录与启动回归 | 共用资料选择器 |
 | API-20261124-001 | BackendReady | 计算中心算子及预检 | 栅格合同 | 波段顺序与全景流式读取 | 算子自检 | 复用现有权限和快照 | 输入与大屏回归 | 玛纳斯冰川解译 |
 | API-20261123-002 | BackendReady | 冰川登记期与变化指标 |
 | API-20261123-001 | BackendReady | v2 通用业务流简版定义 |

@@ -128,7 +128,10 @@ def test_queued_import_requested_once_without_downstream_submission(chains):
     assert not state(workflow)["nodes"]["downstream"].get("computeTaskId")
 
 
-def test_upstream_csv_import_becomes_the_actual_downstream_compute_input(chains):
+@pytest.mark.parametrize("deliver_upstream", [False, True])
+def test_upstream_csv_import_becomes_the_actual_downstream_compute_input(
+    chains, deliver_upstream
+):
     env = chains
     workflow, output = upstream_ready(env)
     advance(env, workflow)
@@ -146,15 +149,37 @@ def test_upstream_csv_import_becomes_the_actual_downstream_compute_input(chains)
         assert bound.resource_id == imported.resource_id
         assert bound.resource_id != env["resource"].pk
         assert output.pk in state(workflow)["consumedOutputs"]
+    if deliver_upstream:
+        # An accepted artifact may be both an input and a declared final result.
+        version = output.task.version
+        for spec in version.manifest["outputs"]:
+            if spec["key"] == output.key:
+                spec["final"] = True
+        version.save(update_fields=["manifest"])
+        state(workflow)["nodes"]["upstream"]["contractOutputs"] = [
+            {
+                "name": output.key,
+                "semanticType": "table",
+                "evidenceId": f"output-{output.pk}",
+            }
+        ]
+        workflow.save(update_fields=["plan"])
     final = finish_task(env, downstream_id, "DOWNSTREAM_FINAL")
     advance(env, workflow)
     advance(env, workflow)
     result = advance(env, workflow)
     assert workflow.status == "succeeded", workflow.detail
-    assert (
-        result["resultOutputIds"] == [final.pk]
-        and output.pk not in result["resultOutputIds"]
-    )
+    expected = [output.pk, final.pk] if deliver_upstream else [final.pk]
+    assert workflow.result_ids == result["resultOutputIds"] == expected
+    if deliver_upstream:
+        assert result["resultResourceIds"] == [imported.resource_id]
+        # An earlier completed task stored only its downstream outputs.
+        workflow.result_ids = [final.pk]
+        workflow.result_resource_ids = []
+        with project_scope(env["scope"]):
+            historical = runtime.serialize_run(env["owner"], workflow)
+        assert historical["resultOutputIds"] == expected
+        assert historical["resultResourceIds"] == [imported.resource_id]
 
 
 @pytest.mark.parametrize("action", ["pause", "cancel"])
