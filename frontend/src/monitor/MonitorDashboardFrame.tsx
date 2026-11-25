@@ -134,7 +134,9 @@ export default function MonitorDashboardFrame({
           </span>
           <span>
             {displayOnly
-              ? "以登记的实际观测期与统计口径为准"
+              ? scene === "glacier"
+                ? "登记期不是影像拍摄日期"
+                : "以登记的实际观测期与统计口径为准"
               : t(
                   reducedMotion
                     ? "monitor.motionReduced"

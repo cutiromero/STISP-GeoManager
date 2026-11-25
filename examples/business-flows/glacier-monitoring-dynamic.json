@@ -1,0 +1,96 @@
+{
+  "schemaVersion": 2,
+  "adapter": "research_flow",
+  "skill": {
+    "title": "冰川解译",
+    "instructions": "统计本期冰川面积，找到同样区、同任务的上一个登记期后，在共同有效区域比较。登记期按成果批次，不是影像拍摄日。"
+  },
+  "inputRequirements": [
+    {
+      "key": "image",
+      "label": "本期原始影像",
+      "description": "选一幅要分析的冰川原始影像（15 波段 TIFF），不要选彩色分类图。",
+      "dataTypes": [
+        "raster"
+      ],
+      "required": true,
+      "requiredFields": [],
+      "multiple": false
+    }
+  ],
+  "nodes": [
+    {
+      "id": "interpret",
+      "title": "提取冰川",
+      "kind": "operator",
+      "description": "生成洁净冰川和表碛冰川的分类图。",
+      "instruction": "",
+      "dependsOn": [],
+      "dataRoles": [],
+      "inputBindings": {
+        "image": {
+          "role": "image"
+        }
+      },
+      "contract": {
+        "requiredOutputs": [
+          {
+            "name": "classification",
+            "semanticType": "raster"
+          }
+        ],
+        "importOutputs": [
+          "classification"
+        ]
+      }
+    },
+    {
+      "id": "compare",
+      "title": "统计面积和变化",
+      "kind": "operator",
+      "description": "统计本期面积，自动查找可以对比的上期成果。",
+      "instruction": "按登记期自动找上期分类。两期都覆盖且有效的地方才算变化。交接标准图只做类别编码对比；不要把类别代码当成已核实的冰川类型。",
+      "dependsOn": [
+        "interpret"
+      ],
+      "dataRoles": [],
+      "inputBindings": {
+        "current": {
+          "nodeId": "interpret",
+          "outputKey": "classification"
+        }
+      },
+      "contract": {
+        "requiredOutputs": [
+          {
+            "name": "areas",
+            "semanticType": "table"
+          },
+          {
+            "name": "transitions",
+            "semanticType": "table"
+          },
+          {
+            "name": "coverage",
+            "semanticType": "table"
+          }
+        ]
+      }
+    },
+    {
+      "id": "handover",
+      "title": "整理报告",
+      "kind": "result",
+      "description": "交付分类图并说明冰川面积。",
+      "instruction": "用中文写本期面积和统计范围。有上期时写明两次登记日期、共同范围和结果差异；交接标准只报告编码差异。成果清单由平台附上。",
+      "dependsOn": [
+        "compare"
+      ],
+      "dataRoles": []
+    }
+  ],
+  "outputRequirements": [
+    "冰川分类图",
+    "面积统计和变化报告"
+  ]
+}

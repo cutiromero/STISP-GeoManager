@@ -4,6 +4,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { App } from "antd";
 import { MemoryRouter } from "react-router-dom";
@@ -707,3 +708,79 @@ it("ZIP 上传经业务流角色绑定后启动，不进入旧对话提交路径
   );
   expect(submit).not.toHaveBeenCalled();
 });
+
+it.each(["manans-glacier-interpretation", "glacier-monitoring-dynamic"])(
+  "%s uses the task materials catalog and binds one selected image",
+  async (code) => {
+    const glacierVersion = {
+      ...version,
+      definition: {
+        ...version.definition,
+        adapter: "research_flow" as const,
+        schemaVersion: 2 as const,
+        nodes: version.definition.nodes.map((node) => ({
+          ...node,
+          review: { ai: false, human: false, maxRevisions: 0 },
+        })),
+        inputRequirements: [{
+          key: "image",
+          label: "本期原始影像",
+          description: "选择一幅冰川原始影像",
+          dataTypes: ["raster" as const],
+          required: true,
+          requiredFields: [],
+        }],
+      },
+    };
+    vi.mocked(businessFlowsApi.detail).mockResolvedValue({
+      ...detail,
+      flow: { ...detail.flow, code },
+      version: glacierVersion,
+      versions: [glacierVersion],
+    });
+    const catalog = vi.spyOn(agentApi, "workflowCatalogResources").mockResolvedValue({
+      items: [{
+        id: 2370,
+        name: "玛纳斯原始影像 · T45TUJ",
+        description: "Sentinel-2",
+        dataType: "raster",
+        directoryId: 9,
+        directoryName: "玛纳斯原始影像",
+      }],
+      directories: [{ id: 9, name: "玛纳斯原始影像" }],
+      total: 1,
+      page: 1,
+      pageSize: 20,
+    });
+    const start = vi.spyOn(businessFlowsApi, "start").mockResolvedValue(businessFlowRun());
+    render(
+      <App>
+        <BusinessFlowLaunch
+          launch={intent}
+          model="qwen"
+          canImport
+          onStarted={vi.fn()}
+          onCancel={vi.fn()}
+        />
+      </App>,
+    );
+    const materials = await screen.findByRole("region", { name: "任务资料" });
+    expect(within(materials).getByRole("link", { name: "上传影像" })).toHaveAttribute("href", expect.stringContaining("/resources/data/import"));
+    expect(within(materials).getByRole("button", { name: "沿用上次配置" })).toBeVisible();
+    expect(catalog).not.toHaveBeenCalled();
+    fireEvent.click(within(materials).getByRole("button", { name: "选择系统数据" }));
+    await waitFor(() => expect(catalog).toHaveBeenCalledWith("", expect.objectContaining({ dataType: "raster" }), 1, undefined));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "选择玛纳斯原始影像 · T45TUJ" }));
+    const picker = await screen.findByRole("dialog", { name: "选择系统数据" });
+    fireEvent.click(within(picker).getByRole("button", { name: "加入本次任务" }));
+    expect(within(materials).getByRole("button", { name: "移除玛纳斯原始影像 · T45TUJ" })).toBeVisible();
+    const submit = screen.getByRole("button", { name: "开始业务流" });
+    await waitFor(() => expect(submit).toBeEnabled());
+    fireEvent.click(submit);
+    await waitFor(() =>
+      expect(start).toHaveBeenCalledWith(intent.definitionId, expect.objectContaining({
+        inputs: { image: 2370 },
+      })),
+    );
+  },
+);

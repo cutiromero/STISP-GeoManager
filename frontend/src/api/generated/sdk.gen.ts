@@ -2983,9 +2983,9 @@ export const confirmAgentWorkflow = <ThrowOnError extends boolean = false>(optio
 });
 
 /**
- * 搜索科研任务可用的系统数据
+ * 搜索可供业务流使用的系统数据
  *
- * 在当前项目中按资料来源、关键词和目录筛选可用数据。research 用途采用智能体的数据访问权限；logic 用途采用逻辑推理的资料登记权限。
+ * 在当前项目与资源 ACL 内按来源、类型、目录和关键词查询可用数据。logic 用途需要智能体和业务流权限。research 用途需要智能体权限。
  */
 export const listAgentWorkflowCatalogResources = <ThrowOnError extends boolean = false>(options: Options<ListAgentWorkflowCatalogResourcesData, ThrowOnError>): RequestResult<ListAgentWorkflowCatalogResourcesResponses, ListAgentWorkflowCatalogResourcesErrors, ThrowOnError> => (options.client ?? client).get<ListAgentWorkflowCatalogResourcesResponses, ListAgentWorkflowCatalogResourcesErrors, ThrowOnError>({
     security: [{

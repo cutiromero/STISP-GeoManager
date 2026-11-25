@@ -40,6 +40,7 @@ import {
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ApiError, requestEventStream, requestJson } from "../api/client";
 import type {
+  AgentWorkflowCatalogItem,
   HermesCapabilities,
   HermesMessage as Message,
   HermesMessageList,
@@ -78,9 +79,7 @@ import {
   type Citations,
 } from "./HermesTimeline";
 import useAgentLayout from "./useAgentLayout";
-import WorkflowDataPicker, {
-  type WorkflowDataSelection,
-} from "./WorkflowDataPicker";
+import WorkflowCatalogPicker from "./WorkflowCatalogPicker";
 import "../businessflows/business-flow-launch.css";
 
 const api = "/api/agent/hermes";
@@ -810,7 +809,7 @@ function Thread({
   const [messages, setMessages] = useState<Message[]>([]);
   const [plan, setPlan] = useState<TodoPlan>();
   const [workflowDraft, setWorkflowDraft] = useState(workflow);
-  const [materials, setMaterials] = useState<WorkflowDataSelection[]>([]);
+  const [materials, setMaterials] = useState<AgentWorkflowCatalogItem[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [runId, setRunId] = useState(session?.last_run_id ?? null);
   const [pendingInput, setPendingInput] = useState("");
@@ -1375,17 +1374,20 @@ function Thread({
                 {name}
               </Tag>
             ))}
-            <WorkflowDataPicker
-              open={pickerOpen}
-              usage="research"
-              polished
-              selection={materials}
-              onCancel={() => setPickerOpen(false)}
-              onConfirm={(items) => {
-                setMaterials(items);
-                setPickerOpen(false);
-              }}
-            />
+            {pickerOpen && (
+              <WorkflowCatalogPicker
+                usage="research"
+                polished
+                disabled={false}
+                attachedIds={[]}
+                initialSelection={materials}
+                onClose={() => setPickerOpen(false)}
+                onConfirm={(items) => {
+                  setMaterials(items);
+                  setPickerOpen(false);
+                }}
+              />
+            )}
           </Flex>
         )}
         <div className="agent-input-row">

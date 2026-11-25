@@ -1,6 +1,7 @@
 """One admission counter for execution, reviews and preparation model calls."""
 
 from apps.compute.packages import ComputeError
+from .definitions import concise_definition, task_executor
 
 MAX_MODEL_CALLS = 256
 
@@ -48,7 +49,15 @@ def check_start_budget(policy, definition, input_plan, *, agent_enabled=True):
     calculations = 5 if scientific else sum(calculation(node) for node in nodes)
     operators = calculations + len(conversions)
     reviews = sum(node["review"]["ai"] for node in nodes)
-    if agent_enabled and definition.get("executionMode") == "main_agent":
+    if agent_enabled and concise_definition(definition):
+        models = (
+            sum(
+                3 if calculation(node) else int(node["kind"] != "human")
+                for node in nodes
+            )
+            + reviews
+        )
+    elif agent_enabled and task_executor(definition):
         # Scientific mapping may be reused; its five calculations and final
         # analysis still require the task's own actions, routing and review.
         models = (

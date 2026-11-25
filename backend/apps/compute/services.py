@@ -326,8 +326,12 @@ def validate_submission(user, body):
     if (
         any((port.get("raster") or {}).get("streaming") for port in input_specs)
         and gpu_profile is None
+        and not (
+            manifest.get("runtime") == "python-geospatial-v1"
+            and config().mode == "native"
+        )
     ):
-        raise ComputeError("流式栅格输入需要已配置的原生地理模型环境")
+        raise ComputeError("流式栅格输入需要平台原生地理计算环境")
     for spec in input_specs:
         rid = bindings.get(spec["key"])
         if rid is None and not spec["required"]:
@@ -398,6 +402,12 @@ def validate_submission(user, body):
             info = windowed_metadata(
                 spec, info, parameter_values(manifest, {}, params, check_inputs=False)
             )
+        elif resource.data_type == "raster" and (spec.get("raster") or {}).get(
+            "streaming"
+        ):
+            from .raster_windows import whole_grid_metadata
+
+            info = whole_grid_metadata(info)
         if resource.data_type == "raster":
             from .raster_contracts import gaps as raster_gaps
 

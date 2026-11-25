@@ -50,6 +50,7 @@ import WildfireLaunchOptions, {
 import "./business-flows.css";
 import "./business-flow-launch.css";
 import { monitoringFlowProfile } from "./monitoringFlowProfile";
+import BusinessFlowImageSelection from "./BusinessFlowImageSelection";
 
 // Candidate reads are bounded metadata. Search is remote and shared by all roles.
 const CANDIDATE_SEARCH_DELAY_MS = RESOURCE_SEARCH_DELAY_MS;
@@ -60,7 +61,7 @@ const GenericWorkflowUploads = lazy(
 export type BusinessFlowLaunchIntent = MonitoringWorkflowLaunch;
 export default function BusinessFlowLaunch({
   launch,
-  model: suppliedModel,
+  model,
   conversationId,
   onStarted,
   onCancel,
@@ -73,7 +74,6 @@ export default function BusinessFlowLaunch({
   presentation = "default",
   fixedInputs = false,
   canImport = false,
-  directMonitoring = false,
 }: {
   launch: BusinessFlowLaunchIntent;
   model: string;
@@ -89,24 +89,17 @@ export default function BusinessFlowLaunch({
   presentation?: "default" | "task";
   fixedInputs?: boolean;
   canImport?: boolean;
-  directMonitoring?: boolean;
 }) {
   const ui = useComputeText();
   const { bootstrap } = useAgentBootstrapState();
-  const [chosenModel, setChosenModel] = useState<string>();
-  const onlineModels =
-    bootstrap?.models?.filter(
-      (option) => option.allowAgent && option.status === "online",
-    ) ?? [];
-  const defaultModel =
-    onlineModels.find(
-      (option) => option.alias === bootstrap?.defaultAgentModel,
-    ) ?? onlineModels[0];
-  const model = directMonitoring
-    ? (chosenModel ?? defaultModel?.alias ?? "")
-    : suppliedModel;
   const [version, setVersion] = useState<BusinessFlowVersion>();
   const [flowCode, setFlowCode] = useState("");
+  const manans = flowCode === "manans-glacier-interpretation";
+  const glacierPilot = version?.definition.schemaVersion === 2 &&
+    (flowCode === "glacier-monitoring-dynamic" || manans);
+  const imageRole = glacierPilot
+    ? version?.definition.inputRequirements.find((input) => input.key === "image")
+    : undefined;
   const [wildfireSelection, setWildfireSelection] =
     useState<WildfireLaunchSelection>();
   const [loading, setLoading] = useState(true);
@@ -498,9 +491,10 @@ export default function BusinessFlowLaunch({
     setResourceSearch(wantedQuery.current);
     void loadCandidates(wantedQuery.current, true);
   };
+  const taskGoal = goal.trim() || (manans ? "提取这景玛纳斯影像的冰川，统计面积和有效区占比。" : glacierPilot ? "提取本期冰川，统计面积和变化。" : "");
   const start = async () => {
     if (inFlight.current || !version) return;
-    if (!goal.trim()) {
+    if (!taskGoal) {
       setError("请说明本次任务目标。");
       return;
     }
@@ -532,7 +526,7 @@ export default function BusinessFlowLaunch({
       goal:
         needsWildfireSelection && wildfireSelection
           ? `${goal.trim()}\n本次确认的观测选择：${wildfireSelection.summary}`
-          : goal.trim(),
+          : taskGoal,
       model,
       reviewerModel,
       ...(thinkingAvailable ? { reasoningEffort: effort } : {}),
@@ -608,9 +602,9 @@ export default function BusinessFlowLaunch({
     inputReady &&
     wildfireReady &&
     !missing.length &&
-    goal.trim(),
+    taskGoal,
   );
-  const SettingsTag = presentation === "task" ? "details" : "div";
+  const SettingsTag = presentation === "task" || glacierPilot ? "details" : "div";
   return (
     <section
       className={`business-flow-launch-panel${presentation === "task" && fixedInputs ? " monitor-concise-launch" : ""}`}
@@ -660,23 +654,18 @@ export default function BusinessFlowLaunch({
             <div className="flow-launch-grid">
               <div className="flow-launch-form">
                 {error && <Alert type="error" showIcon title={error} />}
-                {directMonitoring && (
-                  <Alert
-                    type="info"
-                    showIcon
-                    title="一次配置，由主 Agent 组织解译"
-                    description="绑定原始资料后直接运行。主 Agent 预检、按实际差距调用适配能力、执行已发布科学算子并核验成果。默认使用资料有效范围，不要求重复框选。"
-                  />
-                )}
                 <label
                   className="business-flow-launch-field"
                   htmlFor="business-flow-launch-goal"
                 >
-                  {ui("本次任务目标", "Task goal")}
+                  {glacierPilot
+                    ? ui("想补充什么？（可选）", "Additional instructions (optional)")
+                    : ui("本次任务目标", "Task goal")}
                   <Input.TextArea
                     id="business-flow-launch-goal"
                     value={goal}
                     disabled={busy}
+                    placeholder={manans ? "例如：重点说明有效覆盖范围。" : glacierPilot ? "例如：重点看表碛冰川面积。" : undefined}
                     onChange={(event) => setGoal(event.target.value)}
                     maxLength={12000}
                     autoSize={{ minRows: 2, maxRows: 5 }}
@@ -684,24 +673,13 @@ export default function BusinessFlowLaunch({
                 </label>
                 {
                   <SettingsTag className="business-flow-launch-settings">
-                    {presentation === "task" && (
+                    {(presentation === "task" || glacierPilot) && (
                       <summary>{ui("高级设置", "Advanced settings")}</summary>
                     )}
                     <div className="business-flow-launch-roles">
                       <span>
                         <RobotOutlined />
                         {ui("任务执行", "Executor")}
-                        {directMonitoring ? (
-                          <Select
-                            aria-label="主 Agent 执行模型"
-                            style={{ minWidth: 170 }}
-                            value={model || undefined}
-                            options={modelOptions}
-                            onChange={setChosenModel}
-                            disabled={busy}
-                            placeholder="选择可用模型"
-                          />
-                        ) : (
                           <strong>
                             {modelOptions.find(
                               (option) => option.value === model,
@@ -709,7 +687,6 @@ export default function BusinessFlowLaunch({
                               model ||
                               ui("尚未选择模型", "No model selected")}
                           </strong>
-                        )}
                       </span>
                       {needsReview && (
                         <label>
@@ -823,6 +800,16 @@ export default function BusinessFlowLaunch({
                       <p key={key}>{inputLabels?.[id] ?? `资料 ${id}`}</p>
                     ))}
                   </div>
+                ) : imageRole ? (
+                  <BusinessFlowImageSelection
+                    key={candidateScope}
+                    flowId={launch.definitionId}
+                    role={imageRole}
+                    image={inputs[imageRole.key]}
+                    disabled={busy}
+                    canImport={canImport}
+                    onChange={(id) => setInputs(id === undefined ? {} : { [imageRole.key]: id })}
+                  />
                 ) : version.definition.inputRequirements.length ? (
                   <div className="business-flow-launch-inputs">
                     <h3>{ui("任务资料", "Task data")}</h3>
@@ -986,21 +973,6 @@ export default function BusinessFlowLaunch({
                     onChange={setWildfireSelection}
                   />
                 )}
-                {directMonitoring && (
-                  <p className="business-flow-launch-note">
-                    新资料请先入库，再在这里绑定；野火 Zarr 由资料管理员登记。
-                    {canImport && (
-                      <a
-                        href={`/resources/data/import?projectTagId=${getActiveProject()}`}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        {" "}
-                        打开资料导入
-                      </a>
-                    )}
-                  </p>
-                )}
                 <InputAdaptationReview
                   flowId={launch.definitionId}
                   request={inputRequest}
@@ -1094,9 +1066,7 @@ export default function BusinessFlowLaunch({
               disabled={busy}
               onClick={() => callbacks.current.onCancel()}
             >
-              {directMonitoring
-                ? ui("返回业务流", "Back to flows")
-                : ui("返回对话", "Back to conversation")}
+              {ui("返回对话", "Back to conversation")}
             </Button>
             <Button
               type="primary"

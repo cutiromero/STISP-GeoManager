@@ -13,7 +13,7 @@
 - Verification: 运行参数、会话授权、活动顺序及历史回放。
 - Result: 新版会话工作区。
 
-## API-20261124-001 - 科研业务流资料选择
+## API-20261124-003 - 科研业务流资料选择
 
 - Status: BackendReady
 - Owner: codex/xintao。
@@ -22,9 +22,61 @@
 - OpenAPI change: 增加可选 `usage`，支持 `research` 和 `logic`。缺省值为 `logic`。
 - Mock examples: 资料目录回归使用项目和目录数据。
 - Frontend reason: 科研业务流和逻辑推理共用系统数据选择器。
-- Backend implementation notes: 两种用途共用资料目录搜索与分页，各自使用对应的数据访问权限。
+- Backend implementation notes: 两种用途共用项目数据发现与分页。逻辑推理用途同时检查业务流权限。
 - Verification: 项目授权、登记数据和计算成果筛选、目录搜索及资料选择。
 - Result: 新版科研智能体使用资料目录。
+
+## API-20261124-002 - 业务流共用系统数据选择
+
+- Status: BackendReady
+- Owner: codex/xintao。
+- Endpoints: GET /api/agent/workflow-uploads/references/。
+- Change type: 增加可选资料类型筛选并支持当前项目的业务流资料选择。
+- OpenAPI change: GET 增加 `dataType`，沿用原分页、目录和来源参数。
+- Mock examples: 沿用目录分页响应，浏览器测试覆盖玛纳斯及冰川解译。
+- Frontend reason: 在智能体里的任务资料区按目录和关键词选择原始影像。
+- Backend implementation notes: GET 共用智能体的当前项目数据发现和访问控制。POST 的逻辑推理批次引用规则继续适用。
+- Verification: 分项目目录搜索、资料类型筛选、原逻辑推理引用及冰川启动浏览器测试。
+- Result: 逻辑推理和两条冰川解译使用同一个目录选择器。
+
+## API-20261124-001 - 原始影像全景流式计算和波段顺序
+
+- Status: BackendReady
+- Owner: codex/xintao。
+- Endpoints: 计算中心算子清单、预检、任务执行及监测成果读取。
+- Change type: 栅格合同扩展两个可选能力。
+- OpenAPI change: 可选的 `raster.bandNames` 匹配原始波段顺序；已授权的原生流式算子可省略窗口，沿用完整原始网格。
+- Mock examples: 沿用既有端点与响应，真实示例见玛纳斯冰川算子及其自检样例。
+- Frontend reason: 选一景玛纳斯原始影像即可处理全景。
+- Backend implementation notes: 复用输入版本、源依赖、输出网格检查及现有正式登记接口。玛纳斯冰川成果采用二分类指标及真实观测日期。
+- Verification: 栅格合同、冰川展示和算子小样例验证。
+- Result: 玛纳斯冰川解译及监测展示。
+
+## API-20261123-002 - 冰川登记期与变化指标
+
+- Status: BackendReady
+- Owner: codex/xintao。
+- Endpoints: GET /api/ecology/monitoring/official/?scene=glacier。
+- Change type: 增量读取字段，仅冰川显示登记期和共同有效区变化。
+- OpenAPI change: `registrationDate` 与实际观测时间分别保存；`glacierChange` 带前期登记、比较口径及计算指标。
+- Mock examples: 大屏浏览器回归覆盖登记日期、标准图编码差异与卡片内滚动。
+- Frontend reason: 大屏读真实已登记结果并自动刷新，不需要人工上传统计表。
+- Backend implementation notes: 业务流完成后只登记已入库主分类图；仅比较同样区与任务、上个登记期的共同有效像元。前期在当前项目被撤权后不返回其指标。
+- Verification: 区域错位和 NoData 工具自检、实算发布和访问回归、正式大屏页面。
+- Result: 冰川场景和相应业务流，不修改其他业务流。
+
+## API-20261123-001 - v2 通用业务流简版定义
+
+- Status: BackendReady
+- Owner: codex/xintao。
+- Endpoints: 业务流注册、发布、版本详情及运行详情；使用原路径。
+- Change type: 新增版本化定义格式，原 v1 定义、项目权限和执行行为不变。
+- OpenAPI change: `BusinessFlowSpec.schemaVersion` 支持 2；v2 省略 `executionMode`。节点合同仍有具名成果，目标、补充验收条件与工具可沿用默认值。
+- Mock examples: 冰川 v2 真实定义见 `examples/business-flows/glacier-monitoring-dynamic.json`；浏览器回归覆盖 v1 与 v2 的恢复界面。
+- Frontend reason: 新建流程不必重复声明执行方式、节点职责和默认门槛；冰川用户可只选择原图。
+- Backend implementation notes: 同一任务会话推进；单一路径直接进入下一节点，分支仍由智能体决定。审核、数据权限及真实成果校验沿用原边界。
+- Verification: v2 规范与报告单测、旧版回归、冰川历史匹配集成测试、浏览器与正式站真实影像验收。
+- Result: 先应用到冰川解译示范，不迁移其他已发布业务流。
 
 ## API-20261122-002 - Hermes 会话的公开网页检索
 
@@ -991,7 +1043,11 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | API-20261125-001 | BackendReady | 新版智能体对话进展与推理档位 |
-| API-20261124-001 | BackendReady | 科研业务流资料目录用途 |
+| API-20261124-003 | BackendReady | 科研业务流资料目录用途 |
+| API-20261124-002 | BackendReady | 系统数据查询 | 可选资料类型 | 冰川影像筛选 | 复用目录分页 | 当前项目数据发现 | 目录与启动回归 | 共用资料选择器 |
+| API-20261124-001 | BackendReady | 计算中心算子及预检 | 栅格合同 | 波段顺序与全景流式读取 | 算子自检 | 复用现有权限和快照 | 输入与大屏回归 | 玛纳斯冰川解译 |
+| API-20261123-002 | BackendReady | 冰川登记期与变化指标 |
+| API-20261123-001 | BackendReady | v2 通用业务流简版定义 |
 | API-20261122-002 | BackendReady | Hermes 会话的公开网页检索 |
 | API-20261122-001 | BackendReady | Hermes 网页会话、工具发现与 SSE |
 | API-20261121-002 | BackendReady | 业务流科研目的校验与节点图编辑 |

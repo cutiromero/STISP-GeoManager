@@ -2,6 +2,8 @@
 
 from django.core.exceptions import ValidationError
 
+from .definitions import concise_definition
+
 
 def validate(value):
     if not isinstance(value, dict) or set(value) - {
@@ -24,7 +26,7 @@ def for_definition(definition):
     value = validate(definition.get("inputPreparation", {}))
     return {
         "version": 1,
-        "allowScripts": value.get("allowScripts", True),
+        "allowScripts": value.get("allowScripts", not concise_definition(definition)),
         "reviewScripts": value.get(
             "reviewScripts", any(node["review"]["ai"] for node in definition["nodes"])
         ),

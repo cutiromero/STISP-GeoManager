@@ -79,6 +79,20 @@ def windowed_metadata(spec, info, parameters):
     return value
 
 
+def whole_grid_metadata(info):
+    """Describe a native full-grid view without geographic bounds or resampling."""
+    value = deepcopy(info)
+    width, height = value["rasterMetadata"]["size"]
+    bands = len(value["rasterMetadata"]["bands"])
+    value.update(
+        rasterWindow=[0, 0, width, height],
+        streamingRaster=True,
+        sourceSizeBytes=info["sizeBytes"],
+        sizeBytes=min(width, 256) * min(height, 256) * bands * 8 + 65536,
+    )
+    return value
+
+
 def materialize_window(resource, target, window):
     import rasterio
     from rasterio.windows import Window

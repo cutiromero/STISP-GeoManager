@@ -1,0 +1,99 @@
+{
+  "schemaVersion": 2,
+  "adapter": "research_flow",
+  "skill": {
+    "title": "玛纳斯冰川解译",
+    "instructions": "解译一景玛纳斯冰川范围，并与同样区的上一登记期成果比较。变化限两期共同有效区；登记期和影像日期分别记录。"
+  },
+  "inputRequirements": [
+    {
+      "key": "image",
+      "label": "玛纳斯原始影像",
+      "description": "选择一景玛纳斯 Sentinel-2 原始影像。每次对所选影像的有效区解译。",
+      "dataTypes": [
+        "raster"
+      ],
+      "required": true,
+      "requiredFields": [],
+      "multiple": false
+    }
+  ],
+  "nodes": [
+    {
+      "id": "interpret",
+      "title": "提取冰川并统计面积",
+      "kind": "operator",
+      "description": "区分冰川、非冰川与缺测，按有效像元统计冰川面积和占比。",
+      "dependsOn": [],
+      "dataRoles": [],
+      "inputBindings": {
+        "image": {
+          "role": "image"
+        }
+      },
+      "contract": {
+        "requiredOutputs": [
+          {
+            "name": "classification",
+            "semanticType": "raster"
+          },
+          {
+            "name": "statistics",
+            "semanticType": "table"
+          }
+        ],
+        "importOutputs": [
+          "classification"
+        ]
+      }
+    },
+    {
+      "id": "compare",
+      "title": "统计上一登记期变化",
+      "kind": "operator",
+      "description": "比较同样区两期分类的共同有效面积、变化像元占比和冰川净面积差。",
+      "instruction": "直接对已绑定算子调用 preflight_operator，arguments 传空对象。预检会绑定同样区的上一登记期。按返回的 runAction 执行，依据 coverage 和 transitions 的实际结果分析共同有效区。没有可比历史或没有共同有效区时，交付本期面积并说明原因。",
+      "dependsOn": [
+        "interpret"
+      ],
+      "dataRoles": [],
+      "inputBindings": {
+        "current": {
+          "nodeId": "interpret",
+          "outputKey": "classification"
+        }
+      },
+      "contract": {
+        "requiredOutputs": [
+          {
+            "name": "areas",
+            "semanticType": "table"
+          },
+          {
+            "name": "transitions",
+            "semanticType": "table"
+          },
+          {
+            "name": "coverage",
+            "semanticType": "table"
+          }
+        ]
+      }
+    },
+    {
+      "id": "handover",
+      "title": "交付解译报告",
+      "kind": "result",
+      "description": "交付影像日期、冰川面积及与前一登记期的差异。",
+      "instruction": "说明登记期、共同有效范围和冰川净面积差。同一影像不同登记期仅解读分类结果差异。没有可比历史时说明检索结果。",
+      "dependsOn": [
+        "compare"
+      ],
+      "dataRoles": []
+    }
+  ],
+  "outputRequirements": [
+    "冰川分类图",
+    "面积及登记期变化报告"
+  ]
+}

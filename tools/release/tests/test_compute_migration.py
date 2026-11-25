@@ -1,4 +1,4 @@
-"""在独立 SQLite 上证明 compute.0007 的旧列集插入与模型状态一致。"""
+"""在独立 SQLite 上验证 compute.0007 和 compute.0008 的旧列集兼容性。"""
 
 import os
 from pathlib import Path
@@ -33,7 +33,9 @@ project = old_apps.get_model("projects", "Project").objects.first()
 algorithm = old_apps.get_model("compute", "AlgorithmResource").objects.create(project_tag=project, identifier="legacy", name="legacy", created_by=user)
 version = old_apps.get_model("compute", "AlgorithmVersion").objects.create(algorithm=algorithm, version="1", manifest={}, checksum="test", package_path="test")
 executor = MigrationExecutor(connection)
-executor.migrate([("compute", "0007_operator_protocol"), ("projects", "0003_project_features")])
+protocol = [("compute", "0007_operator_protocol"), ("projects", "0003_project_features")]
+executor.migrate(protocol)
+ProtocolTask = executor.loader.project_state(protocol).apps.get_model("compute", "ComputeTask")
 queries = []
 def capture(execute, sql, params, many, context):
     queries.append(sql)
@@ -47,12 +49,19 @@ with connection.cursor() as cursor:
     assert [json.loads(value) for value in cursor.fetchone()] == [{}, {}, {}]
     columns = {row[1]: row for row in cursor.execute("PRAGMA table_info(compute_computetask)")}
     assert all(columns[column][3] == 1 and columns[column][4] is not None for column in ("failure", "field_mappings", "input_collections"))
+MigrationExecutor(connection).migrate([("compute", "0008_computetask_operator_copy")])
+with connection.cursor() as cursor:
+    cursor.execute("SELECT operator_copy FROM compute_computetask WHERE id=%s", [task.pk.hex])
+    assert json.loads(cursor.fetchone()[0]) == {}
+    column = next(row for row in cursor.execute("PRAGMA table_info(compute_computetask)") if row[1] == "operator_copy")
+    assert column[3] == 1 and column[4] is not None
 call_command("makemigrations", check=True, dry_run=True, verbosity=1)
 from tools.release.compatibility import smoke
-before_count = OldTask.objects.count()
-result = smoke([OldTask], connection)
+assert "operator_copy" not in {field.name for field in ProtocolTask._meta.fields}
+before_count = ProtocolTask.objects.count()
+result = smoke([ProtocolTask], connection)
 assert result["passed"] and result["insertRolledBack"] and result["read"]
-assert OldTask.objects.count() == before_count
+assert ProtocolTask.objects.count() == before_count
 from tools.release.compatibility import probe
 root, candidate_config = Path(sys.argv[1]), Path(sys.argv[2])
 pointer = root / ".runtime/config-path"
@@ -75,11 +84,11 @@ except IntegrityError:
 else:
     raise AssertionError("新增非空列没有数据库默认值时，兼容冒烟必须失败")
 assert UnsafeLegacy.objects.count() == 0
-print("旧代码列集 INSERT 成功；三个数据库默认值为空对象；makemigrations 无差异")
+print("旧代码列集 INSERT 成功；数据库默认值为空对象；makemigrations 无差异")
 """
 
 
-def test_compute_0007_legacy_insert_and_makemigrations(tmp_path):
+def test_compute_migrations_legacy_insert_and_makemigrations(tmp_path):
     raw = tomlkit.parse((ROOT / "config/app.example.toml").read_text())
     raw["application"]["storage"]["app_data"] = str(tmp_path / "app")
     raw["application"]["storage"]["research_data_root"] = str(tmp_path / "research")

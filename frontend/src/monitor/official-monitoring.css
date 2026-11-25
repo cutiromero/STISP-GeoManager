@@ -379,13 +379,78 @@
 .official-glacier-map-toggle small {
   white-space: nowrap;
 }
-.official-glacier-references {
-  max-height: 10rem;
-  overflow: auto;
-  margin: 0;
-  padding-inline-start: 18px;
-  overflow-wrap: anywhere;
+
+/* Keep the glacier sidebar fixed; only the region list scrolls. */
+.monitor-showcase[data-scene="glacier"] .official-insights {
+  overflow: hidden;
+  padding-right: 0;
+  gap: clamp(5px, 0.95vh, 10px);
 }
-.official-glacier-references li + li {
-  margin-top: 5px;
+.monitor-showcase[data-scene="glacier"] .official-insights-heading {
+  margin-bottom: 0;
+}
+.monitor-showcase[data-scene="glacier"] .official-region-story {
+  gap: clamp(5px, 0.95vh, 10px);
+}
+.monitor-showcase[data-scene="glacier"] .official-insights .monitor-panel {
+  padding: clamp(7px, 1.3vh, 15px) clamp(9px, 1.1vw, 17px);
+}
+.monitor-showcase[data-scene="glacier"] .official-overview {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+  margin-top: 0;
+}
+.monitor-showcase[data-scene="glacier"] .official-overview-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  grid-auto-rows: minmax(42px, max-content);
+  scrollbar-width: thin;
+  scrollbar-color: #365666 transparent;
+}
+.monitor-showcase[data-scene="glacier"] .official-hero-stat strong {
+  font-size: clamp(24px, 6vh, 66px);
+}
+.monitor-showcase[data-scene="glacier"] .official-metric-strip {
+  margin-block: 5px 0;
+}
+.monitor-showcase[data-scene="glacier"] .official-metric-strip dd {
+  font-size: clamp(13px, 2vh, 22px);
+}
+.monitor-showcase[data-scene="glacier"] .official-glacier-change {
+  --monitor-accent: #d2c2ff;
+}
+.official-glacier-change .monitor-panel-heading h2 {
+  color: var(--monitor-accent);
+}
+.official-glacier-change .glacier-change-overlap :is(dt, dd) {
+  color: #79e2cb;
+}
+.official-glacier-change .glacier-change-share :is(dt, dd) {
+  color: #ffc87a;
+}
+.glacier-change-signed {
+  white-space: nowrap;
+}
+.glacier-change-signed[data-direction="positive"] {
+  color: #a7eb9b;
+}
+.glacier-change-signed[data-direction="negative"] {
+  color: #ffa3b6;
+}
+.official-glacier-change p {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--monitor-muted);
+}
+@media (max-width: 1100px) {
+  .monitor-showcase[data-scene="glacier"] .official-overview {
+    flex: 0 0 auto;
+  }
+  .monitor-showcase[data-scene="glacier"] .official-overview-list {
+    max-height: 15rem;
+  }
 }

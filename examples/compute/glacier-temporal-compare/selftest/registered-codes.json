@@ -1,0 +1,107 @@
+{
+  "inputs": {
+    "current": {
+      "kind": "raster",
+      "shape": [
+        2,
+        4
+      ],
+      "crs": "EPSG:32643",
+      "transform": [
+        3,
+        0,
+        500000,
+        0,
+        -3,
+        4000000
+      ],
+      "dtype": "uint8",
+      "nodata": 255,
+      "fill": 255,
+      "pixels": [
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          1
+        ],
+        [
+          0,
+          2,
+          2
+        ],
+        [
+          0,
+          3,
+          0
+        ],
+        [
+          1,
+          0,
+          1
+        ],
+        [
+          1,
+          2,
+          2
+        ]
+      ]
+    },
+    "baseline": {
+      "kind": "raster",
+      "shape": [
+        2,
+        4
+      ],
+      "crs": "EPSG:32643",
+      "transform": [
+        3,
+        0,
+        500000,
+        0,
+        -3,
+        4000000
+      ],
+      "dtype": "uint8",
+      "nodata": 0,
+      "fill": 0,
+      "pixels": [
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0
+        ],
+        [
+          0,
+          2,
+          1
+        ],
+        [
+          1,
+          0,
+          0
+        ],
+        [
+          1,
+          1,
+          2
+        ]
+      ]
+    }
+  },
+  "parameters": {
+    "current_date": "2025-09-01",
+    "baseline_date": "2024-09-01",
+    "baseline_reason": "matched",
+    "baseline_basis": "registered_codes"
+  }
+}

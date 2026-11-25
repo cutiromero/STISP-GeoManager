@@ -47,8 +47,10 @@ function assertDiagnostic(value: unknown) {
 function assertSpec(value: unknown) {
   const spec = record(value, "definition");
   if (
-    spec.schemaVersion !== 1 ||
+    (spec.schemaVersion !== 1 && spec.schemaVersion !== 2) ||
     !["geology_generic", "research_flow"].includes(String(spec.adapter)) ||
+    (spec.schemaVersion === 2 &&
+      (spec.adapter !== "research_flow" || spec.executionMode !== undefined)) ||
     (spec.executionMode !== undefined &&
       !["nodes", "main_agent"].includes(String(spec.executionMode))) ||
     !Array.isArray(spec.nodes) ||

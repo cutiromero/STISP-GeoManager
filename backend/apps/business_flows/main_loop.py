@@ -4,6 +4,7 @@ from copy import deepcopy
 
 from apps.compute.packages import ComputeError
 from .execution_session import session
+from .definitions import concise_definition
 from .ledger import text
 from .state import binding, state, persist
 
@@ -24,6 +25,16 @@ task.phase=finish_workflow时，核对全部目标已完成后返回finish_workf
 文件以成果引用交接，按需读取片段或统计，不将完整文件或完整历史加入上下文。
 """
 )
+
+
+WORK_INSTRUCTION = """完成当前步骤，依据实际资料和结果判断。工具与输出见当前上下文。
+每次返回一个动作和 arguments。固定资料已接好时直接预检（arguments={}）；原样执行用预检返回的 runAction。只有需要选择或调整才查询算子或更改方案。历史和结果按证据编号查阅。
+遇到问题先尝试能完成任务的替代做法；确实需要用户决定时说明要做什么。finish_node 用 summary、outputs、evidenceIds、limitations 提交实际成果。outputs 每项包含 name、semanticType、evidenceId；没有局限时 limitations 为 []。只把成功的实际结果作为成果。
+"""
+
+
+def concise(workflow):
+    return concise_definition(binding(workflow)["definitionSnapshot"])
 
 
 def remember(workflow, node_id, action, summary):
@@ -83,8 +94,11 @@ def take_action(
         context.get("step", loop["steps"] + 1),
         evidence,
         role="executor",
-        instruction=MAIN_INSTRUCTION
-        + tool_guidance
+        instruction=(
+            WORK_INSTRUCTION
+            if concise(workflow) and task["phase"] == "work"
+            else MAIN_INSTRUCTION + tool_guidance
+        )
         + "\n"
         + _format_instruction(context, contract),
         validate=lambda raw, available: validate_contract_action(
@@ -263,12 +277,19 @@ def select_node(workflow, user, policy, ready):
     loop["activeNodeId"] = ""
     if not ready:
         raise ComputeError("没有依赖已满足的工作目标")
+    if len(ready) == 1 and concise(workflow):
+        loop.update(activeNodeId=ready[0]["id"], phase="work")
+        return ready[0]
     _control(workflow, user, policy, ready)
     return None
 
 
 def finish_workflow(workflow, user, policy, summary=""):
-    if session(workflow)["loop"].get("completed"):
+    loop = session(workflow)["loop"]
+    if loop.get("completed"):
+        return True
+    if concise(workflow):
+        loop.update(phase="completed", completed=True, activeNodeId="")
         return True
     return _control(workflow, user, policy, [], closing=True, summary=summary)
 

@@ -1,0 +1,105 @@
+{
+  "schemaVersion": 2,
+  "identifier": "glacier-b15-infer",
+  "version": "1.1.0",
+  "author": "STISP",
+  "name": "冰川影像分类",
+  "description": "从十五波段原始影像提取洁净冰川和表碛冰川。",
+  "runtime": "python-geospatial-gpu-v1",
+  "deterministic": false,
+  "timeoutSeconds": 900,
+  "agent": {
+    "enabled": true
+  },
+  "qualityReport": {
+    "file": "quality.json"
+  },
+  "capabilities": {
+    "operations": [
+      "infer"
+    ],
+    "dataTypes": [
+      "raster"
+    ],
+    "summary": "分类背景、洁净冰川和表碛冰川。",
+    "useWhen": "冰川原始十五波段 TIFF 影像，3 米 UTM。",
+    "avoidWhen": "已着色的分类图、不同波段或分辨率的影像。"
+  },
+  "inputs": [
+    {
+      "key": "image",
+      "label": "本期原始影像",
+      "kind": "raster",
+      "required": true,
+      "description": "原始15波段、3米UTM TIFF。影像有缺测标记就按标记排除；未标记则按整幅影像计算。",
+      "fields": [],
+      "crs": {
+        "mode": "projected"
+      },
+      "raster": {
+        "bandCount": 15,
+        "dtypes": [
+          "uint8"
+        ],
+        "pixelSizeMeters": 3,
+        "northUp": true
+      }
+    }
+  ],
+  "parameters": [],
+  "outputs": [
+    {
+      "key": "classification",
+      "label": "冰川分类图",
+      "file": "classification.tif",
+      "kind": "raster",
+      "description": "同网格GeoTIFF，0背景、1洁净冰川、2表碛冰川，255缺测。",
+      "fields": [],
+      "required": true,
+      "final": true
+    }
+  ],
+  "resources": {
+    "duration": "minutes",
+    "memory": "large",
+    "scaling": "固定256像元窗口，复用平台GPU租约，单幅最多3000万像元。"
+  },
+  "errors": [
+    {
+      "code": "B15_RUNTIME",
+      "meaning": "受管GPU或已登记权重未就绪",
+      "precondition": "由平台运维修复 b15 运行时。",
+      "remedy": "human_review"
+    },
+    {
+      "code": "B15_SOURCE_REJECTED",
+      "meaning": "影像的类型、波段或网格不适用",
+      "precondition": "请换用原始十五波段、3米UTM TIFF，不要选分类结果。",
+      "remedy": "replace_data"
+    }
+  ],
+  "selfTests": [
+    {
+      "name": "受管GPU实际调用交付模型",
+      "fixture": "selftest/valid.json",
+      "expect": {
+        "files": {
+          "classification.tif": {
+            "bands": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "无缺测标记可按整幅解译",
+      "fixture": "selftest/missing-mask.json",
+      "expect": {
+        "files": {
+          "classification.tif": {
+            "bands": 1
+          }
+        }
+      }
+    }
+  ]
+}

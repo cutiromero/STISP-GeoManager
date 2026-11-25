@@ -441,11 +441,11 @@ def test_glacier_official_comparison_stays_project_scoped(client, setup_monitor)
     from apps.ecology.official_monitoring import official_snapshot
 
     with project_scope(ProjectScope((project.pk,), project.pk, admin.pk)):
-        with pytest.raises(ValidationError, match="只接受历史"):
+        with pytest.raises(ValidationError, match="只接受已登记"):
             register_product(admin, {**values, "kind": "model"})
         with pytest.raises(ValidationError, match="配对原始栅格"):
             register_product(admin, {**values, "sourceResourceIds": [reference.pk]})
-        with pytest.raises(ValidationError, match="覆盖全部有效像元"):
+        with pytest.raises(ValidationError, match="不符合该分类产品口径"):
             register_product(
                 admin,
                 {

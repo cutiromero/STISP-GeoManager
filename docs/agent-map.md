@@ -18,7 +18,7 @@ export PY=/opt/homebrew/Caskroom/miniconda/base/envs/stisp-geomanager/bin/python
 ## 新版科研智能体
 
 - 运行与会话由 Hermes 网关提供。平台入口为 `backend/apps/agent/hermes_views.py`，工具注册位于 `deploy/hermes/plugin`，科研技能位于 `deploy/hermes/skills`。
-- 科研路径与计算中心接入位于 `backend/apps/agent/hermes_research.py`，页面和共用资料选择器分别位于 `frontend/src/agent/HermesPage.tsx` 和 `frontend/src/agent/WorkflowDataPicker.tsx`。
+- 科研路径与计算中心接入位于 `backend/apps/agent/hermes_research.py`，页面和共用资料选择器分别位于 `frontend/src/agent/HermesPage.tsx` 和 `frontend/src/agent/WorkflowCatalogPicker.tsx`。
 - 算子副本、执行快照和源码位置见 `backend/apps/compute/operator_copies.py` 与 `deploy/compute/runner.py`。经确认的逻辑推理处置见 `backend/apps/agent/hermes_geology.py`，实际算子回归见 `backend/tests/integration/test_hermes_geology.py`。
 - 使用与部署见 `docs/hermes-web.md`。回归入口为 `backend/tests/integration/test_hermes_web.py` 和 `frontend/src/agent/HermesPage.browser.test.tsx`。
 

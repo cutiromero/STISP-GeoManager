@@ -1,4 +1,12 @@
-import { Alert, Button, Select, Space, Tag, Typography, Upload } from "antd";
+import {
+  Alert,
+  Button,
+  Select,
+  Space,
+  Tag,
+  Typography,
+  Upload,
+} from "antd";
 import {
   DatabaseOutlined,
   DeleteOutlined,
@@ -15,9 +23,7 @@ import {
   type SetStateAction,
 } from "react";
 import { agentApi } from "../api/agent";
-import WorkflowDataPicker, {
-  type WorkflowDataSelection,
-} from "./WorkflowDataPicker";
+import WorkflowCatalogPicker from "./WorkflowCatalogPicker";
 import type { ReasoningEffort } from "./ReasoningEffortControl";
 import type {
   AgentWorkflowUpload,
@@ -130,6 +136,7 @@ export default function GenericWorkflowUploads({
   const [restoreWarning, setRestoreWarning] = useState("");
   const restoredCallback = useRef(onRestored);
   restoredCallback.current = onRestored;
+  const [catalogError, setCatalogError] = useState("");
   const [recognizing, setRecognizing] = useState(false);
   const [suggestions, setSuggestions] = useState<AgentWorkflowRoleResult>();
   const [recognitionError, setRecognitionError] = useState("");
@@ -334,15 +341,16 @@ export default function GenericWorkflowUploads({
       setError(reason instanceof Error ? reason.message : "删除失败");
     }
   };
-  const addCatalog = async (selection: WorkflowDataSelection[]) => {
-    if (inFlight.current) return;
+  const addCatalog = async (catalogSelected: number[]) => {
+    if (inFlight.current || !catalogSelected.length) return;
     inFlight.current = true;
     changed.current = true;
     setUploading("系统数据");
+    setCatalogError("");
     try {
       const result = await agentApi.addWorkflowCatalogReferences(
         batchId,
-        selection.map((item) => item.id),
+        catalogSelected,
       );
       if (currentBatch.current !== batchId) return;
       setItems((old) => [
@@ -354,6 +362,11 @@ export default function GenericWorkflowUploads({
       setCatalogOpen(false);
       onSelectionChange?.();
       if (!uploadOnly) await recognize();
+    } catch (reason) {
+      if (currentBatch.current === batchId)
+        setCatalogError(
+          reason instanceof Error ? reason.message : "系统数据引用失败",
+        );
     } finally {
       if (currentBatch.current === batchId) {
         setUploading(undefined);
@@ -414,7 +427,10 @@ export default function GenericWorkflowUploads({
           icon={polished ? <PlusOutlined /> : undefined}
           aria-label="选择系统数据"
           disabled={disabled || Boolean(uploading) || recognizing}
-          onClick={() => setCatalogOpen(true)}
+          onClick={() => {
+            setCatalogError("");
+            setCatalogOpen(true);
+          }}
         >
           选择系统数据
         </Button>
@@ -452,15 +468,18 @@ export default function GenericWorkflowUploads({
           </Button>
         )}
       </Space>
-      <WorkflowDataPicker
-        key={batchId}
-        open={catalogOpen}
-        polished={polished}
-        disabled={disabled}
-        excludedIds={items.map((item) => item.resourceId)}
-        onCancel={() => setCatalogOpen(false)}
-        onConfirm={addCatalog}
-      />
+      {catalogOpen && (
+        <WorkflowCatalogPicker
+          key={batchId}
+          polished={polished}
+          attachedIds={items.map((item) => item.resourceId)}
+          disabled={disabled}
+          uploading={Boolean(uploading)}
+          selectionError={catalogError}
+          onClose={() => setCatalogOpen(false)}
+          onConfirm={(selected) => void addCatalog(selected.map((item) => item.id))}
+        />
+      )}
       {!uploadOnly && (
         <Upload.Dragger
           multiple

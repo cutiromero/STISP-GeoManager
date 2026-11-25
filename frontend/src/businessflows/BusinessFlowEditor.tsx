@@ -28,9 +28,8 @@ import BusinessFlowGraph, { businessFlowLevels } from "./BusinessFlowGraph";
 
 export function newBusinessFlowSpec(): BusinessFlowSpec {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     adapter: "research_flow",
-    executionMode: "main_agent",
     skill: {
       title: "科研目的与判断依据",
       instructions: "",
@@ -77,7 +76,7 @@ const formats = [
   { value: "image", label: "图片" },
   { value: "gene", label: "基因数据" },
 ];
-const calculationTools: BusinessFlowNodeContract["tools"] = [
+const calculationTools: NonNullable<BusinessFlowNodeContract["tools"]> = [
   "operator_catalog",
   "preflight_operator",
   "run_operator",
@@ -145,12 +144,14 @@ export default function BusinessFlowEditor({
   };
   const hasOperator = spec.nodes.some((node) => node.kind === "operator");
   const managedSkeleton = spec.adapter === "geology_generic";
+  const concise = spec.schemaVersion === 2;
+  const taskExecutor = concise || spec.executionMode === "main_agent";
   useEffect(() => {
     if (!open) return;
     const initial = version
       ? structuredClone(version.definition)
       : newBusinessFlowSpec();
-    if (!flow && initial.adapter === "research_flow") {
+    if (!flow && initial.adapter === "research_flow" && initial.schemaVersion === 1) {
       initial.executionMode = "main_agent";
       initial.skill ??= { title: "科研目的与判断依据", instructions: "" };
     }
@@ -225,12 +226,13 @@ export default function BusinessFlowEditor({
       requiredOutputs: [{ name: "analysis", semanticType: "analysis" }],
       tools: ["read_evidence", "read_task_record", "ask_user", "finish_node"],
     };
+    const tools = contract.tools ?? ["read_evidence", "read_task_record", "ask_user", "finish_node"];
     updateNode(node.id, {
       contract: {
         ...contract,
         tools: enabled
-          ? [...new Set([...contract.tools, ...calculationTools])]
-          : contract.tools.filter(
+          ? [...new Set([...tools, ...calculationTools])]
+          : tools.filter(
               (tool) =>
                 !calculationTools.includes(tool) && tool !== "prepare_input",
             ),
@@ -421,9 +423,9 @@ export default function BusinessFlowEditor({
       const incomplete = spec.nodes.find(
         (node) =>
           !node.title.trim() ||
-          (!managedSkeleton && !node.instruction.trim()) ||
+          (!concise && !managedSkeleton && !node.instruction.trim()) ||
           (needsResearchPlan && !node.description.trim()) ||
-          (node.contract && !distinctLines(node.contract.acceptance).length) ||
+          (!concise && node.contract && !distinctLines(node.contract.acceptance ?? []).length) ||
           !/^([a-z][a-z0-9_-]{1,63})$/.test(node.id),
       );
       if (incomplete) {
@@ -447,7 +449,7 @@ export default function BusinessFlowEditor({
               ? {
                   contract: {
                     ...node.contract,
-                    acceptance: distinctLines(node.contract.acceptance),
+                    acceptance: distinctLines(node.contract.acceptance ?? []),
                   },
                 }
               : {}),
@@ -499,6 +501,12 @@ export default function BusinessFlowEditor({
           return next;
         }),
       };
+      if (concise && !definition.skill?.instructions.trim()) {
+        if (!knowledgeQuestions.length) delete definition.skill;
+        else if (definition.skill) {
+          definition.skill.instructions = metadata.description.trim() || metadata.name.trim();
+        }
+      }
       await onSave(
         {
           ...metadata,
@@ -599,10 +607,10 @@ export default function BusinessFlowEditor({
           className="business-flow-authoring-panel"
           hidden={panel !== "purpose"}
         >
-          {spec.executionMode === "main_agent" && (
+          {taskExecutor && (
             <Form.Item
               label={ui("科研目的与判断依据", "Research purpose and evidence")}
-              required={!managedSkeleton}
+              required={!managedSkeleton && !concise}
             >
               <Input.TextArea
                 aria-label={ui(
@@ -630,7 +638,7 @@ export default function BusinessFlowEditor({
               />
             </Form.Item>
           )}
-          {spec.executionMode === "main_agent" && (
+          {taskExecutor && (
             <Form.Item label={ui("待查证的知识问题", "Knowledge questions")}>
               <Input.TextArea
                 aria-label={ui("待查证的知识问题", "Knowledge questions")}
@@ -873,7 +881,7 @@ export default function BusinessFlowEditor({
                 )}
                 {node.kind === "agent" &&
                   !managedSkeleton &&
-                  spec.executionMode === "main_agent" &&
+                  taskExecutor &&
                   (node.contract?.requiredOutputs.every(
                     (output) => output.semanticType === "analysis",
                   ) ??
@@ -881,7 +889,7 @@ export default function BusinessFlowEditor({
                     <label className="business-flow-editor-field full">
                       <Checkbox
                         checked={
-                          node.contract?.tools.includes("run_operator") ?? false
+                          node.contract?.tools?.includes("run_operator") ?? false
                         }
                         onChange={(event) =>
                           setAdaptiveCalculation(node, event.target.checked)
@@ -900,7 +908,7 @@ export default function BusinessFlowEditor({
                     <Input.TextArea
                       aria-label={ui("验收条件", "Acceptance criteria")}
                       rows={2}
-                      value={node.contract.acceptance.join("\n")}
+                      value={(node.contract.acceptance ?? []).join("\n")}
                       onChange={(event) =>
                         updateNode(node.id, {
                           contract: {
@@ -913,7 +921,7 @@ export default function BusinessFlowEditor({
                     />
                   </label>
                 )}
-                {spec.executionMode === "main_agent" && spec.skill && (
+                {taskExecutor && spec.skill && (
                   <details className="business-flow-editor-advanced full">
                     <summary>
                       {ui("节点专项补充", "Additional node guidance")}

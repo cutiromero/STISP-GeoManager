@@ -1,0 +1,69 @@
+{
+  "inputs": {
+    "image": {
+      "kind": "raster",
+      "shape": [
+        8,
+        8
+      ],
+      "crs": "EPSG:32645",
+      "transform": [
+        10,
+        0,
+        300000,
+        0,
+        -10,
+        4800000
+      ],
+      "dtype": "uint8",
+      "nodata": 0,
+      "bands": [
+        {
+          "fill": 45,
+          "pixels": [
+            [
+              0,
+              0,
+              0
+            ]
+          ],
+          "name": "B2"
+        },
+        {
+          "fill": 44,
+          "pixels": [
+            [
+              0,
+              0,
+              0
+            ]
+          ],
+          "name": "B3"
+        },
+        {
+          "fill": 49,
+          "pixels": [
+            [
+              0,
+              0,
+              0
+            ]
+          ],
+          "name": "B4"
+        },
+        {
+          "fill": 60,
+          "pixels": [
+            [
+              0,
+              0,
+              0
+            ]
+          ],
+          "name": "B8"
+        }
+      ]
+    }
+  },
+  "parameters": {}
+}

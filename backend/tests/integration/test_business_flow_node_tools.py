@@ -807,6 +807,7 @@ def test_format_retry_once_and_whitelist(operators, monkeypatch):
     )  # Do not ask a second model to diagnose syntax.
     assert item["recovery"]["failure"]["code"] == "MODEL_ACTION_FORMAT"
     assert item["recovery"]["attempts"]
+    assert "可从当前节点继续" in item["recovery"]["reason"]
     assert ComputeTask.objects.count() == 0
     with project_scope(env["scope"]):
         workflow.refresh_from_db()
@@ -850,6 +851,7 @@ def test_format_recovery_after_computation_delivers_original_task(
     finish_task(env, task_id, "PRESERVED")
     item = advance(env, workflow, 3)
     assert item["recovery"]["failure"]["code"] == "MODEL_ACTION_FORMAT"
+    assert "已保留本节点已完成的计算" in item["recovery"]["reason"]
     count = ComputeTask.objects.count()
     with project_scope(env["scope"]):
         runtime.decide_flow(

@@ -20,7 +20,6 @@ import {
   Empty,
   Input,
   Layout,
-  Modal,
   Select,
   Space,
   Spin,
@@ -41,17 +40,12 @@ import type {
   BusinessFlowDefinition,
   BusinessFlowDetail,
   BusinessFlowNode,
-  BusinessFlowRun,
   BusinessFlowSpec,
   BusinessFlowSummary,
 } from "../api/generated/types.gen";
 import BusinessFlowGraph from "./BusinessFlowGraph";
 import BusinessFlowEditor from "./BusinessFlowEditor";
-import BusinessFlowLaunch, {
-  type BusinessFlowLaunchIntent,
-} from "./BusinessFlowLaunch";
 import MonitoringFlowRunPanel from "./MonitoringFlowRunPanel";
-import { monitoringFlowProfile } from "./monitoringFlowProfile";
 import "./business-flows.css";
 
 const dataTypes: Record<string, string> = {
@@ -111,14 +105,6 @@ export default function BusinessFlowsPage() {
   const [editor, setEditor] = useState<"create" | "version" | "copy" | null>(
     null,
   );
-  const [monitoringLaunch, setMonitoringLaunch] =
-    useState<BusinessFlowLaunchIntent>();
-  const [recentRun, setRecentRun] = useState<BusinessFlowRun>();
-  useEffect(() => {
-    setMonitoringLaunch(undefined);
-    setRecentRun(undefined);
-    setEditor(null);
-  }, [scope]);
   const currentProject = String(project?.current ?? "1");
   const useHermes = searchParams.get("runtime") === "hermes";
   const linkedProject = searchParams.get("projectTagId");
@@ -374,10 +360,6 @@ export default function BusinessFlowsPage() {
           state: { hermesWorkflow: { ...intent, projectId: currentProject } },
         },
       );
-      return;
-    }
-    if (monitoringFlowProfile(version.definition, detail.flow.code)) {
-      setMonitoringLaunch(intent);
       return;
     }
     navigate(`/agent/workbench?projectTagId=${project?.current ?? "1"}`, {
@@ -897,45 +879,10 @@ export default function BusinessFlowsPage() {
       >
         <div style={{ height: "100%", display: "flex" }}>{catalog}</div>
       </Drawer>
-      {monitoringLaunch &&
-        detail?.flow.id === monitoringLaunch.definitionId && (
-          <Modal
-            open
-            title="准备监测任务"
-            width={980}
-            footer={null}
-            closable={false}
-            mask={{ closable: false }}
-            keyboard={false}
-          >
-            <BusinessFlowLaunch
-              key={`${scope}:${monitoringLaunch.versionId}`}
-              launch={monitoringLaunch}
-              model=""
-              directMonitoring
-              canImport={user?.permissions.canUploadData}
-              onCancel={() => setMonitoringLaunch(undefined)}
-              onStarted={(run) => {
-                setRecentRun(run);
-                setMonitoringLaunch(undefined);
-                setSearchParams((previous) => {
-                  const next = new URLSearchParams(previous);
-                  next.set("run", run.id);
-                  return next;
-                });
-              }}
-            />
-          </Modal>
-        )}
       {searchParams.get("run") && (
         <MonitoringFlowRunPanel
           key={`${scope}:${searchParams.get("run")}`}
           id={searchParams.get("run")!}
-          initial={
-            recentRun?.projectId === Number(currentProject)
-              ? recentRun
-              : undefined
-          }
           onClose={() =>
             setSearchParams((previous) => {
               const next = new URLSearchParams(previous);

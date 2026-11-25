@@ -4295,6 +4295,10 @@ export type MonitoringProductManifest = {
      */
     quality: 'unverified' | 'passed' | 'needs_review';
     /**
+     * 冰川成果登记期，不是卫星影像拍摄日期。
+     */
+    registrationDate?: string | null;
+    /**
      * 真实观测周期起始日期，未知为null。
      */
     observedStart: string | null;
@@ -4599,6 +4603,22 @@ export type OfficialMonitoringProduct = MonitoringProduct & {
     comparison?: {
         resource: DataResource;
         display: RasterRenderResult;
+    } | null;
+    /**
+     * 冰川前一登记期共同有效区的实算差异；无合格前期或前期撤权时为 null。
+     */
+    glacierChange?: {
+        baselineProductId: number;
+        baselineDate: string;
+        basis: 'classification' | 'registered_codes';
+        commonAreaKm2: number;
+        changedPercent: number;
+        netClass1Km2: number;
+        netClass2Km2: number;
+        /**
+         * 交接标准按编码比较时不计算冰川总净变化。
+         */
+        netIceAreaKm2: number | null;
     } | null;
     /**
      * 冰川场景下可访问的交接文档与参考影像目录条目。
@@ -12217,6 +12237,10 @@ export type ComputeInputSpec = {
          */
         bandCount?: number;
         /**
+         * 按原始影像波段顺序精确匹配名称。
+         */
+        bandNames?: Array<string>;
+        /**
          * 允许的波段类型。
          */
         dtypes?: Array<'uint8' | 'uint16' | 'uint32' | 'int8' | 'int16' | 'int32' | 'float32' | 'float64'>;
@@ -12242,7 +12266,7 @@ export type ComputeInputSpec = {
             string
         ];
         /**
-         * 原生地理模型按有界块读取已授权原件，输入快照为无重采样视图。
+         * 原生地理模型按块读取已授权原件；未声明窗口时使用完整原始网格；快照无重采样。
          */
         streaming?: boolean;
         /**
@@ -13157,13 +13181,13 @@ export type BusinessFlowNode = {
  */
 export type BusinessFlowNodeContract = {
     /**
-     * 节点要达成的目标
+     * v2 省略时使用节点名称；v1 必填
      */
-    goal: string;
+    goal?: string;
     /**
-     * 全部需要满足的验收条件
+     * 仅写额外的科研验收条件；v2 可省略，v1 至少一项
      */
-    acceptance: Array<string>;
+    acceptance?: Array<string>;
     /**
      * 必须交付的具名真实证据
      */
@@ -13178,9 +13202,9 @@ export type BusinessFlowNodeContract = {
         semanticType: string;
     }>;
     /**
-     * 本节点允许的平台工具白名单
+     * 节点工具；v2 可交给平台按节点类型配置，v1 必填
      */
-    tools: Array<'read_evidence' | 'read_task_record' | 'operator_catalog' | 'preflight_operator' | 'run_operator' | 'prepare_input' | 'ask_user' | 'finish_node'>;
+    tools?: Array<'read_evidence' | 'read_task_record' | 'operator_catalog' | 'preflight_operator' | 'run_operator' | 'prepare_input' | 'ask_user' | 'finish_node'>;
     /**
      * 节点动作步数硬上限，恢复不重置
      */
@@ -13728,9 +13752,9 @@ export type BusinessFlowInputClarification = {
  */
 export type BusinessFlowSpec = {
     /**
-     * 定义规范版本
+     * 定义版本；2 为简版通用业务流，由同一任务会话执行。
      */
-    schemaVersion: 1;
+    schemaVersion: 1 | 2;
     /**
      * 平台注册执行适配器
      */
@@ -13750,7 +13774,7 @@ export type BusinessFlowSpec = {
     inputPreparation?: BusinessFlowInputPreparationPolicy;
     skill?: BusinessFlowSkill;
     /**
-     * main_agent由一个任务级主循环选择合法目标、组织输入适配并调用工具继续；省略保留旧节点方式。
+     * 仅用于 v1 定义；v2 不声明，由平台默认使用同一任务会话。
      */
     executionMode?: 'nodes' | 'main_agent';
 };
@@ -26855,7 +26879,7 @@ export type ListAgentWorkflowCatalogResourcesData = {
     body?: never;
     headers: {
         /**
-         * 当前项目 ID
+         * 当前具体项目ID
          */
         'X-Project-Id': number;
     };
@@ -26881,6 +26905,10 @@ export type ListAgentWorkflowCatalogResourcesData = {
          * 每页条数，上限50
          */
         pageSize?: number;
+        /**
+         * 按业务流所需的资料类型筛选
+         */
+        dataType?: 'vector' | 'raster' | 'table';
         /**
          * 数据目录（存量数据组别）ID，0表示未分组
          */
@@ -26935,7 +26963,7 @@ export type AddAgentWorkflowCatalogReferencesData = {
     };
     headers: {
         /**
-         * 当前项目 ID
+         * 当前具体项目ID
          */
         'X-Project-Id': number;
     };

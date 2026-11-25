@@ -1,0 +1,600 @@
+{
+  "schemaVersion": 2,
+  "identifier": "glacier-temporal-compare",
+  "name": "冰川登记期面积与变化",
+  "version": "1.5.0",
+  "author": "STISP",
+  "description": "按原生网格统计本期分类，在两期共同有效区比较登记成果。",
+  "runtime": "python-geospatial-v1",
+  "deterministic": true,
+  "timeoutSeconds": 240,
+  "agent": {
+    "enabled": true
+  },
+  "qualityReport": {
+    "file": "quality.json"
+  },
+  "capabilities": {
+    "operations": [
+      "check",
+      "statistics"
+    ],
+    "dataTypes": [
+      "raster",
+      "table"
+    ],
+    "summary": "比较原生三分类或玛纳斯二分类的面积与转移矩阵。",
+    "useWhen": "同样区的3米三分类或10米玛纳斯二分类；交接二分类按配对原图核对缺测。",
+    "avoidWhen": "不同样区或缺少有效范围依据的历史图。"
+  },
+  "inputs": [
+    {
+      "key": "current",
+      "label": "新一期冰川分类",
+      "kind": "raster",
+      "required": true,
+      "description": "单波段UInt8冰川分类，3米三分类或10米二分类，255缺测。",
+      "fields": [],
+      "crs": {
+        "mode": "projected"
+      },
+      "raster": {
+        "bandCount": 1,
+        "dtypes": [
+          "uint8"
+        ],
+        "northUp": true,
+        "streaming": true
+      }
+    },
+    {
+      "key": "baseline",
+      "label": "前一登记期分类",
+      "kind": "raster",
+      "required": false,
+      "description": "已登记的同样区前期分类；按最近邻对齐后只比较共同有效范围。",
+      "fields": [],
+      "crs": {
+        "mode": "projected"
+      },
+      "raster": {
+        "bandCount": 1,
+        "dtypes": [
+          "uint8"
+        ],
+        "northUp": true,
+        "streaming": true
+      }
+    },
+    {
+      "key": "baseline_image",
+      "label": "前一期标准分类对应原图",
+      "kind": "raster",
+      "required": false,
+      "description": "玛纳斯10米交接二分类使用配对原图有效掩膜。",
+      "fields": [],
+      "crs": {
+        "mode": "projected"
+      },
+      "raster": {
+        "bandCount": 4,
+        "dtypes": [
+          "uint8"
+        ],
+        "pixelSizeMeters": 10,
+        "northUp": true,
+        "streaming": true
+      }
+    }
+  ],
+  "parameters": [
+    {
+      "key": "current_date",
+      "label": "本期登记日",
+      "type": "string",
+      "required": false,
+      "maxLength": 10,
+      "default": "",
+      "agent": {
+        "adjustable": false,
+        "advice": "沿用登记记录，不手填。"
+      },
+      "help": "由业务流查询监测登记记录后填写。"
+    },
+    {
+      "key": "baseline_date",
+      "label": "前期登记日",
+      "type": "string",
+      "required": false,
+      "maxLength": 10,
+      "default": "",
+      "agent": {
+        "adjustable": false,
+        "advice": "沿用登记记录，不手填。"
+      },
+      "help": "由业务流查询监测登记记录后填写。"
+    },
+    {
+      "key": "baseline_reason",
+      "label": "历史核验结果",
+      "type": "enum",
+      "required": false,
+      "default": "no_prior",
+      "choices": [
+        "no_current_date",
+        "no_series",
+        "no_prior",
+        "matched"
+      ],
+      "agent": {
+        "adjustable": false,
+        "advice": "沿用登记记录，不手填。"
+      },
+      "help": "由业务流查询监测登记记录后填写。"
+    },
+    {
+      "key": "region",
+      "label": "样区标识",
+      "type": "string",
+      "required": false,
+      "default": "",
+      "maxLength": 120,
+      "help": "自动匹配的登记样区。",
+      "agent": {
+        "adjustable": false,
+        "advice": "沿用登记记录，不手填。"
+      }
+    },
+    {
+      "key": "baseline_product_id",
+      "label": "前期登记编号",
+      "type": "integer",
+      "required": false,
+      "default": 0,
+      "min": 0,
+      "help": "来自本项目实际登记记录。",
+      "agent": {
+        "adjustable": false,
+        "advice": "沿用登记记录，不手填。"
+      }
+    },
+    {
+      "key": "baseline_basis",
+      "label": "对比口径",
+      "type": "enum",
+      "required": false,
+      "default": "classification",
+      "choices": [
+        "classification",
+        "registered_codes"
+      ],
+      "help": "交接标准仅作类别编码对比。",
+      "agent": {
+        "adjustable": false,
+        "advice": "沿用登记记录，不手填。"
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "key": "areas",
+      "label": "冰川面积与净变化",
+      "kind": "table",
+      "file": "glacier_areas.csv",
+      "description": "各类单期面积与在双期共同有效区内的面积、变化。首期只有单期项。",
+      "fields": [
+        {
+          "role": "class_code",
+          "name": "class_code",
+          "description": "0/1/2或ice合计",
+          "types": [
+            "string"
+          ],
+          "required": true
+        },
+        {
+          "role": "label",
+          "name": "label",
+          "description": "类别名",
+          "types": [
+            "string"
+          ],
+          "required": true
+        },
+        {
+          "role": "current_valid_pixels",
+          "name": "current_valid_pixels",
+          "description": "本期该类有效像元数",
+          "types": [
+            "integer"
+          ],
+          "required": true
+        },
+        {
+          "role": "current_area_km2",
+          "name": "current_area_km2",
+          "description": "单期原生UTM投影面积",
+          "types": [
+            "number"
+          ],
+          "required": true,
+          "unit": "km²"
+        },
+        {
+          "role": "common_current_pixels",
+          "name": "common_current_pixels",
+          "description": "共同有效区内当前像元数",
+          "types": [
+            "integer"
+          ],
+          "required": true
+        },
+        {
+          "role": "common_baseline_pixels",
+          "name": "common_baseline_pixels",
+          "description": "共同有效区内前期像元数",
+          "types": [
+            "integer"
+          ],
+          "required": true
+        },
+        {
+          "role": "common_net_pixels",
+          "name": "common_net_pixels",
+          "description": "共同有效区净变化像元数",
+          "types": [
+            "integer"
+          ],
+          "required": true
+        },
+        {
+          "role": "common_net_km2",
+          "name": "common_net_km2",
+          "description": "共同有效区投影净变化",
+          "types": [
+            "number"
+          ],
+          "required": true,
+          "unit": "km²"
+        }
+      ],
+      "required": true,
+      "final": true
+    },
+    {
+      "key": "transitions",
+      "label": "类别转移矩阵",
+      "kind": "table",
+      "file": "glacier_transitions.csv",
+      "description": "只统计两期共同有效区内0/1/2的全部有向转换；首期表仅有表头。",
+      "fields": [
+        {
+          "role": "baseline_date",
+          "name": "baseline_date",
+          "description": "基线登记日",
+          "types": [
+            "string"
+          ],
+          "required": true
+        },
+        {
+          "role": "current_date",
+          "name": "current_date",
+          "description": "本期登记日",
+          "types": [
+            "string"
+          ],
+          "required": true
+        },
+        {
+          "role": "from_code",
+          "name": "from_code",
+          "description": "前期类别码",
+          "types": [
+            "integer"
+          ],
+          "required": true
+        },
+        {
+          "role": "to_code",
+          "name": "to_code",
+          "description": "本期类别码",
+          "types": [
+            "integer"
+          ],
+          "required": true
+        },
+        {
+          "role": "pixels",
+          "name": "pixels",
+          "description": "该转移像元数",
+          "types": [
+            "integer"
+          ],
+          "required": true
+        },
+        {
+          "role": "area_km2",
+          "name": "area_km2",
+          "description": "该转移的原生UTM投影面积",
+          "types": [
+            "number"
+          ],
+          "required": true,
+          "unit": "km²"
+        }
+      ],
+      "required": true,
+      "final": true
+    },
+    {
+      "key": "coverage",
+      "label": "登记期与共同有效范围",
+      "kind": "table",
+      "file": "observation_coverage.csv",
+      "description": "写明是否建立基线，以及本期、前期和共同有效范围的分母。",
+      "fields": [
+        {
+          "role": "status",
+          "name": "status",
+          "description": "baseline_only或compared",
+          "types": [
+            "string"
+          ],
+          "required": true
+        },
+        {
+          "role": "current_date",
+          "name": "current_date",
+          "description": "本期登记日",
+          "types": [
+            "string"
+          ],
+          "required": true
+        },
+        {
+          "role": "baseline_date",
+          "name": "baseline_date",
+          "description": "前期登记日",
+          "types": [
+            "string"
+          ],
+          "required": true
+        },
+        {
+          "role": "native_crs",
+          "name": "native_crs",
+          "description": "原生UTM CRS",
+          "types": [
+            "string"
+          ],
+          "required": true
+        },
+        {
+          "role": "scene_pixels",
+          "name": "scene_pixels",
+          "description": "格网总像元数",
+          "types": [
+            "integer"
+          ],
+          "required": true
+        },
+        {
+          "role": "current_valid_pixels",
+          "name": "current_valid_pixels",
+          "description": "本期有效像元包含背景",
+          "types": [
+            "integer"
+          ],
+          "required": true
+        },
+        {
+          "role": "baseline_valid_pixels",
+          "name": "baseline_valid_pixels",
+          "description": "前期对齐至本期图幅后的有效像元",
+          "types": [
+            "integer"
+          ],
+          "required": true
+        },
+        {
+          "role": "common_valid_pixels",
+          "name": "common_valid_pixels",
+          "description": "双期共同有效像元包含背景",
+          "types": [
+            "integer"
+          ],
+          "required": true
+        },
+        {
+          "role": "common_valid_pct",
+          "name": "common_valid_pct",
+          "description": "共同有效像元占全格网",
+          "types": [
+            "number"
+          ],
+          "required": true,
+          "unit": "%"
+        },
+        {
+          "role": "baseline_reason",
+          "name": "baseline_reason",
+          "types": [
+            "string"
+          ],
+          "required": true,
+          "description": "是否及为何采用历史分类"
+        }
+      ],
+      "required": true,
+      "final": true
+    }
+  ],
+  "errors": [
+    {
+      "code": "GLACIER_MASK_CONTRACT",
+      "meaning": "分类网格或NoData声明不符",
+      "precondition": "提供3米UTM、单波段UInt8、NoData=255的分类图。",
+      "remedy": "replace_data"
+    },
+    {
+      "code": "GLACIER_CLASS_CODE",
+      "meaning": "有效区有未登记的分类码",
+      "precondition": "提供0/1/2固定编码成果。",
+      "remedy": "replace_data"
+    },
+    {
+      "code": "GLACIER_NO_COVERAGE",
+      "meaning": "本期没有有效像元",
+      "precondition": "更换具有有效观测覆盖的资料。",
+      "remedy": "replace_data"
+    },
+    {
+      "code": "GLACIER_DATE_ORDER",
+      "meaning": "数据观测日期缺失或顺序不符",
+      "precondition": "确认实际观测日期；基线必须早于新期。",
+      "remedy": "human_review"
+    },
+    {
+      "code": "GLACIER_COMPARABILITY",
+      "meaning": "可比条件未确认",
+      "precondition": "核对数据与处理口径，不能确认则转为建基线。",
+      "remedy": "human_review"
+    }
+  ],
+  "resources": {
+    "duration": "seconds",
+    "memory": "small",
+    "scaling": "分块逐像元线性统计，至多3×3类别转移矩阵，不读取全图到内存。"
+  },
+  "selfTests": [
+    {
+      "name": "共同有效区域与背景转移",
+      "fixture": "selftest/paired.json",
+      "expect": {
+        "files": {
+          "observation_coverage.csv": {
+            "rows": 1,
+            "contains": "compared,2025-09-01,2024-09-01,EPSG:32643,8,6,5,4,50.0"
+          },
+          "glacier_areas.csv": {
+            "rows": 4,
+            "contains": "ice,冰川合计,4,3.6e-05,3,1,2,1.8e-05"
+          },
+          "glacier_transitions.csv": {
+            "rows": 9,
+            "contains": "2024-09-01,2025-09-01,0,1,2,1.8e-05"
+          }
+        }
+      }
+    },
+    {
+      "name": "拒绝旧版0为缺测",
+      "fixture": "selftest/legacy.json",
+      "expect": {
+        "errorCode": "GLACIER_MASK_CONTRACT"
+      }
+    },
+    {
+      "name": "范围错开时按共同有效区域计量",
+      "fixture": "selftest/shifted.json",
+      "expect": {
+        "files": {
+          "observation_coverage.csv": {
+            "rows": 1,
+            "contains": "compared,2025-09-01,2024-09-01,EPSG:32643,8,6,5,4,50.0"
+          },
+          "glacier_transitions.csv": {
+            "rows": 9
+          }
+        }
+      }
+    },
+    {
+      "name": "无共同覆盖仅交付单期",
+      "fixture": "selftest/no-overlap.json",
+      "expect": {
+        "files": {
+          "observation_coverage.csv": {
+            "rows": 1,
+            "contains": ",no_common_coverage"
+          },
+          "glacier_transitions.csv": {
+            "rows": 0
+          }
+        }
+      }
+    },
+    {
+      "name": "拒绝未确认可比",
+      "fixture": "selftest/unconfirmed.json",
+      "expect": {
+        "errorCode": "GLACIER_COMPARABILITY"
+      }
+    },
+    {
+      "name": "拒绝非递增日期",
+      "fixture": "selftest/date-order.json",
+      "expect": {
+        "errorCode": "GLACIER_DATE_ORDER"
+      }
+    },
+    {
+      "name": "拒绝没有实际日期的双期",
+      "fixture": "selftest/missing-evidence.json",
+      "expect": {
+        "errorCode": "GLACIER_DATE_ORDER"
+      }
+    },
+    {
+      "name": "标准交接按原码比较并保留0为缺测",
+      "fixture": "selftest/registered-codes.json",
+      "expect": {
+        "files": {
+          "observation_coverage.csv": {
+            "rows": 1
+          },
+          "glacier_transitions.csv": {
+            "rows": 9
+          },
+          "glacier_areas.csv": {
+            "contains": "ice,冰川合计,4,3.6e-05,,,,"
+          }
+        }
+      }
+    },
+    {
+      "name": "玛纳斯部分重叠按两期有效交集统计",
+      "fixture": "selftest/manans-standard.json",
+      "expect": {
+        "files": {
+          "observation_coverage.csv": {
+            "rows": 1,
+            "contains": "compared,2026-11-24,2026-11-23,EPSG:32645,12,11,8,7"
+          },
+          "glacier_areas.csv": {
+            "contains": "ice,冰川合计,2,0.0002,1,2,-1,-0.0001"
+          },
+          "glacier_transitions.csv": {
+            "rows": 4,
+            "contains": "2026-11-23,2026-11-24,0,0,5,0.0005"
+          }
+        }
+      }
+    },
+    {
+      "name": "玛纳斯没有较早同景时交付本期统计",
+      "fixture": "selftest/manans-no-prior.json",
+      "expect": {
+        "files": {
+          "observation_coverage.csv": {
+            "rows": 1
+          },
+          "glacier_areas.csv": {
+            "rows": 3
+          }
+        }
+      }
+    }
+  ]
+}

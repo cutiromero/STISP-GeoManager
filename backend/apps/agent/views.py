@@ -1195,23 +1195,26 @@ def workflow_upload_batch(request):
 @endpoint(["GET", "POST"])
 def workflow_catalog_references(request):
     from .resource_search import search_brief, search_resources
-    from .workflow_uploads import add_catalog_references, catalog_resources, upload_json
+    from .workflow_uploads import add_catalog_references, upload_json
 
     project = request.headers.get("X-Project-Id")
     if request.method == "GET":
         query = request.GET.get("q", "")[:200]
-        source = _resource_source(request)
-        usage = request.GET.get("usage", "logic")
-        if usage == "research":
-            from .resource_discovery import discover_resources
+        from .resource_discovery import discover_resources
 
-            available = discover_resources(
-                request.user, require_access(request.user, "agent"), source=source
-            )
-        elif usage == "logic":
-            available = catalog_resources(request.user, project, source=source)
-        else:
+        policy = require_access(request.user, "agent")
+        usage = request.GET.get("usage", "logic")
+        if usage not in {"logic", "research"}:
             raise ApiProblem("请选择资料目录用途")
+        if usage == "logic" and not policy.get("workflowEnabled", True):
+            raise ApiProblem("业务流执行权限已关闭", 403)
+        types = {"vector", "raster", "table"}
+        kind = request.GET.get("dataType")
+        if kind is not None and kind not in types:
+            raise ApiProblem("资料类型无效")
+        available = discover_resources(
+            request.user, policy, source=_resource_source(request)
+        ).filter(data_type__in={kind} if kind else types)
         try:
             page = int(request.GET.get("page", "1"))
             size = int(request.GET.get("pageSize", "20"))

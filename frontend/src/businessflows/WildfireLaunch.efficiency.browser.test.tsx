@@ -208,22 +208,15 @@ it("starts one-shot observation from confirmed dates with the active Agent model
     <App>
       <BusinessFlowLaunch
         launch={launch}
-        model=""
-        directMonitoring
+        model="mock"
         initialInputs={{ cube: resource.id }}
         onStarted={vi.fn()}
         onCancel={vi.fn()}
       />
     </App>,
   );
-  expect(
-    await screen.findByText("一次配置，由主 Agent 组织解译"),
-  ).toBeVisible();
-  const button = screen.getByRole("button", { name: "开始业务流" });
+  const button = await screen.findByRole("button", { name: "开始业务流" });
   await waitFor(() => expect(button).toBeEnabled());
-  expect(
-    screen.getByRole("combobox", { name: "主 Agent 执行模型" }),
-  ).toBeVisible();
   fireEvent.click(button);
   await waitFor(() => expect(start).toHaveBeenCalledOnce());
   const [, payload] = start.mock.calls[0]!;

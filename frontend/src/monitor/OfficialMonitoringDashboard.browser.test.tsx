@@ -306,15 +306,17 @@ it.each([
   },
 );
 
-it("冰川成果切换同区原始影像并链接项目参考资料，不触发计算", async () => {
+it("冰川成果切换同区原始影像，不显示参考资料和成果说明", async () => {
   vi.mocked(requestJson).mockClear();
   vi.mocked(requestJson).mockResolvedValue({
     scene: "glacier",
     items: [
       {
         ...item(81, "冰川样区 · T42-1", 0),
+        scene: "glacier",
         observedStart: null,
         observedEnd: null,
+        registrationDate: "2026-11-22",
         comparison: {
           resource: { id: 80, name: "原始影像" },
           display: { styleHash: "raw-80" },
@@ -338,16 +340,93 @@ it("冰川成果切换同区原始影像并链接项目参考资料，不触发�
   expect(screen.getByTestId("official-map-handoff")).toHaveTextContent(
     '[81,true,"style-81"]',
   );
-  fireEvent.click(screen.getByRole("button", { name: "查看 1 项" }));
-  const reference = screen.getByRole("link", { name: "冰川图集" });
-  const href = new URL(reference.getAttribute("href")!, window.location.origin);
-  expect(href.pathname).toBe("/resources/catalog");
-  expect(href.searchParams.get("resourceId")).toBe("91");
-  expect(href.searchParams.get("projectTagId")).toBe("8");
+  expect(screen.queryByRole("region", { name: "参考资料" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("region", { name: "成果说明" })).not.toBeInTheDocument();
   expect(
     within(screen.getByRole("region", { name: "正式成果地图" })).getByText(
-      "观测期未登记",
+      "登记期：2026-11-22",
     ),
   ).toBeVisible();
   expect(vi.mocked(requestJson)).toHaveBeenCalledTimes(1);
+});
+
+it("冰川固定右栏，用不同文字颜色区分变化指标与正负面积差", async () => {
+  const before = [...Array(9)].map((_, i) => item(90 + i, `样区-${i + 1}`, i));
+  vi.mocked(requestJson).mockResolvedValue({
+    scene: "glacier",
+    items: [
+      {
+        ...item(100, "冰川样区 · T43-10", 14.89),
+        scene: "glacier",
+        kind: "model",
+        registrationDate: "2026-11-23",
+        metrics: [{key:"ice_area_km2", label:"本期冰川分类面积", unit:"km²", value:14.89}],
+        glacierChange: {
+          baselineProductId:81, baselineDate:"2026-11-22", basis:"registered_codes",
+          commonAreaKm2:19.942, changedPercent:15.25, netClass1Km2:0.2, netClass2Km2:-0.3,
+          netIceAreaKm2:null,
+        },
+        references: Array.from({length:9}, (_, i)=>({id: 910+i, name:`参考图件 ${i+1}`,projectTagId:8})),
+      },
+      ...before.map((p)=>({...p,scene:"glacier",registrationDate:"2026-11-22"})),
+    ],
+  });
+  show("glacier");
+  const changes = await screen.findByRole("region", {name:"登记期变化"});
+  expect(screen.getByText("登记期不是影像拍摄日期")).toBeVisible();
+  expect(screen.queryByText("以登记的实际观测期与统计口径为准")).not.toBeInTheDocument();
+  await waitFor(() => expect(within(changes).getByText("2026-11-22 → 2026-11-23")).toBeVisible());
+  expect(within(changes).getByText("编码变化占比")).toBeVisible();
+  expect(within(changes).queryByText("冰川分类面积净变化")).not.toBeInTheDocument();
+  const column = screen.getByRole("complementary", {name:"区域观测指标"});
+  const overview = within(column).getByRole("region", {name:"区域成果一览"});
+  expect(getComputedStyle(column).overflowY).toBe("hidden");
+  expect(getComputedStyle(within(overview).getByRole("list")).overflowY).toBe("auto");
+  expect(within(overview).getAllByRole("listitem")).toHaveLength(10);
+  const current = within(column).getByText("14.89", { selector: ".official-hero-stat strong" });
+  const entries = within(changes);
+  expect(getComputedStyle(current).color).toBe("rgb(139, 214, 242)");
+  expect(getComputedStyle(entries.getByText("共同有效面积")).color).toBe("rgb(121, 226, 203)");
+  expect(getComputedStyle(entries.getByText("19.942", { selector: "dd" })).color).toBe("rgb(121, 226, 203)");
+  expect(getComputedStyle(entries.getByText("15.25", { selector: "dd" })).color).toBe("rgb(255, 200, 122)");
+  expect(getComputedStyle(entries.getByText("+0.2")).color).toBe("rgb(167, 235, 155)");
+  expect(getComputedStyle(entries.getByText("-0.3")).color).toBe("rgb(255, 163, 182)");
+});
+
+it("玛纳斯显示影像日期、冰川面积和真彩色原图", async () => {
+  await page.viewport(1600, 900);
+  vi.mocked(requestJson).mockResolvedValue({
+    scene: "glacier",
+    items: [{
+      ...item(102, "玛纳斯冰川 · T45TUJ", 14.89),
+      scene: "glacier",
+      kind: "model",
+      model: {variant: "manans-s2-dlinknet34"},
+      observedStart: "2021-09-08",
+      observedEnd: "2021-09-08",
+      registrationDate: "2026-11-24",
+      glacierChange: {
+        baselineProductId: 36, baselineDate: "2026-11-23", basis: "classification",
+        commonAreaKm2: 11967.8234, changedPercent: 0.5966,
+        netClass1Km2: -0.76, netClass2Km2: null, netIceAreaKm2: -0.76,
+      },
+      metrics: [
+        {key: "ice_area_km2", label: "本期冰川分类面积", unit: "km²", value: 14.89},
+        {key: "class_1_percent", label: "冰川占有效区", unit: "%", value: 12.25},
+      ],
+      comparison: {resource: {id: 101, name: "玛纳斯原始影像"}, display: {styleHash: "raw-101"}},
+    }],
+  });
+  show("glacier");
+  const original = await screen.findByRole("button", {name: "原始影像"});
+  expect(within(screen.getByRole("region", {name: "正式成果地图"})).getByText("2021-09-08")).toBeVisible();
+  await waitFor(() => expect(screen.getByText("冰川占有效区")).toBeVisible());
+  const change = screen.getByRole("region", {name: "登记期变化"});
+  expect(within(change).getByText("2026-11-23 → 2026-11-24")).toBeVisible();
+  expect(within(change).getByText("分类变化占比")).toBeVisible();
+  expect(within(change).getByText("冰川分类面积净变化")).toBeVisible();
+  expect(within(change).queryByText("编码 1 / 2 面积差")).not.toBeInTheDocument();
+  fireEvent.click(original);
+  expect(screen.getByText("B4/B3/B2 真彩色")).toBeVisible();
+  expect(screen.getByTestId("official-map-handoff")).toHaveTextContent('[102,true,"raw-101"]');
 });

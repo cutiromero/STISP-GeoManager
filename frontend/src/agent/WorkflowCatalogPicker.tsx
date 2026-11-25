@@ -25,26 +25,30 @@ const kindLabels: Record<string, string> = {
   table: "表格",
 };
 
-export type WorkflowDataSelection = { id: number; name: string };
-
-export default function WorkflowDataPicker({
-  open: catalogOpen,
-  polished = false,
-  disabled = false,
-  usage,
-  excludedIds,
-  selection,
-  onCancel,
+export default function WorkflowCatalogPicker({
+  polished,
+  onClose,
   onConfirm,
+  disabled,
+  attachedIds,
+  uploading,
+  selectionError,
+  single = false,
+  rasterOnly = false,
+  usage,
+  initialSelection = [],
 }: {
-  open: boolean;
-  polished?: boolean;
-  disabled?: boolean;
+  polished: boolean;
+  onClose: () => void;
+  onConfirm: (items: AgentWorkflowCatalogItem[]) => void;
+  disabled: boolean;
+  attachedIds: number[];
+  uploading?: boolean;
+  selectionError?: string;
+  single?: boolean;
+  rasterOnly?: boolean;
   usage?: "research";
-  excludedIds?: number[];
-  selection?: WorkflowDataSelection[];
-  onCancel: () => void;
-  onConfirm: (items: WorkflowDataSelection[]) => void | Promise<void>;
+  initialSelection?: AgentWorkflowCatalogItem[];
 }) {
   const [catalogSource, setCatalogSource] =
     useState<AgentResourceSource>("registered");
@@ -55,37 +59,22 @@ export default function WorkflowDataPicker({
   const [catalogItems, setCatalogItems] = useState<AgentWorkflowCatalogItem[]>(
     [],
   );
-  const catalogNames = useRef(new Map<number, string>());
+  const itemsById = useRef(
+    new Map(initialSelection.map((item) => [item.id, item])),
+  );
   const [catalogPage, setCatalogPage] = useState(1);
   const [catalogTotal, setCatalogTotal] = useState(0);
   const [directoryId, setDirectoryId] = useState<number>();
   const [directories, setDirectories] = useState<
     { id: number; name: string }[]
   >([]);
-  const [catalogSelected, setCatalogSelected] = useState<number[]>([]);
+  const [catalogSelected, setCatalogSelected] = useState(() =>
+    initialSelection.map((item) => item.id),
+  );
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [catalogError, setCatalogError] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState("");
   useEffect(() => {
-    if (catalogOpen) return;
-    setCatalogSource("registered");
-    setCatalogQuery("");
-    setCatalogPage(1);
-    setCatalogTotal(0);
-    setCatalogSearchDelay(0);
-    setCatalogComposing(false);
-    setDirectoryId(undefined);
-    setDirectories([]);
-    setCatalogSelected(selection?.map((item) => item.id) ?? []);
-    catalogNames.current = new Map(
-      selection?.map(({ id, name }) => [id, name]),
-    );
-    setSaveError("");
-  }, [catalogOpen, selection]);
-
-  useEffect(() => {
-    if (!catalogOpen || catalogComposing) return;
+    if (catalogComposing) return;
     setCatalogLoading(true);
     setCatalogItems([]);
     setCatalogError("");
@@ -93,7 +82,12 @@ export default function WorkflowDataPicker({
       (signal) =>
         agentApi.workflowCatalogResources(
           catalogQuery,
-          { signal, source: catalogSource, usage },
+          {
+            signal,
+            source: catalogSource,
+            dataType: rasterOnly ? "raster" : undefined,
+            usage,
+          },
           catalogPage,
           directoryId,
         ),
@@ -102,7 +96,7 @@ export default function WorkflowDataPicker({
           setCatalogItems(result.items);
           setCatalogResultQuery(catalogQuery);
           for (const item of result.items)
-            catalogNames.current.set(item.id, item.name);
+            itemsById.current.set(item.id, item);
           setCatalogTotal(result.total);
           setDirectories(result.directories);
         },
@@ -116,10 +110,10 @@ export default function WorkflowDataPicker({
       catalogSearchDelay,
     );
   }, [
-    catalogOpen,
     catalogSource,
     catalogQuery,
     catalogSearchDelay,
+    rasterOnly,
     catalogPage,
     directoryId,
     catalogComposing,
@@ -138,36 +132,22 @@ export default function WorkflowDataPicker({
     setCatalogPage(1);
     setCatalogSearchDelay(0);
   };
-  const addCatalog = async () => {
-    if (saving || !catalogSelected.length) return;
-    setSaving(true);
-    setSaveError("");
-    try {
-      await onConfirm(
-        catalogSelected.map((id) => ({
-          id,
-          name: catalogNames.current.get(id) ?? `资料 ${id}`,
-        })),
-      );
-    } catch (reason) {
-      setSaveError(reason instanceof Error ? reason.message : "请重试添加资料");
-    } finally {
-      setSaving(false);
-    }
-  };
-
   return (
     <Modal
       title="选择系统数据"
-      open={catalogOpen}
+      open
       width={polished ? 720 : undefined}
       className={polished ? "flow-materials-picker" : undefined}
-      onCancel={onCancel}
-      onOk={() => void addCatalog()}
+      onCancel={onClose}
+      onOk={() =>
+        onConfirm(
+          catalogSelected.flatMap((id) => itemsById.current.get(id) ?? []),
+        )
+      }
       okText="加入本次任务"
-      confirmLoading={saving}
+      confirmLoading={Boolean(uploading)}
       okButtonProps={{
-        disabled: disabled || !catalogSelected.length || saving,
+        disabled: disabled || !catalogSelected.length || Boolean(uploading),
       }}
     >
       <p>
@@ -175,8 +155,8 @@ export default function WorkflowDataPicker({
           ? `从当前项目选择资料，已选 ${catalogSelected.length} 份`
           : `名称命中优先，同级最近更新优先，共 ${catalogTotal} 份。可搜索资料名称或说明；多个关键词以空格分隔且都要包含，可跨页选择。`}
       </p>
-      {(saveError || catalogError) && (
-        <Alert type="error" title={saveError || catalogError} />
+      {(catalogError || selectionError) && (
+        <Alert type="error" title={catalogError || selectionError} />
       )}
       <Segmented<AgentResourceSource>
         aria-label="资料来源"
@@ -217,20 +197,27 @@ export default function WorkflowDataPicker({
             value={catalogQuery}
             onChange={(event) => changeCatalogQuery(event.target.value)}
           />
-          <div className="flow-materials-candidates" aria-busy={catalogLoading}>
+          <div
+            className="flow-materials-candidates"
+            aria-busy={catalogLoading}
+          >
             {catalogItems.map((item) => (
               <Checkbox
                 key={item.id}
                 className="flow-materials-candidate"
                 aria-label={`选择${item.name}`}
                 checked={catalogSelected.includes(item.id)}
-                disabled={disabled || saving || excludedIds?.includes(item.id)}
+                disabled={
+                  disabled ||
+                  Boolean(uploading) ||
+                  attachedIds.includes(item.id)
+                }
                 onChange={(event) =>
-                  setCatalogSelected((previous) =>
-                    event.target.checked
-                      ? [...new Set([...previous, item.id])]
-                      : previous.filter((id) => id !== item.id),
-                  )
+                  setCatalogSelected((previous) => {
+                    if (!event.target.checked)
+                      return previous.filter((id) => id !== item.id);
+                    return single ? [item.id] : [...previous, item.id];
+                  })
                 }
               >
                 <span>
@@ -240,7 +227,7 @@ export default function WorkflowDataPicker({
                     query={catalogResultQuery}
                   />
                   <small>
-                    {kindLabels[item.dataType as keyof typeof kindLabels] ??
+                    {kindLabels[item.dataType] ??
                       item.dataType}{" "}
                     · {item.directoryName || "未分组"}
                   </small>
@@ -269,7 +256,7 @@ export default function WorkflowDataPicker({
             }}
             value={catalogSelected}
             labelRender={(option) =>
-              catalogNames.current.get(Number(option.value)) ?? option.label
+              itemsById.current.get(Number(option.value))?.name ?? option.label
             }
             optionRender={(option) => (
               <ResourceSearchLabel
@@ -295,14 +282,14 @@ export default function WorkflowDataPicker({
               )
             }
             onClear={() => setCatalogSelected([])}
-            disabled={disabled || saving}
+            disabled={disabled || Boolean(uploading)}
             options={catalogItems.map((item) => ({
               value: item.id,
-              label: `${item.name}（${kindLabels[item.dataType as keyof typeof kindLabels] ?? item.dataType} · ${item.directoryName || "未分组"} · 登记 ${item.createdAt?.slice(0, 10) ?? ""}）`,
+              label: `${item.name}（${kindLabels[item.dataType] ?? item.dataType} · ${item.directoryName || "未分组"} · 登记 ${item.createdAt?.slice(0, 10) ?? ""}）`,
               name: item.name,
               description: item.description,
-              details: `${kindLabels[item.dataType as keyof typeof kindLabels] ?? item.dataType} · ${item.directoryName || "未分组"} · 登记 ${item.createdAt?.slice(0, 10) ?? ""}`,
-              disabled: excludedIds?.includes(item.id),
+              details: `${kindLabels[item.dataType] ?? item.dataType} · ${item.directoryName || "未分组"} · 登记 ${item.createdAt?.slice(0, 10) ?? ""}`,
+              disabled: attachedIds.includes(item.id),
             }))}
           />
         </div>

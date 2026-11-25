@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { businessFlowsApi } from "../api/businessFlows";
 import { resetProjectSession, setActiveProject } from "../projects/session";
 import { endBrowserSession } from "../auth/browserSession";
-import { businessFlowRun, geologyDetail } from "./businessFlow.testFixtures";
+import { businessFlowRun, geologyDetail, researchDetail } from "./businessFlow.testFixtures";
 
 const json = (value: unknown) =>
   new Response(JSON.stringify(value), {
@@ -146,4 +146,24 @@ it("rejects malformed recovery and trace payloads before rendering nested fields
   await expect(
     businessFlowsApi.nodeTrace(run.id, "analyse"),
   ).rejects.toMatchObject({ name: "ResponseFormatError" });
+});
+
+it("reads v2 detail with older versions and v2 run snapshots without an execution selector", async () => {
+  const older = researchDetail.version!;
+  const definition = { ...older.definition, schemaVersion: 2 as const };
+  const version = { ...older, id: 23, version: 3, definition };
+  const detail = { ...researchDetail, version, versions: [version, older] };
+  const run = businessFlowRun({ definitionSnapshot: definition });
+  vi.stubGlobal("fetch", vi.fn()
+    .mockResolvedValueOnce(json(detail))
+    .mockResolvedValueOnce(json(run))
+    .mockResolvedValueOnce(json({
+      ...detail,
+      version: { ...version, definition: { ...definition, executionMode: "nodes" } },
+    })));
+  await expect(businessFlowsApi.detail(detail.flow.id)).resolves.toEqual(detail);
+  await expect(businessFlowsApi.run(run.id)).resolves.toEqual(run);
+  await expect(businessFlowsApi.detail(detail.flow.id)).rejects.toMatchObject({
+    name: "ResponseFormatError",
+  });
 });
