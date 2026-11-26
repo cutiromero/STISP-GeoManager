@@ -16,7 +16,6 @@ import {
 import {
   Alert,
   Button,
-  Card,
   Flex,
   Input,
   Popconfirm,
@@ -68,7 +67,6 @@ import {
   groupConversation,
   object as record,
   savedConversation,
-  toolPayload,
   updateConversation,
 } from "./hermesConversation";
 import {
@@ -78,9 +76,20 @@ import {
   readCitations,
   type Citations,
 } from "./HermesTimeline";
+import HermesQuestion, {
+  pendingControl,
+  type HermesControl,
+} from "./HermesQuestion";
+import HermesTaskProgress, {
+  latestTaskProgress,
+  todoPlan,
+  type ResearchPath,
+  type TodoPlan,
+} from "./HermesTaskProgress";
 import useAgentLayout from "./useAgentLayout";
 import WorkflowCatalogPicker from "./WorkflowCatalogPicker";
 import "../businessflows/business-flow-launch.css";
+import "./hermes-workspace.css";
 
 const api = "/api/agent/hermes";
 const terminalStatuses = new Set([
@@ -92,21 +101,11 @@ const terminalStatuses = new Set([
 
 type Mode = "agent" | "chat";
 type HermesEffort = NonNullable<HermesRunCreate["reasoning_effort"]>;
-type Control = {
-  kind: "clarify" | "approval";
-  request_id: string;
-  execution_generation: number;
-  question: string;
-  choices: string[];
-};
-
 type ResearchWorkflow = {
   versionId: number;
   title: string;
   goal: string;
 };
-type Todo = { id: string; content: string; status: string; parent?: string };
-type TodoPlan = { revision: number; todos: Todo[] };
 
 function selectedWorkflow(
   state: unknown,
@@ -124,63 +123,6 @@ function selectedWorkflow(
     return { versionId: value.versionId, title: value.title, goal: value.goal };
 }
 
-function todoPlan(value: unknown): TodoPlan | undefined {
-  const content = toolPayload(value);
-  if (!Array.isArray(content.todos) || typeof content.revision !== "number")
-    return;
-  const todos = content.todos.filter(
-    (item): item is Todo =>
-      typeof item?.id === "string" &&
-      typeof item.content === "string" &&
-      typeof item.status === "string",
-  );
-  return { revision: content.revision, todos };
-}
-
-function latestPlan(messages: Message[]) {
-  for (const message of [...messages].reverse()) {
-    if (message.role !== "tool" || message.tool_name !== "todo_list") continue;
-    const plan = todoPlan(message.content);
-    if (plan) return plan;
-  }
-}
-
-function TaskList({ plan }: { plan: TodoPlan }) {
-  const ui = useComputeText();
-  const labels: Record<string, string> = {
-    pending: ui("待处理", "Pending"),
-    in_progress: ui("进行中", "In progress"),
-    completed: ui("已完成", "Completed"),
-    cancelled: ui("已取消", "Cancelled"),
-  };
-  return (
-    <section
-      className="agent-run-notice"
-      aria-label={ui("任务清单", "Task list")}
-    >
-      <Typography.Text strong>{ui("任务清单", "Task list")}</Typography.Text>
-      <ul>
-        {plan.todos.map(({ id, parent, content, status }) => (
-          <li key={id} style={parent ? { marginInlineStart: 16 } : undefined}>
-            <Tag
-              color={
-                status === "completed"
-                  ? "success"
-                  : status === "in_progress"
-                    ? "processing"
-                    : undefined
-              }
-            >
-              {labels[status] ?? status}
-            </Tag>
-            {content}
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
 function errorText(error: unknown) {
   const detail =
     error instanceof ApiError
@@ -191,43 +133,6 @@ function errorText(error: unknown) {
     : error instanceof Error
       ? error.message
       : "请求失败";
-}
-
-function pendingControl(value: unknown): Control | undefined {
-  const event = record(value);
-  const kind =
-    event.kind ??
-    (event.event === "clarify.request"
-      ? "clarify"
-      : event.event === "approval.request"
-        ? "approval"
-        : undefined);
-  if (
-    (kind !== "clarify" && kind !== "approval") ||
-    typeof event.prompt_id !== "string" ||
-    typeof event.execution_generation !== "number"
-  )
-    return undefined;
-  const question =
-    kind === "clarify" ? event.question : event.description || event.command;
-  return {
-    kind,
-    request_id: event.prompt_id,
-    execution_generation: event.execution_generation,
-    question:
-      typeof question === "string"
-        ? question
-        : kind === "clarify"
-          ? "请补充信息"
-          : "请确认操作",
-    choices: Array.isArray(event.choices)
-      ? event.choices.filter(
-          (choice) =>
-            typeof choice === "string" &&
-            (kind === "clarify" || choice === "once" || choice === "deny"),
-        )
-      : [],
-  };
 }
 
 export default function HermesPage() {
@@ -808,6 +713,7 @@ function Thread({
   );
   const [messages, setMessages] = useState<Message[]>([]);
   const [plan, setPlan] = useState<TodoPlan>();
+  const [path, setPath] = useState<ResearchPath>();
   const [workflowDraft, setWorkflowDraft] = useState(workflow);
   const [materials, setMaterials] = useState<AgentWorkflowCatalogItem[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -816,8 +722,8 @@ function Thread({
   const [live, setLive] = useState(emptyConversation);
   const [startedAt, setStartedAt] = useState<number>();
   const [liveSources, setLiveSources] = useState<Message[]>([]);
-  const [control, setControl] = useState<Control>();
-  const [clarification, setClarification] = useState("");
+  const [controls, setControls] = useState<HermesControl[]>([]);
+  const control = controls[0];
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(Boolean(runId));
   const [retry, setRetry] = useState(0);
@@ -883,13 +789,19 @@ function Thread({
       );
   }
 
+  function receiveTaskProgress(data: Message[]) {
+    const { plan, path } = latestTaskProgress(data);
+    receivePlan(plan);
+    if (path) setPath(path);
+  }
+
   async function history(sessionId: string, signal: AbortSignal) {
     const { data } = await requestJson<HermesMessageList>(
       `${api}/api/sessions/${sessionId}/messages`,
       { signal },
     );
     setMessages(data);
-    receivePlan(latestPlan(data));
+    receiveTaskProgress(data);
     return data;
   }
 
@@ -936,7 +848,7 @@ function Thread({
             ) {
               setLiveSources(turn.messages);
             }
-            receivePlan(latestPlan(data));
+            receiveTaskProgress(data);
           })
           .catch(() => {})
           .finally(() => {
@@ -968,7 +880,7 @@ function Thread({
             setPendingInput("");
             setLiveSources([]);
             setCheckingHistory(false);
-            setControl(undefined);
+            setControls([]);
             setBusy(false);
             setRunId(null);
             return;
@@ -1005,10 +917,15 @@ function Thread({
             } else {
               setMessages(data);
             }
-            receivePlan(latestPlan(data));
+            receiveTaskProgress(data);
             setCheckingHistory(false);
           }
-          setControl(state.pending_controls?.map(pendingControl).find(Boolean));
+          setControls(
+            (state.pending_controls ?? []).flatMap((value) => {
+              const prompt = pendingControl(value);
+              return prompt ? [prompt] : [];
+            }),
+          );
           try {
             await requestEventStream(
               `${url}/events?last_seq=${cursor.current}`,
@@ -1029,6 +946,7 @@ function Thread({
                     typeof event.tool === "string" &&
                     [
                       "todo_list",
+                      "get_research_workflow",
                       "search_knowledge",
                       "read_knowledge_document",
                       "check_knowledge_constraints",
@@ -1038,12 +956,28 @@ function Thread({
                     refreshToolResults(id);
                 }
                 const updated = pendingControl(event);
-                if (updated) setControl(updated);
+                if (updated) {
+                  setControls((queued) =>
+                    queued.some(
+                      (prompt) => prompt.request_id === updated.request_id,
+                    )
+                      ? queued
+                      : [...queued, updated],
+                  );
+                }
                 if (
                   event.event === "clarify.settled" ||
                   event.event === "approval.settled"
-                )
-                  setControl(undefined);
+                ) {
+                  setControls((queued) =>
+                    queued.filter(
+                      (prompt) =>
+                        prompt.request_id !== event.prompt_id ||
+                        prompt.execution_generation !==
+                          event.execution_generation,
+                    ),
+                  );
+                }
               },
               signal,
             );
@@ -1150,31 +1084,40 @@ function Thread({
     }
   }
 
-  async function controlRun(
-    action: "stop" | "clarify" | "approval",
-    reply = clarification,
-  ) {
+  async function stop() {
     if (!runId) return;
     try {
-      await requestJson(`${api}/v1/runs/${runId}/${action}`, {
+      await requestJson(`${api}/v1/runs/${runId}/stop`, {
         method: "POST",
-        body:
-          action === "stop"
-            ? {}
-            : {
-                request_id: control?.request_id,
-                execution_generation: control?.execution_generation,
-                ...(action === "clarify"
-                  ? { answer: reply }
-                  : { choice: reply }),
-              },
+        body: {},
       });
-      if (action !== "stop") {
-        setControl(undefined);
-        setClarification("");
-      }
     } catch (failure) {
       setError(errorText(failure));
+    }
+  }
+
+  async function replyToControl(prompt: HermesControl, reply: string) {
+    if (!runId) return;
+    try {
+      await requestJson(`${api}/v1/runs/${runId}/${prompt.kind}`, {
+        method: "POST",
+        body: {
+          request_id: prompt.request_id,
+          execution_generation: prompt.execution_generation,
+          ...(prompt.kind === "clarify"
+            ? { answer: reply }
+            : { choice: reply }),
+        },
+      });
+      setControls((queued) =>
+        queued.filter(
+          (item) =>
+            item.request_id !== prompt.request_id ||
+            item.execution_generation !== prompt.execution_generation,
+        ),
+      );
+    } catch (failure) {
+      return errorText(failure);
     }
   }
 
@@ -1199,305 +1142,276 @@ function Thread({
   );
   const projectId = String(project?.current ?? "");
   return (
-    <>
-      <div
-        className="agent-messages"
-        ref={viewport}
-        onScroll={(event) => {
-          const box = event.currentTarget;
-          if (box.scrollTop < lastScrollTop.current - 1)
-            followLatest.current = false;
-          if (box.scrollHeight - box.scrollTop - box.clientHeight < 96)
-            followLatest.current = true;
-          setShowLatest(!followLatest.current);
-          lastScrollTop.current = box.scrollTop;
-        }}
-      >
-        {checkingHistory && (
-          <Spin aria-label={ui("加载会话", "Loading conversation")} />
-        )}
-        {!checkingHistory && !messages.length && !active && !workflowDraft && (
-          <Welcome mode={mode} />
-        )}
-        {turns.map((turn) => (
-          <Fragment key={turn.id}>
-            {typeof turn.user?.content === "string" && (
-              <div className="agent-user-message">{turn.user.content}</div>
-            )}
-            {(turn.content.activities.length > 0 || turn.content.answer) && (
+    <div className="hermes-thread">
+      <div className="hermes-chat">
+        <div
+          className="agent-messages"
+          ref={viewport}
+          onScroll={(event) => {
+            const box = event.currentTarget;
+            if (box.scrollTop < lastScrollTop.current - 1)
+              followLatest.current = false;
+            if (box.scrollHeight - box.scrollTop - box.clientHeight < 96)
+              followLatest.current = true;
+            setShowLatest(!followLatest.current);
+            lastScrollTop.current = box.scrollTop;
+          }}
+        >
+          {checkingHistory && (
+            <Spin aria-label={ui("加载会话", "Loading conversation")} />
+          )}
+          {!checkingHistory &&
+            !messages.length &&
+            !active &&
+            !workflowDraft && <Welcome mode={mode} />}
+          {turns.map((turn) => (
+            <Fragment key={turn.id}>
+              {typeof turn.user?.content === "string" && (
+                <div className="agent-user-message">{turn.user.content}</div>
+              )}
+              {(turn.content.activities.length > 0 || turn.content.answer) && (
+                <section className="agent-turn agent-assistant-message">
+                  <AssistantHeading />
+                  <HermesProgress
+                    busy={false}
+                    activities={turn.content.activities}
+                    startedAt={turn.user?.timestamp}
+                    endedAt={turn.messages[turn.messages.length - 1]?.timestamp}
+                  />
+                  {turn.content.answer && (
+                    <HermesAnswer
+                      text={turn.content.answer}
+                      citations={turn.citations}
+                    />
+                  )}
+                  <HermesResultLinks
+                    messages={turn.messages}
+                    project={projectId}
+                  />
+                </section>
+              )}
+            </Fragment>
+          ))}
+          {active && (
+            <>
+              {pendingInput && (
+                <div className="agent-user-message">{pendingInput}</div>
+              )}
               <section className="agent-turn agent-assistant-message">
-                <AssistantHeading />
+                <AssistantHeading
+                  status={
+                    busy
+                      ? control
+                        ? ui("等待您回答", "Waiting for your reply")
+                        : ui("生成中", "Generating")
+                      : undefined
+                  }
+                />
                 <HermesProgress
-                  busy={false}
-                  activities={turn.content.activities}
-                  startedAt={turn.user?.timestamp}
-                  endedAt={turn.messages[turn.messages.length - 1]?.timestamp}
+                  activities={live.activities}
+                  busy={busy}
+                  startedAt={startedAt}
                 />
-                {turn.content.answer && (
-                  <HermesAnswer
-                    text={turn.content.answer}
-                    citations={turn.citations}
-                  />
+                {live.answer && (
+                  <div aria-live="polite">
+                    <HermesAnswer
+                      text={live.answer}
+                      citations={activeCitations}
+                    />
+                  </div>
                 )}
-                <HermesResultLinks
-                  messages={turn.messages}
-                  project={projectId}
-                />
+                <HermesResultLinks messages={liveSources} project={projectId} />
               </section>
-            )}
-          </Fragment>
-        ))}
-        {Boolean(plan?.todos.length) && plan && <TaskList plan={plan} />}
-        {active && (
-          <>
-            {pendingInput && (
-              <div className="agent-user-message">{pendingInput}</div>
-            )}
-            <section className="agent-turn agent-assistant-message">
-              <AssistantHeading
-                status={
-                  busy
-                    ? control
-                      ? ui("等待您回答", "Waiting for your reply")
-                      : ui("生成中", "Generating")
-                    : undefined
-                }
-              />
-              <HermesProgress
-                activities={live.activities}
-                busy={busy}
-                startedAt={startedAt}
-              />
-              {live.answer && (
-                <div aria-live="polite">
-                  <HermesAnswer
-                    text={live.answer}
-                    citations={activeCitations}
-                  />
-                </div>
-              )}
-              <HermesResultLinks messages={liveSources} project={projectId} />
-              {control && (
-                <Card
-                  className="agent-run-notice"
-                  size="small"
-                  title={control.question}
-                >
-                  <Flex gap="small" wrap>
-                    {control.choices.map((choice) => (
-                      <Button
-                        key={choice}
-                        onClick={() => {
-                          if (control.kind === "approval")
-                            void controlRun("approval", choice);
-                          else
-                            setClarification((current) =>
-                              current ? `${current}, ${choice}` : choice,
-                            );
-                        }}
-                      >
-                        {control.kind !== "approval"
-                          ? choice
-                          : choice === "once"
-                            ? ui("批准一次", "Approve once")
-                            : ui("拒绝", "Deny")}
-                      </Button>
-                    ))}
-                    {control.kind === "clarify" && (
-                      <>
-                        <Input
-                          aria-label={ui("补充信息", "Additional information")}
-                          value={clarification}
-                          onChange={(event) =>
-                            setClarification(event.target.value)
-                          }
-                        />
-                        <Button
-                          disabled={!clarification.trim()}
-                          onClick={() => void controlRun("clarify")}
-                        >
-                          {ui("提交", "Submit")}
-                        </Button>
-                      </>
-                    )}
-                  </Flex>
-                </Card>
-              )}
-            </section>
-          </>
-        )}
-        {error && (
-          <Alert
-            className="agent-run-notice"
-            type="error"
-            showIcon
-            message={error}
-            action={
-              runId && (
-                <Button
-                  onClick={() => {
-                    setError("");
-                    setRetry((attempt) => attempt + 1);
-                  }}
-                >
-                  {ui("恢复连接", "Reconnect")}
-                </Button>
-              )
-            }
-          />
-        )}
-      </div>
-      {showLatest && (
-        <div className="agent-latest-bar">
-          <Button icon={<ArrowDownOutlined />} onClick={scrollToLatest}>
-            {ui("回到最新", "Jump to latest")}
-          </Button>
-        </div>
-      )}
-      <AgentComposerFrame layout={layout}>
-        {workflowDraft && (
-          <Flex gap="small" wrap align="center">
-            <Tag>{workflowDraft.title}</Tag>
-            <Button size="small" onClick={() => setPickerOpen(true)}>
-              {ui("选择系统数据", "Select project data")}
-            </Button>
-            {materials.map(({ id, name }) => (
-              <Tag
-                key={id}
-                closable
-                onClose={() =>
-                  setMaterials((current) =>
-                    current.filter((item) => item.id !== id),
-                  )
-                }
-              >
-                {name}
-              </Tag>
-            ))}
-            {pickerOpen && (
-              <WorkflowCatalogPicker
-                usage="research"
-                polished
-                disabled={false}
-                attachedIds={[]}
-                initialSelection={materials}
-                onClose={() => setPickerOpen(false)}
-                onConfirm={(items) => {
-                  setMaterials(items);
-                  setPickerOpen(false);
-                }}
-              />
-            )}
-          </Flex>
-        )}
-        <div className="agent-input-row">
-          <Input.TextArea
-            id="agent-message-input"
-            aria-label={ui("输入消息", "Message")}
-            placeholder={ui(
-              "输入问题，Enter 发送，Shift+Enter 换行",
-              "Ask a question. Enter to send, Shift+Enter for a new line",
-            )}
-            value={prompt}
-            style={{ height: layout.input, resize: "none" }}
-            maxLength={12000}
-            onChange={(event) => setPrompt(event.target.value)}
-            onPressEnter={(event) => {
-              if (event.shiftKey || event.nativeEvent.isComposing) return;
-              event.preventDefault();
-              void send();
-            }}
-          />
-        </div>
-        <div className="agent-composer-footer">
-          <div className="agent-composer-tools">
-            {mode === "agent" && (
-              <Button
-                type="text"
-                onClick={() => navigate("/business-flows?runtime=hermes")}
-                icon={<NodeIndexOutlined />}
-              >
-                {ui("业务流", "Business flows")}
-              </Button>
-            )}
-            <Discovery publicWebAvailable={publicWebAvailable} />
-            <Tooltip
-              title={
-                publicWebAvailable
-                  ? ui(
-                      "在本会话使用公开网页检索",
-                      "Use public web search in this chat",
-                    )
-                  : ui(
-                      "由管理员在智能体设置中开启联网检索",
-                      "An administrator can enable web search in Agent settings",
-                    )
-              }
-            >
-              <span>
-                <Button
-                  type="text"
-                  icon={<GlobalOutlined />}
-                  aria-label={ui("联网检索", "Web research")}
-                  aria-pressed={internetEnabled}
-                  className={internetEnabled ? "agent-tool-active" : undefined}
-                  loading={changingInternet}
-                  disabled={!publicWebAvailable}
-                  onClick={() => void toggleInternet()}
-                >
-                  {ui("联网检索", "Web research")}
-                </Button>
-              </span>
-            </Tooltip>
-            {effort && reasoningEfforts.length > 0 && (
-              <Dropdown
-                trigger={["click"]}
-                menu={{
-                  selectable: true,
-                  selectedKeys: [effort],
-                  items: reasoningEfforts.map((key) => ({
-                    key,
-                    label: effortNames[key],
-                    onClick: () => onEffort(key),
-                  })),
-                }}
-              >
-                <Button
-                  type="text"
-                  icon={<CompassOutlined />}
-                  aria-label={ui("调整思考强度", "Adjust reasoning effort")}
-                  disabled={busy}
-                >
-                  {ui("思考强度", "Effort")} {effortNames[effort]}{" "}
-                  <DownOutlined />
-                </Button>
-              </Dropdown>
-            )}
-          </div>
-          {busy && runId ? (
-            <Button
-              className="agent-send-button"
-              icon={<StopOutlined />}
-              aria-label={ui("停止回答", "Stop response")}
-              title={ui("停止回答", "Stop response")}
-              onClick={() => void controlRun("stop")}
-            />
-          ) : (
-            <Button
-              type="primary"
-              className="agent-send-button"
-              icon={<SendOutlined />}
-              aria-label={ui("发送", "Send")}
-              title={ui("发送", "Send")}
-              onClick={() => void send()}
-              disabled={
-                checkingHistory || busy || changingInternet || !prompt.trim()
+            </>
+          )}
+          {error && (
+            <Alert
+              className="agent-run-notice"
+              type="error"
+              showIcon
+              message={error}
+              action={
+                runId && (
+                  <Button
+                    onClick={() => {
+                      setError("");
+                      setRetry((attempt) => attempt + 1);
+                    }}
+                  >
+                    {ui("恢复连接", "Reconnect")}
+                  </Button>
+                )
               }
             />
           )}
         </div>
-      </AgentComposerFrame>
-    </>
+        {showLatest && (
+          <div className="agent-latest-bar">
+            <Button icon={<ArrowDownOutlined />} onClick={scrollToLatest}>
+              {ui("回到最新", "Jump to latest")}
+            </Button>
+          </div>
+        )}
+        {control && (
+          <HermesQuestion
+            key={`${control.execution_generation}:${control.request_id}`}
+            control={control}
+            remaining={controls.length}
+            onReply={(answer) => replyToControl(control, answer)}
+          />
+        )}
+        <AgentComposerFrame layout={layout}>
+          {workflowDraft && (
+            <Flex gap="small" wrap align="center">
+              <Tag>{workflowDraft.title}</Tag>
+              <Button size="small" onClick={() => setPickerOpen(true)}>
+                {ui("选择系统数据", "Select project data")}
+              </Button>
+              {materials.map(({ id, name }) => (
+                <Tag
+                  key={id}
+                  closable
+                  onClose={() =>
+                    setMaterials((current) =>
+                      current.filter((item) => item.id !== id),
+                    )
+                  }
+                >
+                  {name}
+                </Tag>
+              ))}
+              {pickerOpen && (
+                <WorkflowCatalogPicker
+                  usage="research"
+                  polished
+                  disabled={false}
+                  attachedIds={[]}
+                  initialSelection={materials}
+                  onClose={() => setPickerOpen(false)}
+                  onConfirm={(items) => {
+                    setMaterials(items);
+                    setPickerOpen(false);
+                  }}
+                />
+              )}
+            </Flex>
+          )}
+          <div className="agent-input-row">
+            <Input.TextArea
+              id="agent-message-input"
+              aria-label={ui("输入消息", "Message")}
+              placeholder={ui(
+                "输入问题，Enter 发送，Shift+Enter 换行",
+                "Ask a question. Enter to send, Shift+Enter for a new line",
+              )}
+              value={prompt}
+              style={{ height: layout.input, resize: "none" }}
+              maxLength={12000}
+              onChange={(event) => setPrompt(event.target.value)}
+              onPressEnter={(event) => {
+                if (event.shiftKey || event.nativeEvent.isComposing) return;
+                event.preventDefault();
+                void send();
+              }}
+            />
+          </div>
+          <div className="agent-composer-footer">
+            <div className="agent-composer-tools">
+              {mode === "agent" && (
+                <Button
+                  type="text"
+                  onClick={() => navigate("/business-flows?runtime=hermes")}
+                  icon={<NodeIndexOutlined />}
+                >
+                  {ui("业务流", "Business flows")}
+                </Button>
+              )}
+              <Discovery publicWebAvailable={publicWebAvailable} />
+              <Tooltip
+                title={
+                  publicWebAvailable
+                    ? ui(
+                        "在本会话使用公开网页检索",
+                        "Use public web search in this chat",
+                      )
+                    : ui(
+                        "由管理员在智能体设置中开启联网检索",
+                        "An administrator can enable web search in Agent settings",
+                      )
+                }
+              >
+                <span>
+                  <Button
+                    type="text"
+                    icon={<GlobalOutlined />}
+                    aria-label={ui("联网检索", "Web research")}
+                    aria-pressed={internetEnabled}
+                    className={
+                      internetEnabled ? "agent-tool-active" : undefined
+                    }
+                    loading={changingInternet}
+                    disabled={!publicWebAvailable}
+                    onClick={() => void toggleInternet()}
+                  >
+                    {ui("联网检索", "Web research")}
+                  </Button>
+                </span>
+              </Tooltip>
+              {effort && reasoningEfforts.length > 0 && (
+                <Dropdown
+                  trigger={["click"]}
+                  menu={{
+                    selectable: true,
+                    selectedKeys: [effort],
+                    items: reasoningEfforts.map((key) => ({
+                      key,
+                      label: effortNames[key],
+                      onClick: () => onEffort(key),
+                    })),
+                  }}
+                >
+                  <Button
+                    type="text"
+                    icon={<CompassOutlined />}
+                    aria-label={ui("调整思考强度", "Adjust reasoning effort")}
+                    disabled={busy}
+                  >
+                    {ui("思考强度", "Effort")} {effortNames[effort]}{" "}
+                    <DownOutlined />
+                  </Button>
+                </Dropdown>
+              )}
+            </div>
+            {busy && runId ? (
+              <Button
+                className="agent-send-button"
+                icon={<StopOutlined />}
+                aria-label={ui("停止回答", "Stop response")}
+                title={ui("停止回答", "Stop response")}
+                onClick={() => void stop()}
+              />
+            ) : (
+              <Button
+                type="primary"
+                className="agent-send-button"
+                icon={<SendOutlined />}
+                aria-label={ui("发送", "Send")}
+                title={ui("发送", "Send")}
+                onClick={() => void send()}
+                disabled={
+                  checkingHistory || busy || changingInternet || !prompt.trim()
+                }
+              />
+            )}
+          </div>
+        </AgentComposerFrame>
+      </div>
+      <HermesTaskProgress
+        plan={plan}
+        path={path}
+        draftTitle={workflow?.title}
+      />
+    </div>
   );
 }
 

@@ -1,4 +1,5 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -8,6 +9,7 @@ import {
 import { App } from "antd";
 import { MemoryRouter } from "react-router-dom";
 import { expect, it, vi } from "vitest";
+import { page } from "vitest/browser";
 import { ApiError, requestEventStream, requestJson } from "../api/client";
 import HermesPage from "./HermesPage";
 
@@ -294,8 +296,54 @@ it("opens a versioned research task with the shared data picker and native task 
   const taskId = "f8c01bb8-b122-4e13-b480-aee6f4862d98";
   const plan = {
     revision: 1,
-    todos: [{ id: "inspect", content: "检查样点字段", status: "in_progress" }],
+    todos: [
+      { id: "inspect", content: "检查样点字段", status: "in_progress" },
+      {
+        id: "validate",
+        content: "核对字段值",
+        status: "pending",
+        parent: "inspect",
+      },
+    ],
   };
+  const path = {
+    versionId: 17,
+    name: "科研资料摘要",
+    suggestedSteps: [
+      {
+        id: "collect",
+        title: "整理调查样点",
+        direction: "确认样点表完整",
+        after: [],
+      },
+      {
+        id: "summarize",
+        title: "汇总调查资料",
+        direction: "按调查日期汇总字段",
+        after: ["collect"],
+      },
+    ],
+  };
+  const savedMessages = [
+    {
+      id: 1,
+      role: "tool",
+      tool_name: "get_research_workflow",
+      content: JSON.stringify(path),
+    },
+    {
+      id: 2,
+      role: "tool",
+      tool_name: "todo_list",
+      content: JSON.stringify(plan),
+    },
+    {
+      id: 3,
+      role: "tool",
+      tool_name: "submit_research_compute",
+      content: JSON.stringify({ taskId }),
+    },
+  ];
   let finished = false;
   vi.mocked(requestJson).mockImplementation(async (address, options) => {
     if (address.endsWith("/v1/capabilities"))
@@ -328,22 +376,13 @@ it("opens a versioned research task with the shared data picker and native task 
         status: finished ? "completed" : "running",
         output: "已完成资料检查",
       };
+    if (address.endsWith(`/api/sessions/${session.id}/messages?latest=true`))
+      return { data: savedMessages };
     if (address.endsWith(`/api/sessions/${session.id}/messages`)) {
       return {
         data: [
-          {
-            id: 1,
-            role: "tool",
-            tool_name: "todo_list",
-            content: JSON.stringify(plan),
-          },
-          {
-            id: 2,
-            role: "tool",
-            tool_name: "submit_research_compute",
-            content: JSON.stringify({ taskId }),
-          },
-          { id: 3, role: "assistant", content: "已完成资料检查" },
+          ...savedMessages,
+          { id: 4, role: "assistant", content: "已完成资料检查" },
         ],
       };
     }
@@ -351,14 +390,32 @@ it("opens a versioned research task with the shared data picker and native task 
   });
 
   let complete = () => {};
+  let update = () => {};
   vi.mocked(requestEventStream).mockImplementation(async (_, onEvent) => {
     onEvent("message", {
       seq: 1,
+      event: "tool.completed",
+      tool: "get_research_workflow",
+      preview: '{"versionId":17,"suggestedSteps":[...',
+      error: false,
+    });
+    onEvent("message", {
+      seq: 2,
       event: "tool.completed",
       tool: "todo_list",
       preview: JSON.stringify(plan),
       error: false,
     });
+    update = () =>
+      onEvent("message", {
+        seq: 3,
+        event: "tool.completed",
+        tool: "todo_list",
+        preview: JSON.stringify({
+          revision: 2,
+          todos: plan.todos.map((task) => ({ ...task, status: "completed" })),
+        }),
+      });
     await new Promise<void>((resolve) => {
       complete = resolve;
     });
@@ -396,12 +453,217 @@ it("opens a versioned research task with the shared data picker and native task 
   );
   fireEvent.click(screen.getByRole("button", { name: "加入本次任务" }));
   fireEvent.click(screen.getByRole("button", { name: "发送" }));
-  const tasks = await screen.findByRole("region", { name: "任务清单" });
-  expect(within(tasks).getByText("检查样点字段")).toBeVisible();
+  const progress = screen.getByRole("complementary", { name: "任务进度" });
+  const task = await within(progress).findByRole("button", {
+    name: "核对字段值 待处理",
+  });
+  expect(task).toBeVisible();
+  const main = screen.getByRole("textbox", { name: "输入消息" });
+  expect(progress.getBoundingClientRect().left).toBeGreaterThan(
+    main.getBoundingClientRect().right,
+  );
+  fireEvent.click(task);
+  const inlineDetail = within(progress).getByRole("region", {
+    name: "节点详情",
+  });
+  expect(
+    within(inlineDetail).getByRole("button", { name: "检查样点字段" }),
+  ).toBeVisible();
+  act(update);
+  expect(within(progress).getByText("2 / 2")).toBeVisible();
+  expect(within(inlineDetail).getByText("已完成")).toBeVisible();
+
+  fireEvent.click(within(progress).getByRole("tab", { name: "业务流" }));
+  fireEvent.click(
+    await within(progress).findByRole("button", {
+      name: "汇总调查资料 建议步骤",
+    }),
+  );
+  const workflowDetail = within(progress).getByRole("region", {
+    name: "节点详情",
+  });
+  expect(within(workflowDetail).getByText("按调查日期汇总字段")).toBeVisible();
+  fireEvent.click(
+    within(progress).getByRole("button", { name: "展开任务进度" }),
+  );
+  const drawer = await screen.findByRole("dialog", { name: "任务进度" });
+  const expanded = within(drawer).getByRole("region", { name: "节点详情" });
+  expect(within(expanded).getByText("按调查日期汇总字段")).toBeVisible();
+  fireEvent.click(
+    within(expanded).getByRole("button", { name: "整理调查样点" }),
+  );
+  expect(within(expanded).getByText("确认样点表完整")).toBeVisible();
+  fireEvent.keyDown(drawer, { key: "Escape", code: "Escape", keyCode: 27 });
+  await waitFor(() => expect(drawer).not.toBeVisible());
+  await page.viewport(390, 844);
+  try {
+    expect(within(progress).queryByRole("tab", { name: "业务流" })).toBeNull();
+    fireEvent.click(
+      within(progress).getByRole("button", { name: "展开任务进度" }),
+    );
+    const narrowDrawer = await screen.findByRole("dialog", {
+      name: "任务进度",
+    });
+    expect(within(narrowDrawer).getByText("确认样点表完整")).toBeVisible();
+    fireEvent.keyDown(narrowDrawer, {
+      key: "Escape",
+      code: "Escape",
+      keyCode: 27,
+    });
+    await waitFor(() => expect(narrowDrawer).not.toBeVisible());
+  } finally {
+    await page.viewport(1600, 900);
+  }
   complete();
   expect(
     await screen.findByRole("link", { name: "查看计算任务" }),
   ).toHaveAttribute("href", `/compute?task=${taskId}&projectTagId=1`);
+});
+
+it("answers queued Hermes questions from the composer with native reply payloads", async () => {
+  const prefix = "/api/agent/hermes";
+  const run = "/v1/runs/run_control";
+  const session = {
+    id: "stisp_control",
+    title: "需要补充资料",
+    last_run_id: "run_control",
+  };
+  const prompt = (
+    prompt_id: string,
+    question: string,
+    choices: string[] = [],
+    multi_select = false,
+  ) => ({
+    kind: "clarify",
+    prompt_id,
+    question,
+    choices,
+    multi_select,
+    execution_generation: 4,
+  });
+  const first = prompt("first", "核对哪些资料？", ["岩性图", "断层线"], true);
+  const second = prompt("second", "填写研究区");
+  const third = prompt("third", "补充日期");
+  const post = vi.fn();
+  let replyAttempts = 0;
+  vi.mocked(requestJson).mockImplementation(async (address, options) => {
+    switch (address.slice(prefix.length)) {
+      case "/v1/capabilities":
+        return { session_modes: ["agent"] };
+      case "/api/sessions?mode=agent":
+        return { data: [session] };
+      case run:
+        return {
+          status: "waiting_for_clarify",
+          pending_controls: [first, second],
+        };
+      case `/api/sessions/${session.id}/messages`:
+        return { data: [] };
+      case `${run}/clarify`:
+        post(options?.body);
+        if (++replyAttempts === 1) throw new ApiError("回复发送失败", 503);
+        return { status: "resolved" };
+      case `${run}/approval`:
+        post(options?.body);
+        return { status: "resolved" };
+      default:
+        throw new Error(`Unexpected request ${address}`);
+    }
+  });
+  let emit = (_event: Record<string, unknown>) => {};
+  vi.mocked(requestEventStream).mockImplementation(
+    async (_, onEvent, signal) => {
+      emit = (event) => onEvent("message", event);
+      await new Promise<void>((resolve) =>
+        signal?.addEventListener("abort", () => resolve(), { once: true }),
+      );
+    },
+  );
+  render(
+    <App>
+      <MemoryRouter initialEntries={["/agent/workbench?runtime=hermes"]}>
+        <HermesPage />
+      </MemoryRouter>
+    </App>,
+  );
+  fireEvent.click(await screen.findByRole("button", { name: "需要补充资料" }));
+  const question = await screen.findByRole("region", { name: first.question });
+  const main = screen.getByRole("textbox", { name: "输入消息" });
+  expect(question.getBoundingClientRect().bottom).toBeLessThan(
+    main.getBoundingClientRect().top,
+  );
+  expect(question.closest(".agent-messages")).toBeNull();
+  expect(within(question).getByRole("button", { name: "发送" })).toBeDisabled();
+  fireEvent.click(within(question).getByRole("button", { name: "岩性图" }));
+  fireEvent.click(within(question).getByRole("button", { name: "断层线" }));
+  fireEvent.click(within(question).getByRole("button", { name: "岩性图" }));
+  fireEvent.click(within(question).getByRole("button", { name: "收起问题" }));
+  fireEvent.click(screen.getByRole("button", { name: "查看待答问题 (2)" }));
+  const opened = within(screen.getByRole("region", { name: first.question }));
+  expect(opened.getByRole("button", { name: "断层线" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  expect(post).not.toHaveBeenCalled();
+  fireEvent.click(opened.getByRole("button", { name: "发送" }));
+  expect(await opened.findByText("回复发送失败")).toBeVisible();
+  await waitFor(() =>
+    expect(opened.getByRole("button", { name: "发送" })).toBeEnabled(),
+  );
+  fireEvent.click(opened.getByRole("button", { name: "发送" }));
+  expect(post).toHaveBeenLastCalledWith({
+    request_id: "first",
+    execution_generation: 4,
+    answer: '["断层线"]',
+  });
+  const next = await screen.findByRole("region", { name: second.question });
+  act(() => {
+    emit({ seq: 1, event: "clarify.request", ...third });
+    emit({
+      seq: 2,
+      event: "clarify.settled",
+      prompt_id: "first",
+      execution_generation: 4,
+    });
+    emit({
+      seq: 3,
+      event: "approval.request",
+      prompt_id: "fourth",
+      execution_generation: 4,
+      description: "登记计算成果",
+      choices: ["once", "deny", "always"],
+    });
+  });
+  fireEvent.change(
+    within(next).getByRole("textbox", { name: "自行填写回复" }),
+    { target: { value: "都兰" } },
+  );
+  fireEvent.click(within(next).getByRole("button", { name: "发送" }));
+  expect(post).toHaveBeenLastCalledWith({
+    request_id: "second",
+    execution_generation: 4,
+    answer: "都兰",
+  });
+  const last = await screen.findByRole("region", { name: third.question });
+  fireEvent.click(within(last).getByRole("button", { name: "跳过" }));
+  expect(post).toHaveBeenLastCalledWith({
+    request_id: "third",
+    execution_generation: 4,
+    answer: "",
+  });
+  const approval = await screen.findByRole("region", { name: "登记计算成果" });
+  expect(within(approval).queryByRole("textbox")).toBeNull();
+  const deny = within(approval).getByRole("button", { name: "拒绝" });
+  fireEvent.click(deny);
+  fireEvent.click(within(approval).getByRole("button", { name: "批准一次" }));
+  expect(deny).toHaveAttribute("aria-pressed", "false");
+  fireEvent.click(within(approval).getByRole("button", { name: "确认" }));
+  expect(post).toHaveBeenLastCalledWith({
+    request_id: "fourth",
+    execution_generation: 4,
+    choice: "once",
+  });
+  await waitFor(() => expect(approval).not.toBeInTheDocument());
 });
 
 it("opens saved history and unlocks the composer after a previous run expires", async () => {
