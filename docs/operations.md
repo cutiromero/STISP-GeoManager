@@ -263,6 +263,8 @@ Watchtower 只会根据容器当前的 image tag 拉取容器镜像，不会在�
 
 ### 浏览器内容安全策略与 Mapbox GL JS
 
+API 路径由 Django 单独处理。框架生成的 HTML 错误页在应用出口转换为 JSON，并保留实际状态码及允许方法等响应头。API 意外产生 HTML 成功页时返回 500，并以 `X-Request-Id` 关联应用日志。排查公网异常时，对照同一路径的直连响应和公网响应，并核对浏览器记录中的原请求地址、最终地址及请求编号。
+
 平台对 Django 返回的 HTML 强制发送 `Content-Security-Policy` 和 `Permissions-Policy`，前端入口 HTML 也包含同等 CSP 兜底。策略禁止页面加载音视频、对象插件、外域脚本和外域框架，并禁用自动播放及画中画，以阻断数据导入页等功能页面上由被污染入口或代理注入的媒体浮层。
 
 当前前端使用依赖包中的 ESM 版 `mapbox-gl`，并已禁用 Mapbox events 采集。完整策略为：

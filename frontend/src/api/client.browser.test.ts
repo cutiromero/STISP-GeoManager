@@ -8,6 +8,7 @@ import {
   unregisterForbiddenHandler,
 } from "./client";
 import { setLocale } from "../i18n";
+import { RESPONSE_DIAGNOSTICS_KEY } from "./responseDiagnostics";
 import { setActiveProject, resetProjectSession } from "../projects/session";
 import {
   browserSessionStorageKey,
@@ -689,6 +690,28 @@ describe("api client", () => {
         bands: [1],
       },
     });
+  });
+
+  it("identifies the original API and final page when the SDK receives redirected HTML", async () => {
+    sessionStorage.removeItem(RESPONSE_DIAGNOSTICS_KEY);
+    const page = new Response("<html>application entry</html>", {
+      headers: { "Content-Type": "text/html" },
+    });
+    Object.defineProperties(page, {
+      url: { value: new URL("/map", location.origin).href },
+      redirected: { value: true },
+    });
+    fetchMock.mockResolvedValueOnce(page);
+
+    await expect(api.adminProfile()).rejects.toMatchObject({
+      issue: "unexpected_content_type",
+    });
+    const records = JSON.parse(sessionStorage.getItem(RESPONSE_DIAGNOSTICS_KEY)!);
+    const diagnostic = records.at(-1);
+    expect(new URL(diagnostic.requestedUrl).pathname).toBe("/api/admin/profile/");
+    expect(new URL(diagnostic.finalUrl).pathname).toBe("/map");
+    expect(diagnostic.redirected).toBe(true);
+    expect(fetchMock).toHaveBeenCalledOnce();
   });
 
   it("recovers a raster job status read after an HTML reply in the same project", async () => {

@@ -340,7 +340,16 @@ async function unwrap<T>(request: Promise<HeyApiResponse>): Promise<T> {
       throw error;
     }
     const status = response?.status ?? 0;
-    notifyAuthorizationFailure(status, response?.url);
+    const url = response ? responseRequestUrl(response) : undefined;
+    notifyAuthorizationFailure(status, url);
+    if (response && url) {
+      recordResponseDiagnostic(
+        url,
+        response,
+        error,
+        response.ok ? "invalid_json" : `http:${status}`,
+      );
+    }
     throw new ApiError(errorMessage(error, status), status, error, response);
   }
   if (response) {

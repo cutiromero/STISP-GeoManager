@@ -81,6 +81,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    "apps.core.middleware.ApiResponseMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "apps.core.middleware.FrontendSecurityHeadersMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",

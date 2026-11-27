@@ -17,7 +17,7 @@ export function responseRequestMethod(response: Response) {
   return responseMethods.get(response) ?? "GET";
 }
 export function responseRequestUrl(response: Response) {
-  return response.url || responseUrls.get(response) || window.location.href;
+  return responseUrls.get(response) || response.url || window.location.href;
 }
 
 export function requestScope() {

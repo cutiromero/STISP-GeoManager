@@ -7,13 +7,13 @@ from unittest.mock import Mock, patch
 import json
 
 from django.conf import settings
-from django.http import Http404, JsonResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from django.test import RequestFactory, override_settings
 import pytest
 
 from apps.core import client_build, frontend_assets as assets
 from apps.core.browser_sessions import SESSION_KEY
-from apps.core.middleware import ApiContextMiddleware
+from apps.core.middleware import ApiContextMiddleware, ApiResponseMiddleware
 
 
 @pytest.fixture
@@ -151,7 +151,7 @@ def test_identity_fence_stops_view_before_wrong_account_access(expected, status,
     with patch(
         "apps.core.middleware.current_entry", return_value="/static/assets/new.js"
     ):
-        response = ApiContextMiddleware(view)(request)
+        response = ApiResponseMiddleware(ApiContextMiddleware(view))(request)
     assert response.status_code == status
     assert view.call_count == calls
     assert response["X-STISP-Session"] == "a" * 32
@@ -171,6 +171,74 @@ def test_optional_fence_does_not_authenticate_anonymous_or_override_cache():
     view.return_value = JsonResponse({"detail": "public tile"})
     view.return_value["Cache-Control"] = "public, max-age=60"
     assert ApiContextMiddleware(view)(request)["Cache-Control"] == "public, max-age=60"
+
+
+@pytest.mark.parametrize(
+    "method,path,expected",
+    [
+        ("get", "/api", 404),
+        ("get", "/api/", 404),
+        ("get", "/api/no-such-route/", 404),
+        ("get", "/api/raster/render/async/", 405),
+        ("post", "/api/health/", 405),
+    ],
+)
+def test_public_api_framework_errors_are_json(client, method, path, expected):
+    response = getattr(client, method)(path)
+    assert response.status_code == expected
+    assert response["Content-Type"] == "application/json"
+    assert response.json()["detail"]
+    assert len(response["X-Request-Id"]) == 24
+    assert "no-store" in response["Cache-Control"]
+    if expected == 405:
+        assert response["Allow"]
+
+
+@pytest.mark.parametrize("status,expected", [(200, 500), (500, 500), (503, 503)])
+def test_api_html_failure_is_correlated_and_does_not_expose_content(
+    status, expected, caplog
+):
+    request = RequestFactory().get("/api/example/")
+    html = HttpResponse(
+        "<html>underlying error text</html>",
+        status=status,
+        headers={"Retry-After": "3"},
+    )
+    response = ApiResponseMiddleware(lambda request: html)(request)
+    assert response.status_code == expected
+    assert response["Content-Type"] == "application/json"
+    assert response["Retry-After"] == "3"
+    assert b"underlying error text" not in response.content
+    assert response["X-Request-Id"] in caplog.text
+    if status == 200:
+        assert json.loads(response.content)["code"] == "api_unexpected_response"
+
+
+@pytest.mark.parametrize(
+    "path,status,media_type,disposition",
+    [
+        ("/map", 200, "text/html", ""),
+        ("/api/raster/tiles/1/example/1/1/1.png", 200, "image/png", ""),
+        ("/api/agent/stream/", 200, "text/event-stream", ""),
+        (
+            "/api/agent/report/download/",
+            200,
+            "text/html",
+            'attachment; filename="report.html"',
+        ),
+        ("/api/raster/tiles/1/example/0/0/0.png", 204, "text/html", ""),
+        ("/api/health/", 304, "text/html", ""),
+    ],
+)
+def test_response_boundary_preserves_navigation_and_non_json_api_deliveries(
+    path, status, media_type, disposition
+):
+    request = RequestFactory().get(path)
+    original = HttpResponse(status=status, content_type=media_type)
+    if disposition:
+        original["Content-Disposition"] = disposition
+    assert ApiResponseMiddleware(lambda request: original)(request) is original
+    assert ("X-Request-Id" in original) == path.startswith("/api/")
 
 
 def test_current_static_wins_and_missing_assets_fall_back_to_history(history, tmp_path):
