@@ -117,6 +117,33 @@ def historical_references(resource, *, include_original=False):
     return inputs, imports, workflows
 
 
+def saved_map_snapshots(project_id):
+    """The persisted display configurations that can keep a result in use."""
+    for model, fields in (
+        (WorkspaceScene, ("snapshot",)),
+        (MapComposition, ("source_workspace_snapshot",)),
+        (MapCompositionVersion, ("workspace_snapshot", "resource_manifest")),
+    ):
+        rows = model._base_manager.filter(project_tag_id=project_id).values(*fields)
+        for row in rows.iterator():
+            yield from row.items()
+
+
+def saved_map_uses_resource(snapshots, resource_id, layer_ids, raster_ids):
+    return any(
+        _contains_reference(value, resource_id, layer_ids, raster_ids)
+        or (
+            field == "resource_manifest"
+            and isinstance(value, list)
+            and any(
+                isinstance(item, dict) and item.get("id") == resource_id
+                for item in value
+            )
+        )
+        for field, value in snapshots
+    )
+
+
 def resource_reference_reasons(
     resource, *, allow_history=False, include_original=False
 ) -> list[str]:
@@ -154,32 +181,10 @@ def resource_reference_reasons(
     def contains(value):
         return _contains_reference(value, resource.id, layer_ids, raster_ids)
 
-    snapshots = (
-        (WorkspaceScene.objects.filter(project_tag_id=project_id), ("snapshot",)),
-        (
-            MapComposition.objects.filter(project_tag_id=project_id),
-            ("source_workspace_snapshot",),
-        ),
-        (
-            MapCompositionVersion.objects.filter(project_tag_id=project_id),
-            ("workspace_snapshot", "resource_manifest"),
-        ),
-    )
-    for queryset, fields in snapshots:
-        if any(
-            contains(value)
-            or (
-                field == "resource_manifest"
-                and any(
-                    isinstance(item, dict) and item.get("id") == resource.id
-                    for item in value or []
-                )
-            )
-            for row in queryset.values(*fields).iterator()
-            for field, value in row.items()
-        ):
-            reasons.append("已保存的工程或专题图引用该数据")
-            break
+    if saved_map_uses_resource(
+        saved_map_snapshots(project_id), resource.id, layer_ids, raster_ids
+    ):
+        reasons.append("已保存的工程或专题图引用该数据")
     workflows = AgentWorkflow.objects.filter(project_tag_id=project_id)
     if removable:
         workflows = workflows.exclude(status__in=WORKFLOW_TERMINAL)

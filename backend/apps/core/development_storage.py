@@ -6,7 +6,6 @@ import json
 from pathlib import Path
 import sqlite3
 
-from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
@@ -23,6 +22,10 @@ from apps.catalog.models import (
     MapLayer,
     ResultArtifact,
     WorkspaceScene,
+)
+from apps.catalog.resource_references import (
+    saved_map_snapshots,
+    saved_map_uses_resource,
 )
 from apps.catalog.resource_storage_delete import ResourceStorageDeletion
 from apps.compute.models import ComputeImport, ComputeInput, ComputeOutput, ComputeTask
@@ -138,9 +141,14 @@ def _strip_references(value, resources, layers, rasters, *, container=""):
         result = []
         for item in value:
             if isinstance(item, dict):
-                if any(
-                    included(item.get(key), resources)
-                    for key in ("resourceId", "dataResourceId", "data_resource_id")
+                source = item.get("sourceResource")
+                if (
+                    isinstance(source, dict)
+                    and included(source.get("id"), resources)
+                    or any(
+                        included(item.get(key), resources)
+                        for key in ("resourceId", "dataResourceId", "data_resource_id")
+                    )
                 ):
                     continue
                 if any(
@@ -218,6 +226,42 @@ def _detach_project(project_id, ids, layers, rasters, receipt):
             row.save(update_fields=("resource_ids", "execution_state"))
 
 
+def _display_dependencies(project_id, resources):
+    from apps.ecology.models import RemoteSensingProduct
+    from apps.raster.models import RasterDataset
+
+    ids = {resource.pk for resource in resources}
+    layers, rasters = defaultdict(set), defaultdict(set)
+    for table, mapping in ((MapLayer, layers), (RasterDataset, rasters)):
+        for resource_id, pk in table._base_manager.filter(
+            data_resource_id__in=ids
+        ).values_list("data_resource_id", "pk"):
+            mapping[resource_id].add(pk)
+
+    kept = set(
+        ResultArtifact._base_manager.filter(
+            project_tag_id=project_id, related_resources__in=ids
+        ).values_list("related_resources", flat=True)
+    )
+    for resource_id, metadata in RemoteSensingProduct._base_manager.filter(
+        project_tag_id=project_id
+    ).values_list("data_resource_id", "metadata"):
+        kept.add(resource_id)
+        if isinstance(metadata, dict):
+            kept.update(
+                (metadata.get("monitoring") or {}).get("sourceResourceIds") or []
+            )
+    snapshots = tuple(saved_map_snapshots(project_id))
+    kept.update(
+        identity
+        for identity in ids - kept
+        if saved_map_uses_resource(
+            snapshots, identity, layers[identity], rasters[identity]
+        )
+    )
+    return kept & ids
+
+
 def clean_generated_data(protected_files=()):
     """应在停止 web/worker 后调用；不删除用户输入、算法版本、账户或知识。"""
     assert_idle()
@@ -235,12 +279,18 @@ def clean_generated_data(protected_files=()):
     result = {
         "rawResourcesKept": len(before["resources"]),
         "generatedResourcesDeleted": [],
+        "referencedGeneratedResourcesKept": [],
         "sharedOriginalFilesKept": [],
         "dataFilesDeleted": 0,
     }
     for project_id, resources in grouped.items():
-        ids = {row.pk for row in resources}
         with project_scope(ProjectScope((project_id,), project_id, superadmin=True)):
+            kept = _display_dependencies(project_id, resources)
+            result["referencedGeneratedResourcesKept"].extend(sorted(kept))
+            resources = [row for row in resources if row.pk not in kept]
+            if not resources:
+                continue
+            ids = {row.pk for row in resources}
             layers = set(
                 MapLayer._base_manager.filter(data_resource_id__in=ids).values_list(
                     "id", flat=True
@@ -313,7 +363,10 @@ def clean_generated_data(protected_files=()):
         action={}, input_refs={}, output_refs={}, metrics={}
     )
     AgentCheckpoint.objects.all().update(state={})
-    ComputeOutput.objects.all().update(expired=True)
+    retained_outputs = ComputeImport.objects.filter(
+        resource_id__in=result["referencedGeneratedResourcesKept"]
+    ).values("output_id")
+    ComputeOutput.objects.exclude(pk__in=retained_outputs).update(expired=True)
     after = original_state()
     if before != after:
         raise RuntimeError("原生数据资源或原始表校验不一致；禁止继续清理工作目录")

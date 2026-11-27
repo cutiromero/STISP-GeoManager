@@ -17,6 +17,7 @@ import { createVectorLayerGroup } from "../utils/layerFactory";
 import type { AppNotification } from "./workspaceNotifications";
 import { showGeojsonWarnings } from "./workspaceNotifications";
 import { isLoadedVectorLayer } from "./workspaceSnapshot";
+import { isAbortError } from "../utils/rasterRenderTasks";
 
 export interface WorkspaceRestoreProgress {
   percent: number;
@@ -43,6 +44,7 @@ interface RestoreWorkspaceGroupsOptions {
   queryResultLimit: number;
   notification: AppNotification;
   onProgress?: (state: WorkspaceRestoreProgress) => void;
+  checkScope?: () => void;
 }
 
 export async function restoreWorkspaceGroups({
@@ -53,6 +55,7 @@ export async function restoreWorkspaceGroups({
   queryResultLimit,
   notification,
   onProgress,
+  checkScope = () => {},
 }: RestoreWorkspaceGroupsOptions): Promise<WorkspaceRestoreResult> {
   if (!Array.isArray(savedGroups)) {
     return { groups: [], issues: [] };
@@ -63,6 +66,7 @@ export async function restoreWorkspaceGroups({
   );
   let processedLayers = 0;
   const updateRestoreProgress = (detail: string) => {
+    checkScope();
     if (!onProgress) {
       return;
     }
@@ -79,14 +83,9 @@ export async function restoreWorkspaceGroups({
     const restoredChildren: LoadedLayer[] = [];
     for (const savedLayer of savedGroup.children ?? []) {
       updateRestoreProgress(`正在恢复图层：${savedLayer.name}`);
-      if (isLoadedVectorLayer(savedLayer)) {
-        restoredChildren.push(savedLayer);
-        processedLayers += 1;
-        updateRestoreProgress(`已恢复图层：${savedLayer.name}`);
-        continue;
-      }
       if (savedLayer.layerType === "vector") {
-        if (!savedLayer.query) {
+        const embedded = isLoadedVectorLayer(savedLayer);
+        if (!savedLayer.query && !embedded) {
           issues.push({
             layerName: savedLayer.name,
             resourceName: savedLayer.sourceResource.name,
@@ -110,10 +109,16 @@ export async function restoreWorkspaceGroups({
         }
         try {
           const profile = await api.resourceProfile(savedLayer.sourceResource);
+          checkScope();
           const resource = profile.resource ?? savedLayer.sourceResource;
-          const unfiltered =
-            !savedLayer.query.attributeFilters.length &&
-            !savedLayer.query.spatialFilter;
+          if (embedded && !savedLayer.query) {
+            restoredChildren.push({ ...savedLayer, sourceResource: resource });
+            processedLayers += 1;
+            updateRestoreProgress(`已恢复图层：${savedLayer.name}`);
+            continue;
+          }
+          const query = savedLayer.query!;
+          const unfiltered = !query.attributeFilters.length && !query.spatialFilter;
           const deferred =
             unfiltered &&
             isLargeVectorResource({
@@ -125,17 +130,18 @@ export async function restoreWorkspaceGroups({
             tiled || deferred
               ? tilePreviewResult(resource, profile)
               : await api.queryResource(resource, {
-                  attributeFilters: savedLayer.query.attributeFilters,
-                  spatialFilter: savedLayer.query.spatialFilter,
+                  attributeFilters: query.attributeFilters,
+                  spatialFilter: query.spatialFilter,
                   limit: queryResultLimit,
                   displayGeometry: true,
                 });
+          checkScope();
           showGeojsonWarnings(notification, result.warnings);
           const queryGroup = createVectorLayerGroup(
             resource,
             profile,
             result,
-            savedLayer.query,
+            query,
           );
           const restoredVectorLayer = queryGroup.children[0];
           if (restoredVectorLayer?.layerType === "vector") {
@@ -163,11 +169,12 @@ export async function restoreWorkspaceGroups({
             });
           }
         } catch (error) {
+          if (isAbortError(error)) throw error;
           issues.push({
             layerName: savedLayer.name,
             resourceName: savedLayer.sourceResource.name,
-            reason:
-              error instanceof Error ? error.message : "原始矢量数据不可用",
+            reason: sourceUnavailable(error) ??
+              (error instanceof Error ? error.message : "原始矢量数据不可用"),
             action: "skipped",
           });
         }
@@ -190,8 +197,11 @@ export async function restoreWorkspaceGroups({
       let currentRaster:
         | Awaited<ReturnType<typeof api.resourceProfile>>["raster"]
         | undefined;
+      let currentResource = savedLayer.sourceResource;
       try {
         const profile = await api.resourceProfile(savedLayer.sourceResource);
+        checkScope();
+        currentResource = profile.resource ?? currentResource;
         currentRaster = profile.raster ?? undefined;
         rasterKind =
           (savedLayer.symbolization as LoadedRasterLayer["symbolization"])
@@ -205,23 +215,15 @@ export async function restoreWorkspaceGroups({
             reason: "原始栅格数据未就绪或已不可用",
             action: "restored-with-warning",
           });
-        } else if (
-          savedLayer.rasterDatasetId &&
-          profile.raster.id !== savedLayer.rasterDatasetId
-        ) {
-          issues.push({
-            layerName: savedLayer.name,
-            resourceName: savedLayer.sourceResource.name,
-            reason: "原始栅格数据已变更，已使用快照中的瓦片引用恢复",
-            action: "restored-with-warning",
-          });
         }
       } catch (error) {
-        if (isForbiddenError(error)) {
+        if (isAbortError(error)) throw error;
+        const unavailable = sourceUnavailable(error);
+        if (unavailable) {
           issues.push({
             layerName: savedLayer.name,
             resourceName: savedLayer.sourceResource.name,
-            reason: "当前账号无权访问原始栅格数据，请联系管理员申请权限",
+            reason: unavailable,
             action: "skipped",
           });
           processedLayers += 1;
@@ -243,8 +245,9 @@ export async function restoreWorkspaceGroups({
       // Renderer version alone does not prove that the persisted style still
       // matches its source or that a static pyramid survived cache cleanup.
       const refreshSnapshotTiles =
-        !savedLayer.tileUrl ||
-        !usesCurrentRasterRenderer(savedLayer.tileUrl) ||
+        !currentRaster ||
+        currentRaster.id !== savedLayer.rasterDatasetId ||
+        !usesCurrentRasterRenderer(savedLayer.tileUrl, currentRaster?.id) ||
         rasterKind === "categorical" ||
         Boolean(savedStyleHash);
       let refreshedRender: RasterRenderResult | undefined;
@@ -255,17 +258,20 @@ export async function restoreWorkspaceGroups({
       if (refreshSnapshotTiles && currentRaster) {
         updateRestoreProgress(`正在准备栅格显示：${savedLayer.name}`);
         try {
-          refreshedRender = await renderSnapshotRaster(
+          const result = await renderSnapshotRaster(
             currentRaster.id,
             currentRaster.mapLayerId,
             savedLayer.symbolization as LoadedRasterLayer["symbolization"],
             savedLayer.rasterRulesMode ?? "custom",
             savedStyleHash,
+            checkScope,
           );
-          if (!usesCurrentRasterRenderer(refreshedRender.tileUrl)) {
-            throw new Error("栅格服务返回了旧版瓦片地址");
+          if (result.datasetId !== currentRaster.id || !usesCurrentRasterRenderer(result.tileUrl, currentRaster.id)) {
+            throw new Error("栅格服务返回了不匹配的瓦片地址");
           }
+          refreshedRender = result;
         } catch (error) {
+          if (isAbortError(error)) throw error;
           refreshError =
             error instanceof Error ? error.message : "栅格显示准备失败";
           issues.push({
@@ -289,7 +295,7 @@ export async function restoreWorkspaceGroups({
         id: savedLayer.id,
         name: savedLayer.name,
         layerType: "raster",
-        sourceResource: savedLayer.sourceResource as DataResource,
+        sourceResource: currentResource as DataResource,
         tileUrl: refreshSnapshotTiles
           ? refreshedRender?.tileUrl
           : savedLayer.tileUrl,
@@ -357,7 +363,8 @@ async function renderSnapshotRaster(
   layerId: number | null,
   symbolization: LoadedRasterLayer["symbolization"],
   rulesMode: "default" | "custom",
-  styleHash?: string,
+  styleHash: string | undefined,
+  checkScope: () => void,
 ): Promise<RasterRenderResult> {
   const rules = symbolization as unknown as Record<string, unknown>;
   let job: Awaited<ReturnType<typeof api.renderRasterAsync>>;
@@ -369,6 +376,7 @@ async function renderSnapshotRaster(
     );
   } catch (error) {
     if (!styleHash || !isStatusError(error, 404)) throw error;
+    checkScope();
     // Very old snapshots may no longer have a registered style. Recreating
     // client rules still passes the backend custom-symbolization permission.
     job = await api.renderRasterAsync({ datasetId, layerId, rules, rulesMode });
@@ -379,8 +387,10 @@ async function renderSnapshotRaster(
       throw new Error("栅格显示准备等待超时");
     }
     await new Promise((resolve) => globalThis.setTimeout(resolve, 900));
+    checkScope();
     job = await api.rasterJob(job.id);
   }
+  checkScope();
   if (
     job.status === "ready" &&
     job.result &&
@@ -392,12 +402,11 @@ async function renderSnapshotRaster(
   throw new Error(job.error || "栅格显示准备失败");
 }
 
-function usesCurrentRasterRenderer(tileUrl: string | undefined) {
-  if (!tileUrl) {
-    return false;
-  }
-  return new RegExp(`(?:[?&])rv=${rasterTileRendererVersion}(?:[&#]|$)`).test(
-    tileUrl,
+function usesCurrentRasterRenderer(tileUrl: string | undefined, datasetId: number | undefined) {
+  return Boolean(
+    datasetId &&
+    tileUrl?.startsWith(`/api/raster/tiles/${datasetId}/`) &&
+    new RegExp(`(?:[?&])rv=${rasterTileRendererVersion}(?:[&#]|$)`).test(tileUrl)
   );
 }
 
@@ -407,8 +416,12 @@ function savedRasterStyleHash(tileUrl: string | undefined, datasetId: number) {
   )?.[1];
 }
 
-function isForbiddenError(error: unknown) {
-  return isStatusError(error, 403);
+function sourceUnavailable(error: unknown) {
+  if (isStatusError(error, 401)) return "登录已失效，请重新登录";
+  if (isStatusError(error, 403)) return "当前账号无权访问此数据，请联系管理员申请权限";
+  if (isStatusError(error, 404) || isStatusError(error, 410))
+    return "工程引用的资源已失效或已删除";
+  return undefined;
 }
 
 function isStatusError(error: unknown, status: number) {

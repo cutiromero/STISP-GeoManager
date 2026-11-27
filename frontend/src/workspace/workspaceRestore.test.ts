@@ -611,6 +611,70 @@ describe("restoreWorkspaceGroups", () => {
     ]);
   });
 
+  it("skips deleted legacy vectors and rasters before using saved geometry or tiles", async () => {
+    mockApi.resourceProfile.mockRejectedValue(
+      Object.assign(new Error("Not found"), { status: 404 }),
+    );
+    const result = await restoreWorkspaceGroups({
+      savedGroups: [makeGroup([
+        {
+          ...makeSavedVectorLayer({ query: undefined }),
+          geojson: { type: "FeatureCollection", features: [] },
+        },
+        makeSavedRasterLayer({ tileUrl: "/api/raster/tiles/7/old/{z}/{x}/{y}.png?rv=4" }),
+      ])],
+      canQueryData: true,
+      canLoadVectorLayer: true,
+      canLoadRasterLayer: true,
+      queryResultLimit: 30000,
+      notification,
+    });
+    expect(result.groups).toEqual([]);
+    expect(result.issues).toHaveLength(2);
+    for (const issue of result.issues) {
+      expect(issue).toMatchObject({ action: "skipped", reason: "工程引用的资源已失效或已删除" });
+    }
+    expect(mockApi.resourceProfile).toHaveBeenCalledTimes(2);
+    expect(mockApi.renderRasterAsync).not.toHaveBeenCalled();
+  });
+
+  it.each([true, false])("refreshes replaced imagery and rejects stale tile receipts (%s)", async (valid) => {
+    const symbolization = cloneDefaultRasterSymbolization();
+    const tile = "/api/raster/tiles/8/new/{z}/{x}/{y}.png?rv=4";
+    mockApi.resourceProfile.mockResolvedValue({
+      raster: { id: 8, mapLayerId: 10, rasterKind: "imagery" },
+    });
+    mockApi.renderRasterAsync.mockResolvedValue({
+      status: "ready",
+      result: {
+        datasetId: valid ? 8 : 7,
+        tileUrl: tile,
+        rules: symbolization,
+      },
+    });
+    const result = await restoreWorkspaceGroups({
+      savedGroups: [makeGroup([
+        makeSavedRasterLayer({
+          tileUrl: "/api/raster/tiles/7/old/{z}/{x}/{y}.png?rv=4",
+          rasterKind: "imagery",
+          symbolization,
+        }),
+      ])],
+      canQueryData: true,
+      canLoadVectorLayer: true,
+      canLoadRasterLayer: true,
+      queryResultLimit: 30000,
+      notification,
+    });
+    expect(mockApi.renderRasterAsync).toHaveBeenCalledOnce();
+    expect(mockApi.renderRasterAsync.mock.calls[0][0]).toMatchObject({ datasetId: 8, layerId: 10 });
+    expect(result.groups[0].children[0]).toMatchObject({
+      rasterDatasetId: 8,
+      tileUrl: valid ? tile : undefined,
+      renderStatus: valid ? "ready" : "failed",
+    });
+  });
+
   it("restores manually created empty groups", async () => {
     const result = await restoreWorkspaceGroups({
       savedGroups: [{ ...makeGroup([]), isManual: true }],

@@ -4,6 +4,8 @@ import type { Map as MapboxMap } from "mapbox-gl";
 import type { RefObject } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
+import { requestScope } from "../projects/session";
+import { isAbortError } from "../utils/rasterRenderTasks";
 import type {
   LoadedLayerGroup,
   MapViewState,
@@ -69,7 +71,9 @@ export function useWorkspaceScenes({
   const requestSequence = useRef(0);
   const inFlight = useRef<Promise<WorkspaceSceneSummary[]> | null>(null);
   const lastRefresh = useRef(0);
-  const sceneLoads = useRef(new Map<number, Promise<void>>());
+  const sceneLoad = useRef<{ id: number; check: () => void; pending: Promise<void> } | null>(null);
+  const sceneLoadSequence = useRef(0);
+  useEffect(() => () => { ++sceneLoadSequence.current; }, []);
   const [isRestoringWorkspace, setIsRestoringWorkspace] = useState(false);
   const loadWorkspaceScenes = useCallback(
     async (query?: { q?: string; offset?: number }) => {
@@ -242,20 +246,33 @@ export function useWorkspaceScenes({
   const loadWorkspaceScene = useCallback(
     async (scene: WorkspaceSceneSummary | number, animate = true) => {
       const sceneId = typeof scene === "number" ? scene : scene.id;
-      const existing = sceneLoads.current.get(sceneId);
-      if (existing) return existing;
+      const existing = sceneLoad.current;
+      if (existing?.id === sceneId) {
+        try {
+          existing.check();
+          return existing.pending;
+        } catch (error) {
+          if (!isAbortError(error)) throw error;
+        }
+      }
+      const sequence = ++sceneLoadSequence.current;
+      const scope = requestScope();
+      const check = () => {
+        scope();
+        if (sequence !== sceneLoadSequence.current)
+          throw new DOMException("工程加载已切换", "AbortError");
+      };
+      const notificationKey = `workspace-load-${sceneId}-${sequence}`;
       const load = async () => {
-        const notificationKey = `workspace-load-${sceneId}`;
         const detail =
           typeof scene === "number"
             ? await api.workspace(scene)
             : "snapshot" in scene
               ? (scene as WorkspaceScene)
               : await api.workspace(scene.id);
+        check();
         const label = detail.kind === "project" ? "工程" : "专题";
         const snapshot = detail.snapshot as WorkspaceSceneSnapshot;
-        if (mapRef.current)
-          await restoreMapBasemap(mapRef.current, snapshot.basemapId);
         if (!Array.isArray(snapshot.groups)) {
           message.warning("该工作区快照不包含可恢复的图层");
           return;
@@ -274,6 +291,7 @@ export function useWorkspaceScenes({
           canLoadRasterLayer,
           queryResultLimit,
           notification,
+          checkScope: check,
           onProgress: (state) => {
             openWorkspaceProgressNotification(notification, {
               key: notificationKey,
@@ -284,8 +302,10 @@ export function useWorkspaceScenes({
             });
           },
         });
+        check();
         const restoredGroups = uniqueLoadedLayerGroups(restoreResult.groups);
-        if (restoredGroups.length === 0) {
+        const restoredLayers = restoredGroups.flatMap((group) => group.children);
+        if (!restoredGroups.length || (!restoredLayers.length && restoreResult.issues.length > 0)) {
           showWorkspaceRestoreEmptyResult(notification, {
             key: notificationKey,
             label,
@@ -304,6 +324,8 @@ export function useWorkspaceScenes({
           detail: "正在应用图层和地图视图",
         });
         const map = mapRef.current;
+        if (map) await restoreMapBasemap(map, snapshot.basemapId);
+        check();
         if (snapshot.mapView && map) {
           const view = {
             center: snapshot.mapView.center,
@@ -318,9 +340,6 @@ export function useWorkspaceScenes({
           }
         }
         replaceGroups(restoredGroups);
-        const restoredLayers = restoredGroups.flatMap(
-          (group) => group.children,
-        );
         setSelectedLayerId(
           restoredLayers.some((layer) => layer.id === snapshot.selectedLayerId)
             ? (snapshot.selectedLayerId ?? null)
@@ -337,13 +356,18 @@ export function useWorkspaceScenes({
         showWorkspaceRestoreIssues(notification, restoreResult.issues);
       };
       setIsRestoringWorkspace(true);
-      const pending = load();
-      sceneLoads.current.set(sceneId, pending);
+      const pending = load().catch((error: unknown) => {
+        notification.destroy(notificationKey);
+        if (!isAbortError(error)) throw error;
+      });
+      sceneLoad.current = { id: sceneId, check, pending };
       try {
         await pending;
       } finally {
-        sceneLoads.current.delete(sceneId);
-        setIsRestoringWorkspace(sceneLoads.current.size > 0);
+        if (sceneLoad.current?.pending === pending) {
+          sceneLoad.current = null;
+          setIsRestoringWorkspace(false);
+        }
       }
     },
     [

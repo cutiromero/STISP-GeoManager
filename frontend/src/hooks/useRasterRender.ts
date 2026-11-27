@@ -22,6 +22,7 @@ export function rasterLayerWithRenderResult(
   current: LoadedRasterLayer,
   result: RasterRenderResult,
   opacity = current.symbolization.opacity,
+  rulesMode = current.rasterRulesMode,
 ): LoadedRasterLayer {
   return {
     ...current,
@@ -34,6 +35,7 @@ export function rasterLayerWithRenderResult(
     renderStatus: "ready",
     renderRequestedMode: undefined,
     renderProgress: 100,
+    rasterRulesMode: rulesMode,
     symbolization: {
       ...rasterSymbolizationFromRules(result.rules),
       opacity,
@@ -82,9 +84,10 @@ export function useRasterRender(
       layerId: string,
       result: RasterRenderResult,
       opacity: number,
+      rulesMode: "default" | "custom",
     ) => {
       updateLayer(groupId, layerId, (current) =>
-        rasterLayerWithRenderResult(current, result, opacity),
+        rasterLayerWithRenderResult(current, result, opacity, rulesMode),
       );
     },
     [updateLayer],
@@ -177,7 +180,7 @@ export function useRasterRender(
         "default",
         onProgress,
       );
-      return rasterLayerWithRenderResult(layer, result);
+      return rasterLayerWithRenderResult(layer, result, layer.symbolization.opacity, "default");
     },
     [runRasterRender],
   );
@@ -226,7 +229,7 @@ export function useRasterRender(
             }));
           },
         );
-        applyResult(groupId, layerId, result, symbolization.opacity);
+        applyResult(groupId, layerId, result, symbolization.opacity, rulesMode);
         if (completionMessage) {
           message.success(completionMessage);
         }

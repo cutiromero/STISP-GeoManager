@@ -8,7 +8,7 @@ from django.contrib.auth import get_user_model
 from django.test import TransactionTestCase, override_settings
 
 from apps.agent.models import AgentWorkflow, AgentWorkflowStep
-from apps.catalog.models import DataResource
+from apps.catalog.models import DataResource, WorkspaceScene
 from apps.core.development_storage import clean_generated_data, original_state
 from apps.core.storage import table_data_path
 
@@ -74,6 +74,37 @@ class DevelopmentStorageTests(TransactionTestCase):
                 ).fetchone()
             )
         self.assertEqual(result["rawResourcesKept"], 1)
+
+    def test_cleanup_preserves_nested_workspace_layer_reference(self):
+        published = self.resource("retained_map", generated=True)
+        disposable = self.resource("temporary_result", generated=True)
+        snapshot = {
+            "version": 2,
+            "groups": [
+                {
+                    "id": "group",
+                    "sourceResource": {"id": published.pk},
+                    "children": [
+                        {
+                            "id": "saved-layer",
+                            "layerType": "vector",
+                            "sourceResource": {"id": published.pk},
+                        }
+                    ],
+                }
+            ],
+            "selectedLayerId": "saved-layer",
+        }
+        scene = WorkspaceScene.objects.create(
+            owner=self.user, name="保存的成果图", kind="project", snapshot=snapshot
+        )
+        result = clean_generated_data()
+        scene.refresh_from_db()
+        self.assertEqual(scene.snapshot, snapshot)
+        self.assertEqual(result["referencedGeneratedResourcesKept"], [published.pk])
+        self.assertEqual(result["generatedResourcesDeleted"], [disposable.pk])
+        self.assertTrue(DataResource.objects.filter(pk=published.pk).exists())
+        self.assertFalse(DataResource.objects.filter(pk=disposable.pk).exists())
 
     def test_protected_original_file_not_unlinked_even_if_reused_by_generated_resource(
         self,
