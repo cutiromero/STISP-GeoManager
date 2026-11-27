@@ -1650,16 +1650,10 @@ export const api = {
     jobId: string,
     options: RequestLifecycleOptions & { projectTagId?: number } = {},
   ) =>
-    unwrap<RasterJob>(
-      sdk.getJobStatus({
-        path: { job_id: jobId },
-        headers:
-          options.projectTagId === undefined
-            ? undefined
-            : { "X-Project-Id": String(options.projectTagId) },
-        signal: options.signal,
-      }),
-    ),
+    requestJson<RasterJob>(`/api/raster/jobs/${encodeURIComponent(jobId)}/`, {
+      projectTagId: options.projectTagId?.toString(),
+      signal: options.signal,
+    }),
   classifyRasterUniqueValues: (datasetId: number, band: number) =>
     unwrap<RasterUniqueValuesResult>(
       sdk.getUniqueValues({ body: { datasetId, band } }),

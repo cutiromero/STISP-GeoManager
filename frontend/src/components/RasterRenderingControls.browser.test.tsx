@@ -51,7 +51,8 @@ describe("raster rendering controls", () => {
     fireEvent.click(screen.getByRole("switch", { name: "NoData透明" }));
     expect(renderRaster).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "应用渲染方案" }));
-    expect(apply).toHaveBeenCalledWith(
+    expect(apply).not.toHaveBeenCalled();
+    expect(renderRaster).toHaveBeenCalledWith(
       "group-1",
       "raster-1",
       expect.objectContaining({
@@ -59,15 +60,10 @@ describe("raster rendering controls", () => {
         palette: "thermal",
         bands: [1],
       }),
-    );
-    expect(renderRaster).toHaveBeenCalledWith(
-      "group-1",
-      "raster-1",
-      apply.mock.calls[0][2],
       expect.objectContaining({ id: "raster-1" }),
       "custom",
     );
-    expect(apply.mock.calls[0][2].nodata.enabled).toBe(
+    expect(renderRaster.mock.calls[0][2].nodata.enabled).toBe(
       !cloneDefaultRasterSymbolization().nodata.enabled,
     );
   });
@@ -76,7 +72,7 @@ describe("raster rendering controls", () => {
     const slider = screen.getByRole("slider", { name: "图层不透明度" });
     fireEvent.keyDown(slider, { key: "Home", keyCode: 36 });
     fireEvent.click(screen.getByRole("button", { name: "应用渲染方案" }));
-    expect(apply.mock.calls[0][2].opacity).toBe(0);
+    expect(renderRaster.mock.calls[0][2].opacity).toBe(0);
   });
   it("uses three valid bands when switching to RGB", async () => {
     show();
@@ -84,7 +80,7 @@ describe("raster rendering controls", () => {
     fireEvent.click(await screen.findByText("RGB多波段合成"));
     expect(screen.getByRole("combobox", { name: "R 波段" })).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "应用渲染方案" }));
-    expect(apply.mock.calls[0][2].bands).toEqual([1, 2, 3]);
+    expect(renderRaster.mock.calls[0][2].bands).toEqual([1, 2, 3]);
   });
   it("does not allow an account without styling permission to apply", () => {
     show(false);

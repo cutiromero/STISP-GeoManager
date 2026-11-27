@@ -525,7 +525,6 @@ export default function LayerPanel() {
     const targetLayer = ctx.groups
       .find((g) => g.id === groupId)
       ?.children.find((l) => l.id === layerId);
-    ctx.setLayerSymbolization(groupId, layerId, symbolization);
     if (
       "mode" in symbolization &&
       "bands" in symbolization &&
@@ -535,10 +534,12 @@ export default function LayerPanel() {
         groupId,
         layerId,
         symbolization,
-        { ...targetLayer, symbolization },
+        targetLayer,
         "custom",
       );
+      return;
     }
+    ctx.setLayerSymbolization(groupId, layerId, symbolization);
   }
 
   function createManualLayerGroup() {
@@ -1238,7 +1239,8 @@ function RasterRenderFeedback({ layer }: { layer: LoadedLayer }) {
   const progress = Math.min(100, Math.max(0, layer.renderProgress ?? 0));
   const messages = layer.renderMessages ?? [];
   const latestMessage = messages[messages.length - 1];
-  const isUniqueValue = layer.symbolization.mode === "unique";
+  const isUniqueValue =
+    (layer.renderRequestedMode ?? layer.symbolization.mode) === "unique";
   if (status === "failed") {
     return (
       <div

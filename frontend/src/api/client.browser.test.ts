@@ -691,6 +691,28 @@ describe("api client", () => {
     });
   });
 
+  it("recovers a raster job status read after an HTML reply in the same project", async () => {
+    const ready = { id: "render-job", status: "ready", progressPercent: 100 };
+    fetchMock
+      .mockResolvedValueOnce(
+        new Response("<html>Temporary proxy response</html>", {
+          status: 200,
+          headers: { "Content-Type": "text/html" },
+        }),
+      )
+      .mockResolvedValueOnce(jsonResponse(ready));
+    expect(await api.rasterJob("render-job", { projectTagId: 2 })).toEqual(ready);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    for (let index = 0; index < 2; index++) {
+      const request = capturedRequest(fetchMock, index);
+      const url = new URL(request.url);
+      expect(url.pathname).toBe("/api/raster/jobs/render-job/");
+      expect(url.searchParams.has("_stisp_read")).toBe(index === 1);
+      expect(request.method).toBe("GET");
+      expect(request.headers.get("X-Project-Id")).toBe("2");
+    }
+  });
+
   it("extracts export filenames from content-disposition headers", async () => {
     fetchMock.mockResolvedValue(
       new Response("zip-content", {

@@ -474,6 +474,7 @@ export interface LoadedRasterLayer {
   rasterMetadata?: RasterDatasetProfile["metadata"];
   renderJobId?: string;
   renderStatus?: string;
+  renderRequestedMode?: RasterSymbolization["mode"];
   renderProgress?: number;
   renderMessages?: string[];
   geometryType: string;

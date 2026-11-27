@@ -37,12 +37,11 @@ export default function RasterRenderingControls({
   function apply() {
     if (!editable || !layer || !group || !context || !validBands || busy)
       return;
-    context.setLayerSymbolization(group.id, layer.id, draft);
     context.startRasterRender(
       group.id,
       layer.id,
       draft,
-      { ...layer, symbolization: draft },
+      layer,
       "custom",
     );
   }

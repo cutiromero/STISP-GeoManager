@@ -21,6 +21,7 @@ export type RasterRenderProgressHandler = (job: RasterJob) => void;
 export function rasterLayerWithRenderResult(
   current: LoadedRasterLayer,
   result: RasterRenderResult,
+  opacity = current.symbolization.opacity,
 ): LoadedRasterLayer {
   return {
     ...current,
@@ -31,10 +32,11 @@ export function rasterLayerWithRenderResult(
     imageCoordinates: result.imageCoordinates,
     summary: "XYZ 瓦片已就绪",
     renderStatus: "ready",
+    renderRequestedMode: undefined,
     renderProgress: 100,
     symbolization: {
       ...rasterSymbolizationFromRules(result.rules),
-      opacity: current.symbolization.opacity,
+      opacity,
     },
     metadata: {
       ...current.metadata,
@@ -75,9 +77,14 @@ export function useRasterRender(
   useEffect(() => cancelAllRasterTasks, [cancelAllRasterTasks]);
 
   const applyResult = useCallback(
-    (groupId: string, layerId: string, result: RasterRenderResult) => {
+    (
+      groupId: string,
+      layerId: string,
+      result: RasterRenderResult,
+      opacity: number,
+    ) => {
       updateLayer(groupId, layerId, (current) =>
-        rasterLayerWithRenderResult(current, result),
+        rasterLayerWithRenderResult(current, result, opacity),
       );
     },
     [updateLayer],
@@ -192,9 +199,9 @@ export function useRasterRender(
         ...current,
         summary: "后台符号化中",
         renderStatus: "running",
+        renderRequestedMode: symbolization.mode,
         renderProgress: 5,
         renderMessages: ["提交符号化任务"],
-        tileUrl: current.tileUrl,
       }));
       if (isUniqueValueRender) {
         message.info(
@@ -219,7 +226,7 @@ export function useRasterRender(
             }));
           },
         );
-        applyResult(groupId, layerId, result);
+        applyResult(groupId, layerId, result, symbolization.opacity);
         if (completionMessage) {
           message.success(completionMessage);
         }

@@ -1,7 +1,16 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { App as AntdApp } from "antd";
-import { createRef } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { createRef, useState } from "react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { api } from "../api/client";
+import { useRasterRender } from "../hooks/useRasterRender";
+import WorkbenchLegend from "../map/WorkbenchLegend";
 import { LayerContext, type LayerContextValue } from "../hooks/LayerContext";
 import {
   cloneDefaultGroupSymbolization,
@@ -12,11 +21,15 @@ import type {
   LoadedLayerGroup,
   LoadedRasterLayer,
   LoadedVectorLayer,
+  RasterJob,
+  RasterRenderResult,
   ResourceListItem,
 } from "../types";
 import LayerPanel from "./LayerPanel";
 
-describe("LayerPanel drag ordering", () => {
+afterEach(() => vi.restoreAllMocks());
+
+describe("LayerPanel", () => {
   it("keeps categorical raster progress visible while a unique-value style is built", () => {
     const context = makeContext(
       [makeGroup("raster-group", [makeRasterLayer()])],
@@ -37,6 +50,99 @@ describe("LayerPanel drag ordering", () => {
     expect(status).toHaveTextContent("37%");
     expect(status).toHaveTextContent("LUCC 静态瓦片 z16：925/2575");
     expect(status).toHaveTextContent("完成后自动更新");
+  });
+
+  it("keeps the applied tiles and legend together until the new style is ready", async () => {
+    const initial = {
+      ...makeRasterLayer(),
+      renderStatus: "ready",
+      tileUrl: "/old-tiles",
+    };
+    const items = [{ value: 1, color: "#d9a441", label: "岩性类别 A" }];
+    const result: RasterRenderResult = {
+      delivery: "xyz",
+      datasetId: 7,
+      layerId: null,
+      styleHash: "new-style",
+      tileUrl: "/new-tiles",
+      minZoom: 0,
+      maxZoom: 12,
+      tileSampling: "nearest",
+      status: "ready",
+      bounds3857: [],
+      bounds4326: [],
+      imageCoordinates: [],
+      rules: { ...initial.symbolization, uniqueValues: items },
+    };
+    const queued: RasterJob = {
+      id: "style-job",
+      kind: "render",
+      status: "queued",
+      stage: "queued",
+      progressPercent: 0,
+      messages: [],
+      result: null,
+      error: "",
+      startedAt: 0,
+      finishedAt: null,
+    };
+    let finishPoll: (value: RasterJob) => void = () => {};
+    vi.spyOn(api, "classifyRasterUniqueValues").mockResolvedValue({
+      band: 1,
+      items,
+    });
+    vi.spyOn(api, "renderRasterAsync").mockResolvedValue(queued);
+    const poll = vi.spyOn(api, "rasterJob").mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishPoll = resolve;
+        }),
+    );
+    function Workbench() {
+      const [layer, setLayer] = useState(initial);
+      const { startRasterRender } = useRasterRender((_group, _id, update) =>
+        setLayer(update),
+      );
+      const context = makeContext([makeGroup("styles", [layer])], vi.fn());
+      return (
+        <LayerContext.Provider
+          value={{
+            ...context,
+            canUseCustomSymbolization: true,
+            startRasterRender,
+            setLayerSymbolization: (_group, _id, symbolization) => {
+              if ("mode" in symbolization)
+                setLayer((previous) => ({ ...previous, symbolization }));
+            },
+          }}
+        >
+          <LayerPanel />
+          <WorkbenchLegend layers={[layer]} english={false} mobileHidden={false} />
+          <output data-testid="tile-url">{layer.tileUrl}</output>
+        </LayerContext.Provider>
+      );
+    }
+    render(
+      <AntdApp>
+        <Workbench />
+      </AntdApp>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "分类栅格符号化" }));
+    const dialog = await screen.findByRole("dialog", { name: "分类栅格符号化" });
+    fireEvent.click(await within(dialog).findByRole("tab", { name: "唯一值" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: /^分\s*类$/ }));
+    await within(dialog).findByText("岩性类别 A");
+    fireEvent.click(within(dialog).getByRole("button", { name: "确定" }));
+    await waitFor(() => expect(poll).toHaveBeenCalledOnce(), { timeout: 3000 });
+    expect(screen.getByTestId("tile-url")).toHaveTextContent("/old-tiles");
+    expect(screen.getByText("林地")).toBeVisible();
+
+    finishPoll({ ...queued, status: "ready", result });
+    await waitFor(() =>
+      expect(screen.getByTestId("tile-url")).toHaveTextContent("/new-tiles"),
+    );
+    expect(screen.getByText("岩性类别 A")).toBeVisible();
+    expect(screen.queryByText("林地")).not.toBeInTheDocument();
   });
 
   it("orders expanded groups from the group header instead of the child height", async () => {
